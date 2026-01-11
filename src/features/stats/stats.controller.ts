@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
-import { StatsService } from "../services/index.ts";
 import { json2csv } from 'json-2-csv';
+import { StatsService } from "./stats.service.ts";
 
 export namespace StatsController {
     export async function getBorrowsStatistics(req: Request<{}, {}, {}, { from: string, format: 'json' | 'csv' }>, res: Response) {

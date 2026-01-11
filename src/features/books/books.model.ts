@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { prisma } from "../prisma.ts";
+import { prisma } from "../../lib/prisma.ts";
 import { getBookAvailableQuantity } from "@prisma/client/sql";
 
 export namespace BookModel {

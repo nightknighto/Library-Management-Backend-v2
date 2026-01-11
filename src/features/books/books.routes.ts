@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { Validators } from "../../middleware/validators.middleware.ts";
-import { BookDTOs } from "../../dtos/books.dtos.ts";
-import { BookController } from "../../controllers/books.controller.ts";
-import { rateLimiter } from "../../middleware/rate-limiter.middleware.ts";
+import { BookDTOs } from "./books.dtos.ts";
+import { Validators } from "../../common/middleware/validators.middleware.ts";
+import { BookController } from "./books.controller.ts";
+import { rateLimiter } from "../../common/middleware/rate-limiter.middleware.ts";
 
 const booksRoutes = Router();
 

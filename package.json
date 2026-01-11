@@ -4,9 +4,9 @@
     "main": "dist/index.js",
     "type": "module",
     "scripts": {
-        "dev": "node --experimental-transform-types --env-file=.env --watch .\\src\\index.ts",
-        "start": "node --experimental-transform-types --env-file=.env .\\src\\index.ts",
-        "typecheck": "tsc",
+        "dev": "node --experimental-transform-types --env-file=.env --watch src/server.ts",
+        "start": "node --experimental-transform-types --env-file=.env src/server.ts",
+        "check": "tsc",
         "test": "jest --runInBand",
         "test:watch": "jest --watch --runInBand",
         "test:coverage": "jest --coverage --runInBand",

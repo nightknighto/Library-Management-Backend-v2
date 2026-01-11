@@ -2,7 +2,7 @@
   // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
     // File Layout
-    "rootDir": "./src",
+    "rootDir": "src",
     "outDir": "./dist",
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
@@ -34,14 +34,13 @@
     "typeRoots": [
       "./node_modules/@types",
     ],
-
     // NEW stuff
     "allowImportingTsExtensions": true, // Allow importing .ts files with extensions
     "noEmit": true, // Do not emit outputs
-    "erasableSyntaxOnly": true, // Enable erasable syntax only (prevents "namespace", "enum", etc.)
+    // "erasableSyntaxOnly": true, // Enable erasable syntax only (prevents "namespace", "enum", etc.)
     "verbatimModuleSyntax": true, // enforces "import type" for type-only imports
   },
   "include": [
-    "src"
+    "src",
   ],
 }

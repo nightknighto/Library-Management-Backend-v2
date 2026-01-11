@@ -1,8 +1,7 @@
 import type { Request, Response } from 'express';
-import { UserModel } from '../models/index.ts';
-import { JwtService } from '../services/index.ts';
-import { UserDTOs } from '../dtos/index.ts';
-
+import type { UserDTOs } from './users.dtos.ts';
+import { UserModel } from './users.model.ts';
+import { JwtService } from '../../common/services/jwt.service.ts';
 
 export namespace UserController {
 

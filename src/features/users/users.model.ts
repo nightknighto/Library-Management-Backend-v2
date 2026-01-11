@@ -1,5 +1,4 @@
-import { Prisma } from "@prisma/client";
-import { prisma } from "../prisma.ts";
+import { prisma } from "../../lib/prisma.ts";
 
 
 export namespace UserModel {

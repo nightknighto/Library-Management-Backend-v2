@@ -1,5 +1,5 @@
 import { getReturnsMadeDaily, getBorrowsMadeDaily, getMostBorrowingUsers, getMostPopularBooks, getMostOverdueUsers, getOverdueDaily } from "@prisma/client/sql";
-import { prisma } from "../prisma.ts";
+import { prisma } from "../../lib/prisma.ts";
 
 export namespace StatsService {
     export async function borrowsMadeDailySince(date: Date) {

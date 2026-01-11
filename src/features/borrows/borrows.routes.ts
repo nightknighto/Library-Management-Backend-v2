@@ -1,7 +1,8 @@
 import { Router } from "express";
-import { BorrowController } from "../../controllers/index.ts";
-import { authenticate, Validators } from "../../middleware/index.ts";
-import { BorrowDTOs } from "../../dtos/index.ts";
+import { authenticate } from "../../common/middleware/auth.ts";
+import { Validators } from "../../common/middleware/validators.middleware.ts";
+import { BorrowController } from "./borrows.controller.ts";
+import { BorrowDTOs } from "./borrows.dtos.ts";
 
 const borrowsRoutes = Router();
 
