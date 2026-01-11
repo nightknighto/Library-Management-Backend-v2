@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { UserDTOs } from "./users.dtos.ts";
 import { UserController } from "./users.controller.ts";
-import { Validators } from "../../common/middleware/validators.middleware.ts";
-import { rateLimiter } from "../../common/middleware/rate-limiter.middleware.ts";
-import { authenticate } from "../../common/middleware/auth.ts";
+import { Validators } from "../../shared/middlewares/validators.middleware.ts";
+import { rateLimiter } from "../../shared/middlewares/rate-limiter.middleware.ts";
+import { authenticate } from "../../shared/middlewares/auth.ts";
 
 const usersRoutes = Router();
 

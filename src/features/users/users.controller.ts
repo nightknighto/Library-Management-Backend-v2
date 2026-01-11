@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import type { UserDTOs } from './users.dtos.ts';
 import { UserRepository } from './users.repository.ts';
-import { JwtService } from '../../common/services/jwt.service.ts';
+import { JwtUtils } from '../../utils/jwt.util.ts';
 
 async function registerUser(req: Request<unknown, unknown, UserDTOs.RegisterUserRequest>, res: Response) {
     const { email, name } = req.body;
@@ -18,7 +18,7 @@ async function loginUser(req: Request<unknown, unknown, UserDTOs.LoginUserReques
     if (!user) {
         return res.status(404).json({ error: 'User not found' });
     }
-    const token = JwtService.createToken({ email });
+    const token = JwtUtils.createToken({ email });
     res.status(200).json({ token });
 }
 

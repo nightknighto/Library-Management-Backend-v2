@@ -1,5 +1,5 @@
 import express from 'express';
-import { CONFIG } from './config/index.ts';
+import { CONFIG } from './config/config.ts';
 import rootRouter from './routes.ts';
 
 // Create Express app

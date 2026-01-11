@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { authenticate } from "../../common/middleware/auth.ts";
-import { Validators } from "../../common/middleware/validators.middleware.ts";
+import { authenticate } from "../../shared/middlewares/auth.ts";
+import { Validators } from "../../shared/middlewares/validators.middleware.ts";
 import { BorrowController } from "./borrows.controller.ts";
 import { BorrowDTOs } from "./borrows.dtos.ts";
 

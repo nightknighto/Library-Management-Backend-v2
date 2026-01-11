@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { Validators } from "../../common/middleware/validators.middleware.ts";
-import { rateLimiter } from "../../common/middleware/rate-limiter.middleware.ts";
+import { Validators } from "../../shared/middlewares/validators.middleware.ts";
+import { rateLimiter } from "../../shared/middlewares/rate-limiter.middleware.ts";
 import { BookController } from "./books.controller.ts";
 import * as BookDTOs from './books.dtos.ts';
 

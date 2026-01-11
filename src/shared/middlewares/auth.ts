@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { JwtService } from '../services/index.ts';
+import { JwtUtils } from '../../utils/jwt.util.ts';
 
 // Extend Express Request type to include user
 declare global {
@@ -42,7 +42,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         const token = authHeader.split(' ')[1];
 
         try {
-            const user = JwtService.verifyToken(token!);
+            const user = JwtUtils.verifyToken(token!);
 
             if (!user.email) {
                 return res.status(401).json({ error: 'Invalid token' });
