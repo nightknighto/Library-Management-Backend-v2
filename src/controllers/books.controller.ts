@@ -1,6 +1,6 @@
-import { Request, Response } from 'express';
-import { BookModel } from '../models/books.model';
-import { BookDTOs } from '../dtos/books.dtos';
+import type { Request, Response } from 'express';
+import { BookModel } from '../models/index.ts';
+import { BookDTOs } from '../dtos/index.ts';
 
 
 export namespace BookController {

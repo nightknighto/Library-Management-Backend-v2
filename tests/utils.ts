@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 
 export interface MockRequest extends Partial<Request> {
     body?: any;

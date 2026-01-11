@@ -76,8 +76,9 @@ export namespace Validators {
     export function validateNumericParams(params: string[]) {
         return async (req: Request, res: Response, next: NextFunction) => {
             for (const param of params) {
+                const value = req.params[param];
                 // Check if the parameter is not a number or is an empty string
-                if (Number.isNaN(Number(req.params[param])) || req.params[param]?.trim() === '') {
+                if (typeof value !== 'string' || Number.isNaN(Number(value)) || value.trim() === '') {
                     res.status(400).json({
                         error: `${param} parameter must be a number`,
                     });

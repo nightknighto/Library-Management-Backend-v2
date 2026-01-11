@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { CONFIG } from "./config";
+import { CONFIG } from "./config/index.ts";
 
 // Initialize Prisma client
 export const prisma = new PrismaClient({

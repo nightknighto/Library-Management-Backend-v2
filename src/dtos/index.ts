@@ -1,3 +1,3 @@
-export * from './books.dtos';
-export * from './borrows.dtos';
-export * from './users.dtos';
+export * from './books.dtos.ts';
+export * from './borrows.dtos.ts';
+export * from './users.dtos.ts';

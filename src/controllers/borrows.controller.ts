@@ -1,7 +1,6 @@
-import { Request, Response } from 'express';
-import { BorrowModel } from '../models/borrows.model';
-import { BookModel } from '../models/books.model';
-import { BorrowDTOs } from '../dtos/borrows.dtos';
+import type { Request, Response } from 'express';
+import { BorrowDTOs } from '../dtos/index.ts';
+import { BookModel, BorrowModel } from '../models/index.ts';
 
 
 export namespace BorrowController {

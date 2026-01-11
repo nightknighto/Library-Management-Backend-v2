@@ -1,6 +1,6 @@
-import express, { Application } from 'express';
-import mainRouter from './routes';
-import { CONFIG } from './config';
+import express from 'express';
+import { CONFIG } from './config/index.ts';
+import mainRouter from './routes/index.ts';
 
 // Create Express app
 const app = express();

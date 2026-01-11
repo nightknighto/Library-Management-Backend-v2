@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { UserController } from '../../controllers/users.controller';
-import { authenticate, rateLimiter } from "../../middleware";
-import { Validators } from "../../middleware/validators.middleware";
-import { UserDTOs } from "../../dtos/users.dtos";
+import { UserController } from '../../controllers/index.ts';
+import { authenticate, rateLimiter } from "../../middleware/index.ts";
+import { Validators } from "../../middleware/index.ts";
+import { UserDTOs } from "../../dtos/index.ts";
 
 const usersRoutes = Router();
 

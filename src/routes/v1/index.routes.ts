@@ -1,8 +1,8 @@
 import { Router } from "express";
-import booksRoutes from "./books.routes";
-import borrowsRoutes from "./borrows.routes";
-import statsRoutes from "./stats.routes";
-import usersRoutes from "./users.routes";
+import booksRoutes from "./books.routes.ts";
+import borrowsRoutes from "./borrows.routes.ts";
+import statsRoutes from "./stats.routes.ts";
+import usersRoutes from "./users.routes.ts";
 
 const v1Routes = Router();
 

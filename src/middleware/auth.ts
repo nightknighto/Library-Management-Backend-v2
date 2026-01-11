@@ -1,5 +1,5 @@
-import { Request, Response, NextFunction } from 'express';
-import { JwtService } from '../services';
+import type { Request, Response, NextFunction } from 'express';
+import { JwtService } from '../services/index.ts';
 
 // Extend Express Request type to include user
 declare global {

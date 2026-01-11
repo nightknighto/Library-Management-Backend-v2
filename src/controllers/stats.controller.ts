@@ -1,5 +1,5 @@
-import { Request, Response } from "express";
-import { StatsService } from "../services/stats.service";
+import type { Request, Response } from "express";
+import { StatsService } from "../services/index.ts";
 import { json2csv } from 'json-2-csv';
 
 export namespace StatsController {
