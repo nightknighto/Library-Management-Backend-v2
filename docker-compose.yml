@@ -1,0 +1,33 @@
+services:
+  database:
+    image: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mydb
+    ports:
+      - "5432:5432"
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+
+  backend: # NOTE: DATABASE MUST BE UP AND RUNNING BEFORE BUILDING THE BACKEND
+    build: 
+      context: .
+      dockerfile: Dockerfile
+      network: host
+      args:
+        - DATABASE_URL=postgresql://postgres:postgres@localhost:5432/mydb
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgres@database:5432/mydb"
+      JWT_SECRET: "helloworld"
+      PORT: 3000
+    depends_on:
+      - database
