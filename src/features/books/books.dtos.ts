@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { createRequestSchema } from '../../shared/schemas/create-request-schema.ts';
 
 const isbnSchema = z.string()
 
@@ -17,42 +18,65 @@ const totalQuantitySchema = z.number()
     .min(1, "Total quantity must be at least 1")
     .max(1000, "Total quantity cannot exceed 1000");
 
-export const CreateBookSchema = z.object({
-    isbn: isbnSchema,
-    title: titleSchema,
-    author: authorSchema,
-    shelf: shelfSchema,
-    total_quantity: totalQuantitySchema
-}).strict();
+export const CreateBookRequestSchema = createRequestSchema({
+    body: {
+        isbn: isbnSchema,
+        title: titleSchema,
+        author: authorSchema,
+        shelf: shelfSchema,
+        total_quantity: totalQuantitySchema
+    }
+})
 
-export const UpdateBookSchema = CreateBookSchema.omit({ isbn: true });
+export const UpdateBookRequestSchema = createRequestSchema({
+    body: {
+        title: titleSchema.optional(),
+        author: authorSchema.optional(),
+        shelf: shelfSchema.optional(),
+        total_quantity: totalQuantitySchema.optional()
+    },
+    params: {
+        isbn: isbnSchema
+    }
+})
 
 /**
  * Schema for book search query parameters
  */
-export const BookSearchQuerySchema = z.object({
-    title: z.string().optional(),
-    author: z.string().optional(),
-    isbn: z.string().optional(),
-    page: z.string()
-        .optional()
-        .transform(val => val ? parseInt(val) : 1)
-        .refine(val => val > 0, "Page must be a positive number"),
-    limit: z.string()
-        .optional()
-        .transform(val => val ? parseInt(val) : 10)
-        .refine(val => val > 0 && val <= 100, "Limit must be between 1 and 100")
-});
+export const ListBooksRequestSchema = createRequestSchema({
+    query: {
+        title: titleSchema.optional(),
+        author: authorSchema.optional(),
+        isbn: isbnSchema.optional(),
+        page: z.coerce.number()
+            .refine(val => val > 0, "Page must be a positive number")
+            .default(1),
+        limit: z.coerce.number()
+            .refine(val => val > 0 && val <= 100, "Limit must be between 1 and 100")
+            .default(10),
+    }
+})
 
-/**
- * Schema for ISBN parameter validation
- */
-export const BookParamsSchema = z.object({
-    isbn: isbnSchema
-});
+export const GetBookRequestSchema = createRequestSchema({
+    query: {
+        fields: z.string().optional()
+            .transform(val => val ? val.split(',') : [])
+            .pipe(z.array(z.enum(['title', 'author', 'isbn', 'shelf', 'total_quantity'])))
+    },
+    params: {
+        isbn: isbnSchema
+    }
+})
+
+export const DeleteBookRequestSchema = createRequestSchema({
+    params: {
+        isbn: isbnSchema
+    }
+})
 
 // Type exports for use in controllers
-export type CreateBookRequest = z.infer<typeof CreateBookSchema>;
-export type UpdateBookRequest = z.infer<typeof UpdateBookSchema>;
-export type BookSearchQuery = z.infer<typeof BookSearchQuerySchema>;
-export type BookParams = z.infer<typeof BookParamsSchema>;
+export type CreateBookRequest = z.infer<typeof CreateBookRequestSchema>;
+export type UpdateBookRequest = z.infer<typeof UpdateBookRequestSchema>;
+export type ListBooksRequest = z.infer<typeof ListBooksRequestSchema>;
+export type GetBookRequest = z.infer<typeof GetBookRequestSchema>;
+export type DeleteBookRequest = z.infer<typeof DeleteBookRequestSchema>;

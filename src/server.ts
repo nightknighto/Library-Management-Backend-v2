@@ -10,44 +10,44 @@ const PORT = CONFIG.port
 app.use(express.json());
 
 app.use((req, res, next) => {
-  // Overwrite the 'query' property with a new, writable one
-  Object.defineProperty(req, 'query', {
-    ...Object.getOwnPropertyDescriptor(req, 'query'),
-    value: req.query,
-    writable: true,
-  });
+    // Overwrite the 'query' property with a new, writable one
+    Object.defineProperty(req, 'query', {
+        ...Object.getOwnPropertyDescriptor(req, 'query'),
+        value: req.query,
+        writable: true,
+    });
 
-  next();
+    next();
 });
 
 app.use('/api/v1', rootRouter);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error:', err);
-  res.status(500).json('Internal Server Error');
+    console.error('Error:', err);
+    res.status(500).json('Internal Server Error');
 });
 
 // Start server
 const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
 
 // Prevent the process from exiting
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received, closing server...');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
+    console.log('SIGTERM received, closing server...');
+    server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+    });
 });
 
 process.on('SIGINT', () => {
-  console.log('SIGINT received, closing server...');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
+    console.log('SIGINT received, closing server...');
+    server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+    });
 });
 
 
