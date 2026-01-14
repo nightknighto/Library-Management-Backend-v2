@@ -22,39 +22,19 @@ function isZodError(error: any): error is ZodError {
  */
 export function validateRequest(schema: RequestSchema) {
     return async (req: Request, res: Response, next: NextFunction) => {
-        try {
-            // Parse the request data using the schema. If the data is invalid, a ZodError will be thrown.
-            // Also filters out any additional properties not defined in the schema.
-            const validated = await schema.parseAsync({
-                body: req.body,
-                query: req.query,
-                params: req.params,
-            });
+        // Parse the request data using the schema. If the data is invalid, a ZodError will be thrown.
+        // Also filters out any additional properties not defined in the schema.
+        const validated = await schema.parseAsync({
+            body: req.body,
+            query: req.query,
+            params: req.params,
+        });
 
-            req.body = validated.body;
-            req.params = validated.params;
-            req.query = validated.query;
+        req.body = validated.body;
+        req.params = validated.params;
+        req.query = validated.query;
 
-            next();
-        } catch (error) {
-            if (isZodError(error)) {
-                // Improved error handling for request validation errors.
-                const errorMessages = error.errors.map((issue: any) => ({
-                    message: `${issue.path.length ? issue.path.join('.') : '[root]'}: ${issue.message}`,
-                    path: issue.path
-                }));
-
-                res.status(400).json({
-                    error: "Invalid request data.",
-                    details: errorMessages
-                });
-            } else {
-                console.error('Error in validating request: ', error);
-                res.status(500).json({
-                    error: 'Internal Server Error',
-                });
-            }
-        }
+        next();
     };
 }
 

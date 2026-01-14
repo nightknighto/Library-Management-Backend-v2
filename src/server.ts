@@ -1,6 +1,8 @@
 import express from 'express';
+import { ZodError } from 'zod';
 import { CONFIG } from './config/config.ts';
 import rootRouter from './routes.ts';
+import { globalErrorHandler } from './shared/middlewares/error-handler.middleware.ts';
 
 // Create Express app
 const app = express();
@@ -23,10 +25,7 @@ app.use((req, res, next) => {
 app.use('/api/v1', rootRouter);
 
 // Error handling middleware
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error('Error:', err);
-    res.status(500).json('Internal Server Error');
-});
+app.use(globalErrorHandler);
 
 // Start server
 const server = app.listen(PORT, () => {

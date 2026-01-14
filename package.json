@@ -4,8 +4,8 @@
     "main": "dist/index.js",
     "type": "module",
     "scripts": {
-        "dev": "node --experimental-transform-types --env-file=.env --watch src/server.ts",
-        "start": "node --experimental-transform-types --env-file=.env src/server.ts",
+        "dev": "node --env-file=.env --watch src/server.ts",
+        "start": "node --env-file=.env src/server.ts",
         "check": "tsc",
         "test": "jest --runInBand",
         "test:watch": "jest --watch --runInBand",
@@ -20,9 +20,10 @@
         "@prisma/client": "^5.3.1",
         "express": "^5.1.0",
         "express-rate-limit": "^7.5.0",
+        "http-errors": "^2.0.1",
         "json-2-csv": "^5.5.9",
         "jsonwebtoken": "^9.0.2",
-        "zod": "^3.24.4"
+        "zod": "^3.25.76"
     },
     "devDependencies": {
         "@types/express": "^5.0.3",
