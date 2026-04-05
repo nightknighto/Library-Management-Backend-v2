@@ -35,7 +35,7 @@
       "./node_modules/@types",
     ],
     // NEW stuff
-    "allowImportingTsExtensions": true, // Allow importing .ts files with extensions
+    "allowImportingTsExtensions": true, // Allow importing files with .ts extensions
     "noEmit": true, // Do not emit outputs
     "erasableSyntaxOnly": true, // Enable erasable syntax only (prevents "namespace", "enum", etc.)
     "verbatimModuleSyntax": true, // enforces "import type" for type-only imports

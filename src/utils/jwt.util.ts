@@ -14,4 +14,4 @@ export const JwtUtils = {
     verifyToken: (token: string) => {
         return jwt.verify(token, JWT_SECRET) as JwtPayload;
     }
-}
+} as const;
