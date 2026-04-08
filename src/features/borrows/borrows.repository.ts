@@ -12,7 +12,7 @@ import { prisma } from "../../lib/prisma.ts";
  * @param book_isbn - The ISBN of the borrowed book
  * @returns A Promise that resolves to the active borrow record if found, or null if no active borrow exists
  */
-export async function getActiveBorrowByUserAndBook(user_email: string, book_isbn: string) {
+async function getActiveBorrowByUserAndBook(user_email: string, book_isbn: string) {
     const borrow = await prisma.borrow.findFirst({
         where: {
             user_email,
@@ -23,7 +23,7 @@ export async function getActiveBorrowByUserAndBook(user_email: string, book_isbn
     return borrow;
 }
 
-export async function createBorrow(
+async function createBorrow(
     user_email: string,
     book_isbn: string,
     due_date: Date
@@ -38,7 +38,7 @@ export async function createBorrow(
     return borrow;
 }
 
-export async function returnBook(user_email: string, book_isbn: string) {
+async function returnBook(user_email: string, book_isbn: string) {
     const updatedBorrow = await prisma.borrow.updateMany({
         where: {
             user_email,
@@ -62,7 +62,7 @@ export async function returnBook(user_email: string, book_isbn: string) {
  * - The due date has passed (is less than the current date)
  * - The book has not been returned yet (return_date is null)
  */
-export async function getOverdueBorrows({ page, limit }: { page: number; limit: number; }) {
+async function getOverdueBorrows({ page, limit }: { page: number; limit: number; }) {
     const now = new Date();
     const skip = page && limit ? (page - 1) * limit : undefined;
     const take = limit || undefined;

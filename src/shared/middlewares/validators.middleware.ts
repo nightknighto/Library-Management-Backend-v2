@@ -22,50 +22,47 @@ function isZodError(error: any): error is ZodError {
  */
 export function validateRequest(schema: RequestSchema) {
     return async (req: Request, res: Response, next: NextFunction) => {
-        try {
-            // Parse the request data using the schema. If the data is invalid, a ZodError will be thrown.
-            // Also filters out any additional properties not defined in the schema.
-            const validated = await schema.parseAsync({
-                body: req.body,
-                query: req.query,
-                params: req.params,
-            });
+        // Parse the request data using the schema. If the data is invalid, a ZodError will be thrown.
+        // Also filters out any additional properties not defined in the schema.
+        const validated = await schema.parseAsync({
+            body: req.body,
+            query: req.query,
+            params: req.params,
+        });
 
-            req.body = validated.body;
-            req.params = validated.params;
-            req.query = validated.query;
+        req.body = validated.body;
+        req.params = validated.params;
+        req.query = validated.query;
 
-            next();
-        } catch (error) {
-            if (isZodError(error)) {
-                // Improved error handling for request validation errors.
-                const errorMessages = error.errors.map((issue: any) => ({
-                    message: `${issue.path.length ? issue.path.join('.') : '[root]'}: ${issue.message}`,
-                    path: issue.path
-                }));
-
-                res.status(400).json({
-                    error: "Invalid request data.",
-                    details: errorMessages
-                });
-            } else {
-                console.error('Error in validating request: ', error);
-                res.status(500).json({
-                    error: 'Internal Server Error',
-                });
-            }
-        }
+        next();
     };
 }
 
 /**
- * Type for a validated Express request.
- * Takes the inferred type from a request schema (e.g., z.infer<typeof GetBookRequestSchema>)
- * and maps it to Express's Request type.
+ * Type for a validated Express request with strong typing.
+ * 
+ * Maps a validated request schema type to Express's `Request` type, automatically
+ * extracting and typing the `params`, `body`, and `query` properties based on the
+ * inferred schema type. If a property is not defined in the schema, it defaults to
+ * a sensible fallback type.
+ * 
+ * @template T - The inferred type from a request schema (e.g., `z.infer<typeof GetBookRequestSchema>`).
+ *               Should have `params?`, `body?`, and `query?` properties matching your schema.
  * 
  * @example
+ * ```typescript
+ * const GetBookRequestSchema = createRequestSchema({
+ *   params: z.object({ id: z.string() }),
+ *   query: z.object({ includeDetails: z.boolean().optional() }),
+ * });
+ * 
  * type GetBookRequest = z.infer<typeof GetBookRequestSchema>;
- * function handler(req: ValidatedRequest<GetBookRequest>, res: Response) { ... }
+ * 
+ * function getBook(req: ValidatedRequest<GetBookRequest>, res: Response) {
+ *   // req.params.id is typed as string
+ *   // req.query.includeDetails is typed as boolean | undefined
+ * }
+ * ```
  */
 export type ValidatedRequest<T> = Request<
     T extends { params: infer P } ? P : Record<string, string>,

@@ -1,7 +1,7 @@
 import { prisma } from "../../lib/prisma.ts";
 
 
-export async function createUser(email: string, name: string) {
+async function createUser(email: string, name: string) {
     try {
         const user = await prisma.user.create({
             data: {
@@ -18,7 +18,7 @@ export async function createUser(email: string, name: string) {
     }
 }
 
-export async function getAllUsers(page: number, limit: number) {
+async function getAllUsers(page: number, limit: number) {
     const skip = page && limit ? (page - 1) * limit : undefined;
     const take = limit || undefined;
 
@@ -26,12 +26,22 @@ export async function getAllUsers(page: number, limit: number) {
     const users = await prisma.user.findMany({
         skip,
         take,
+        include: {
+            _count: {
+                select: {}
+            }
+        }
     });
 
     return users;
 }
 
-export async function getUser(email: string) {
+async function getUserCount() {
+    const count = await prisma.user.count();
+    return count;
+}
+
+async function getUser(email: string) {
     const user = await prisma.user.findUnique({
         where: { email },
     });
@@ -50,7 +60,7 @@ export async function getUser(email: string) {
  * 
  * @throws Will throw an error if the database operation fails, except for P2025 (record not found) which returns undefined
  */
-export async function getUserWithActiveBorrows(email: string) {
+async function getUserWithActiveBorrows(email: string) {
     try {
         const user = await prisma.user.findUnique({
             where: { email },
@@ -79,7 +89,7 @@ export async function getUserWithActiveBorrows(email: string) {
     }
 }
 
-export async function updateUser(email: string, name: string) {
+async function updateUser(email: string, name: string) {
     try {
         const updatedUser = await prisma.user.update({
             where: { email },
@@ -96,7 +106,7 @@ export async function updateUser(email: string, name: string) {
     }
 }
 
-export async function deleteUser(email: string) {
+async function deleteUser(email: string) {
     try {
         const user = await prisma.user.delete({
             where: { email },
@@ -116,5 +126,6 @@ export const UserRepository = {
     getUser,
     getUserWithActiveBorrows,
     updateUser,
-    deleteUser
+    deleteUser,
+    getUserCount
 } as const;

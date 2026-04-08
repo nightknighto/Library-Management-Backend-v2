@@ -1,2 +1,3 @@
 - Separate `server.ts` into `app.ts` and `server.ts` for better modularity.
     - Simplifies testing with Supertest, as `app.ts` can be imported without starting the server.
+- Update Zod from v3 to v4

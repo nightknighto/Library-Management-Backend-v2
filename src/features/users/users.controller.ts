@@ -1,60 +1,91 @@
-import type { Request, Response } from 'express';
-import type { UserDTOs } from './users.dtos.ts';
+import type * as UserDTOs from './users.dtos.ts';
 import { UserRepository } from './users.repository.ts';
 import { JwtUtils } from '../../utils/jwt.util.ts';
+import type { ValidatedRequest } from '../../shared/middlewares/validators.middleware.ts';
+import type { ControllerResponse, PaginatedControllerResponse } from '../../shared/schemas/controller-responses.schema.ts';
 
-async function registerUser(req: Request<unknown, unknown, UserDTOs.RegisterUserRequest>, res: Response) {
+async function registerUser(req: ValidatedRequest<UserDTOs.RegisterUserRequest>, res: ControllerResponse<UserDTOs.RegisterUserResponse>) {
     const { email, name } = req.body;
     const user = await UserRepository.createUser(email, name);
     if (!user) {
-        return res.status(400).json({ error: 'User with this email already exists' });
+        return res.status(400).json({
+            success: false,
+            error: 'User with this email already exists'
+        });
     }
-    res.status(201).json({ message: 'User registered successfully' });
+    const token = JwtUtils.createToken({ email });
+    res.status(201).json({
+        success: true,
+        data: { token },
+        meta: { timestamp: new Date().toISOString() }
+    });
 }
 
-async function loginUser(req: Request<unknown, unknown, UserDTOs.LoginUserRequest>, res: Response) {
+async function loginUser(req: ValidatedRequest<UserDTOs.LoginUserRequest>, res: ControllerResponse<UserDTOs.LoginUserResponse>) {
     const { email } = req.body;
     const user = await UserRepository.getUser(email);
     if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        return res.status(404).json({ success: false, error: 'User not found' });
     }
     const token = JwtUtils.createToken({ email });
-    res.status(200).json({ token });
+    res.status(200).json({ success: true, data: { token }, meta: { timestamp: new Date().toISOString() } });
 }
 
-async function getAllUsers(req: Request, res: Response) {
+async function getAllUsers(req: ValidatedRequest<UserDTOs.GetAllUsersRequest>, res: PaginatedControllerResponse<UserDTOs.GetAllUsersResponse>) {
     const { page, limit } = req.query;
     const users = await UserRepository.getAllUsers(
-        page ? parseInt(page as string) : 1,
-        Math.min(limit ? parseInt(limit as string) : 10, 100)
+        page,
+        limit
     );
-    res.status(200).json(users);
+    const totalCount = await UserRepository.getUserCount();
+
+    res.status(200).json({
+        success: true,
+        data: users,
+        meta: {
+            timestamp: new Date().toISOString(),
+            pagination: {
+                totalCount: totalCount,
+                limit: limit,
+                offset: (page - 1) * limit,
+                hasNextPage: page * limit < totalCount
+            }
+        }
+    });
 }
 
-async function updateUser(req: Request<unknown, unknown, UserDTOs.UpdateUserRequest>, res: Response) {
+async function updateUser(req: ValidatedRequest<UserDTOs.UpdateUserRequest>, res: ControllerResponse<UserDTOs.UpdateUserResponse>) {
     const { email } = req.user!;
     const { name } = req.body;
     const updatedUser = await UserRepository.updateUser(email, name);
     if (!updatedUser) {
-        return res.status(404).json({ error: 'User not found' });
+        return res.status(404).json({ success: false, error: 'User not found' });
     }
-    res.status(200).json(updatedUser);
+    res.status(200).json({
+        success: true,
+        data: updatedUser,
+        meta: { timestamp: new Date().toISOString() }
+    });
 }
 
-async function deleteUser(req: Request<UserDTOs.UserParams>, res: Response) {
+async function deleteUser(req: ValidatedRequest<UserDTOs.DeleteUserRequest>, res: ControllerResponse<UserDTOs.DeleteUserResponse>) {
     const { email } = req.params;
     const user = await UserRepository.deleteUser(email);
     if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        return res.status(404).json({ success: false, error: 'User not found' });
     }
-    res.status(200).json({ message: 'User deleted successfully' });
+    res.status(200).json({
+        success: true,
+        data: { message: 'User deleted successfully' },
+        meta: { timestamp: new Date().toISOString() }
+    });
 }
 
-async function getUserBorrows(req: Request, res: Response) {
+async function getUserBorrows(req: ValidatedRequest<UserDTOs.GetUserBorrowsRequest>, res: ControllerResponse<UserDTOs.GetUserBorrowsResponse>) {
     const { email } = req.user!;
     const userWithBorrows = await UserRepository.getUserWithActiveBorrows(email);
     if (!userWithBorrows) {
-        return res.status(404).json({ error: 'User not found' });
+        return res.status(404).json({ success: false, error: 'User not found' });
     }
 
     const now = new Date();
@@ -64,11 +95,15 @@ async function getUserBorrows(req: Request, res: Response) {
         activeBorrows: userWithBorrows.Borrow.map(borrow => ({
             bookTitle: borrow.book.title,
             due_date: borrow.due_date,
-            status: borrow.due_date > now ? 'On Time' : 'Overdue'
+            status: borrow.due_date > now ? 'On Time' as const : 'Overdue' as const
         }))
     }
 
-    res.status(200).json(response);
+    res.status(200).json({
+        success: true,
+        data: response,
+        meta: { timestamp: new Date().toISOString() }
+    });
 }
 
 export const UserController = {

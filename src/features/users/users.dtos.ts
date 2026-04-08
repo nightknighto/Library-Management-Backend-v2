@@ -1,51 +1,56 @@
 import { z } from 'zod';
+import { createRequestSchema } from '../../shared/schemas/create-request-schema.ts';
 
-/**
- * Validation schemas for User-related endpoints
- */
-export namespace UserDTOs {
+// Email validation
+const emailInputSchema = z.string()
+    .min(1, "Email is required")
+    .trim()
+    .toLowerCase()
+    .email("Invalid email format")
+    .max(255, "Email must be less than 255 characters");
 
-    // Email validation
-    const emailSchema = z.string()
-        .min(1, "Email is required")
-        .trim()
-        .toLowerCase()
-        .email("Invalid email format")
-        .max(255, "Email must be less than 255 characters");
+// Name validation
+const nameInputSchema = z.string()
+    .min(1, "Name is required")
+    .max(100, "Name must be less than 100 characters")
+    .regex(/^[a-zA-Z\s'-]+$/, "Name can only contain letters, spaces, hyphens, and apostrophes")
+    .trim();
 
-    // Name validation
-    const nameSchema = z.string()
-        .min(1, "Name is required")
-        .max(100, "Name must be less than 100 characters")
-        .regex(/^[a-zA-Z\s'-]+$/, "Name can only contain letters, spaces, hyphens, and apostrophes")
-        .trim();
+export const RegisterUserRequestSchema = createRequestSchema({
+    body: {
+        email: emailInputSchema,
+        name: nameInputSchema
+    }
+});
 
-    /**
-     * Schema for user registration
-     */
-    export const RegisterUserSchema = z.object({
-        email: emailSchema,
-        name: nameSchema
-    }).strict();
+export const RegisterUserResponseSchema = z.object({
+    token: z.string()
+})
 
-    /**
-     * Schema for user login
-     */
-    export const LoginUserSchema = z.object({
-        email: emailSchema
-    }).strict();
+export const LoginUserRequestSchema = createRequestSchema({
+    body: {
+        email: emailInputSchema
+    }
+});
 
-    /**
-     * Schema for updating user information
-     */
-    export const UpdateUserSchema = z.object({
-        name: nameSchema
-    }).strict();
+export const LoginUserResponseSchema = z.object({
+    token: z.string()
+})
 
-    /**
-     * Schema for user pagination query parameters
-     */
-    export const UserPaginationQuerySchema = z.object({
+export const UpdateUserRequestSchema = createRequestSchema({
+    body: {
+        name: nameInputSchema
+    }
+});
+
+export const UpdateUserResponseSchema = z.object({
+    email: z.string(),
+    name: z.string(),
+    registered_at: z.date()
+})
+
+export const GetAllUsersRequestSchema = createRequestSchema({
+    query: {
         page: z.string()
             .optional()
             .transform(val => val ? parseInt(val) : 1)
@@ -54,19 +59,52 @@ export namespace UserDTOs {
             .optional()
             .transform(val => val ? parseInt(val) : 10)
             .refine(val => val > 0 && val <= 100, "Limit must be between 1 and 100")
-    });
+    }
+});
 
-    /**
-     * Schema for user email parameter validation
-     */
-    export const UserParamsSchema = z.object({
-        email: emailSchema
-    });
+export const GetAllUsersResponseSchema = z.object({
+    email: z.string(),
+    name: z.string(),
+    registered_at: z.date(),
+}).array()
 
-    // Type exports for use in controllers
-    export type RegisterUserRequest = z.infer<typeof RegisterUserSchema>;
-    export type LoginUserRequest = z.infer<typeof LoginUserSchema>;
-    export type UpdateUserRequest = z.infer<typeof UpdateUserSchema>;
-    export type UserPaginationQuery = z.infer<typeof UserPaginationQuerySchema>;
-    export type UserParams = z.infer<typeof UserParamsSchema>;
-}
+export const DeleteUserRequestSchema = createRequestSchema({
+    params: {
+        email: emailInputSchema
+    }
+})
+
+export const DeleteUserResponseSchema = z.object({
+    message: z.string()
+})
+
+export const GetUserBorrowsRequestSchema = createRequestSchema({});
+
+export const GetUserBorrowsResponseSchema = z.object({
+    email: z.string(),
+    name: z.string(),
+    activeBorrows: z.array(z.object({
+        bookTitle: z.string(),
+        due_date: z.date(),
+        status: z.enum(['On Time', 'Overdue'])
+    }))
+})
+
+// Type exports for use in controllers
+export type RegisterUserRequest = z.infer<typeof RegisterUserRequestSchema>;
+export type RegisterUserResponse = z.infer<typeof RegisterUserResponseSchema>;
+
+export type LoginUserRequest = z.infer<typeof LoginUserRequestSchema>;
+export type LoginUserResponse = z.infer<typeof LoginUserResponseSchema>;
+
+export type UpdateUserRequest = z.infer<typeof UpdateUserRequestSchema>;
+export type UpdateUserResponse = z.infer<typeof UpdateUserResponseSchema>;
+
+export type GetAllUsersRequest = z.infer<typeof GetAllUsersRequestSchema>;
+export type GetAllUsersResponse = z.infer<typeof GetAllUsersResponseSchema>;
+
+export type DeleteUserRequest = z.infer<typeof DeleteUserRequestSchema>;
+export type DeleteUserResponse = z.infer<typeof DeleteUserResponseSchema>;
+
+export type GetUserBorrowsRequest = z.infer<typeof GetUserBorrowsRequestSchema>;
+export type GetUserBorrowsResponse = z.infer<typeof GetUserBorrowsResponseSchema>;

@@ -70,14 +70,14 @@ const emptySchema = z.union([
  * - Infers exact types for use with `ValidatedRequest<T>` in controllers
  * 
  * @example
- * export const CreateBookSchema = createRequestSchema({
+ * export const CreateBookRequestSchema = createRequestSchema({
  *   body: {
  *     title: z.string(),
  *     author: z.string(),
  *   }
  * });
  * 
- * export const GetBookSchema = createRequestSchema({
+ * export const GetBookRequestSchema = createRequestSchema({
  *   params: { id: z.string().uuid() },
  *   query: { includeDetails: z.coerce.boolean().default(false) },
  * });

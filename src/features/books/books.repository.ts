@@ -51,6 +51,28 @@ async function getAllBooks({
     return books;
 }
 
+async function countBooks({
+    title, author, isbn,
+}: {
+    title?: string;
+    author?: string;
+    isbn?: string;
+}) {
+    const where: Prisma.BookWhereInput = {
+        ...(title && { title: { contains: title, mode: "insensitive" } }),
+        ...(author && { author: { contains: author, mode: "insensitive" } }),
+        ...(isbn && { isbn: { contains: isbn, mode: "insensitive" } }),
+    };
+
+    const totalCount = await prisma.book.count({
+        where,
+    });
+
+    return totalCount;
+}
+
+
+
 async function getBookByIsbn(isbn: string) {
     const book = await prisma.$queryRawTyped(getBookAvailableQuantity(isbn));
     return book[0];
@@ -95,5 +117,7 @@ export const BookRepository = {
     getAllBooks,
     getBookByIsbn,
     updateBook,
-    deleteBook
+    deleteBook,
+    countBooks
+
 } as const;
