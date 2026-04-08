@@ -1,4 +1,4 @@
-import type * as UserDTOs from './users.dtos.ts';
+import type * as UserDTOs from './users.schemas.ts';
 import { UserRepository } from './users.repository.ts';
 import { JwtUtils } from '../../utils/jwt.util.ts';
 import type { ValidatedRequest } from '../../shared/middlewares/validators.middleware.ts';

@@ -1,5 +1,5 @@
 import type { Response } from 'express';
-import * as BorrowDTOs from './borrows.dtos.ts';
+import * as BorrowDTOs from './borrows.schemas.ts';
 import { BorrowRepository } from './borrows.repository.ts';
 import { BookRepository } from '../books/books.repository.ts';
 import type { ValidatedRequest } from '../../shared/middlewares/validators.middleware.ts';

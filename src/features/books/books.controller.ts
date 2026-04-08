@@ -1,5 +1,5 @@
 import { BookRepository } from './books.repository.ts';
-import * as BookDTOs from './books.dtos.ts';
+import * as BookDTOs from './books.schemas.ts';
 import type { ValidatedRequest } from '../../shared/middlewares/validators.middleware.ts';
 import createHttpError from 'http-errors';
 import type { ControllerResponse, PaginatedControllerResponse } from '../../shared/schemas/controller-responses.schema.ts';

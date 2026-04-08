@@ -1,5 +1,5 @@
 import { Router } from "express";
-import * as UserDTOs from "./users.dtos.ts";
+import * as UserDTOs from "./users.schemas.ts";
 import { UserController } from "./users.controller.ts";
 import { rateLimiter } from "../../shared/middlewares/rate-limiter.middleware.ts";
 import { authenticate } from "../../shared/middlewares/auth.ts";
