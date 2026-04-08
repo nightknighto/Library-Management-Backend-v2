@@ -12,8 +12,9 @@ This project follows a **Feature-Based (Vertical Slice) Architecture**. Unlike t
 
 This is where 90% of the development happens. Each folder represents a specific business domain (e.g., `users`, `billing`, `orders`).
 
-* **`*.controller.ts`**: Handles HTTP or Express-specific logic. Parses requests and returns responses. No business logic here.
-* **`*.service.ts`**: The "Brain". Contains all business logic and orchestrates database calls. Never pass `req` or `res` into a service; this makes it impossible to test.
+* **`*.controller.ts`**: Handles HTTP or Express-specific logic. Parses requests, calls the appropriate service and returns responses. No business logic here.
+* **`*.service.ts`**: The "Brain". Contains all business logic and interacts with the database, integrates with third-party APIs, or performs calculations. Never pass `req` or `res` into a service; this makes it impossible to test.
+  * If you ever need to switch from REST to GraphQL, your Services won't change; only your Controllers will.
 * **`*.schema.ts`**: Data validation (Zod). Defines what the input/output should look like. Database table schemas can also be defined here.
 * **`*.routes.ts`**: Local routing for the specific feature.
 * **`*.types.ts`**: TypeScript interfaces specific to this domain.
@@ -28,34 +29,44 @@ Some other file notations that are less likely to be needed: (won't be used in t
 
 ### `src/shared/` (The Glue)
 
-Logic that is specific to our application but used by multiple features.
+Logic that is specific to your application but used by multiple features.
 
 * **`middlewares/`**: Global Express middlewares (Auth guards, error handlers, rate limiters).
 * **`schemas/`**: Common validation patterns (e.g., Pagination, UUID validation).
 * **`types/`**: Global API response shapes or Express type extensions.
 * **`services/`**: Shared services used across features (e.g., EmailService, LoggingService, RedisService).
 
+> The Rule: It is "domain-aware." It knows what a "User" or an "Error" looks like in your specific system.
+
 ### `src/lib/` (The Adapters)
 
 Wrappers for third-party SDKs. If we swap a library, we only change it here. Only for initializing and configuring external services.
 
 * *Examples:* `prisma.ts` (DB Client), `stripe.ts` (Payments), `s3.ts` (Storage).
+* **Rule:** It "initializes" a tool.
 * **Rule:** Features should import from `lib/`, not directly from `node_modules` for core clients.
 
 ### `src/utils/` (The Toolbox)
 
-Stateless, domain-agnostic helper functions. These are "Technical Utilities." They don't care about your business; they just perform a task.
+These are stateless, generic functions that do one small thing and have no "knowledge" of your app's business domain.
 
+* **What goes here**: Date formatters, string manipulators, or a function to calculate a hash.
 * *Examples:* `date-formatter.ts`, `currency-convert.ts`, `string-utils.ts`.
 * **Rule:** If a function needs to know about the Database or a User model or third-party service, it does **not** belong here.
+* **Rule:** You should be able to copy this folder into a completely different project (like a React frontend) and it would still work.
 
 > Reflecting on `/lib` and `/utils`: The key is to maintain the conceptual separation: `/lib` for external service wrappers and `/utils` for pure helper functions. If you find that distinction too rigid, feel free to combine them but keep the naming clear (e.g., `lib/stripe.ts` vs `lib/date-utils.ts`).
 
 ### `src/config/` (The Brain)
 
-Centralized environment variable management.
+Centralized environment variable management. This is strictly for external settings. It’s the bridge between your environment variables `(.env)` and your application.
+* What goes here: Database connection strings, API keys, CORS settings, or AWS S3 bucket names.
+* The Rule: If you change a value here, it shouldn't require you to change your business logic.
+* Example: `database.config.ts`, `passport.config.ts`.
 
-* Uses a validation library (like Zod) to ensure the app crashes immediately if a required `.env` variable is missing.
+> Use a validation library (like Zod) to ensure the app crashes immediately if a required `.env` variable is missing.
+
+> Loggers and their configurations are put in this folder.
 
 ---
 
