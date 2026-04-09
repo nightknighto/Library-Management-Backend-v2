@@ -1,31 +1,21 @@
 import { BookRepository } from './books.repository.ts';
 import * as BookDTOs from './books.schemas.ts';
-import type { ValidatedRequest } from '../../shared/middlewares/validators.middleware.ts';
 import createHttpError from 'http-errors';
-import type { ControllerResponse, PaginatedControllerResponse } from '../../shared/schemas/controller-responses.schema.ts';
-import { sanitizeResponse } from '../../shared/schemas/sanitize-response.ts';
+import { createHandler } from '../../core/create-handler.core.ts';
 
-async function createBook(req: ValidatedRequest<BookDTOs.CreateBookRequest>, res: ControllerResponse<BookDTOs.CreateBookResponse>) {
+const createBook = createHandler(BookDTOs.CreateBookContract, async (req) => {
     const book = await BookRepository.createBook(req.body);
     if (!book) {
-        return res.status(400).json({ success: false, error: 'Book with this ISBN already exists' });
+        throw new createHttpError.BadRequest('Book with this ISBN already exists');
     }
 
-    const output = sanitizeResponse(BookDTOs.CreateBookResponseSchema, {
-        message: 'Book created successfully',
-        gg: 2,
-    })
+    return {
+        statusCode: 201,
+        data: 'Book created successfully',
+    };
+});
 
-    res.status(201).json({
-        success: true,
-        data: output,
-        meta: {
-            timestamp: new Date().toISOString(),
-        }
-    });
-}
-
-async function getAllBooks(req: ValidatedRequest<BookDTOs.ListBooksRequest>, res: PaginatedControllerResponse<BookDTOs.ListBooksResponse>) {
+const getAllBooks = createHandler(BookDTOs.ListBooksContract, async (req) => {
     const { title, author, isbn, page, limit } = req.query;
 
     const books = await BookRepository.getAllBooks({
@@ -38,25 +28,17 @@ async function getAllBooks(req: ValidatedRequest<BookDTOs.ListBooksRequest>, res
 
     const totalCount = await BookRepository.countBooks({ title, author, isbn })
 
-    const output = sanitizeResponse(BookDTOs.ListBooksResponseSchema, books)
+    return {
+        data: books,
+        pagination: {
+            totalCount,
+            page,
+            limit,
+        },
+    };
+})
 
-    res.status(200).json({
-        success: true,
-        data: output,
-        meta: {
-            timestamp: new Date().toISOString(),
-            pagination: {
-                totalCount: totalCount,
-                limit: 20,
-                offset: 0,
-                hasNextPage: page * limit < totalCount,
-            }
-        }
-    });
-}
-
-async function getBookByIsbn(req: ValidatedRequest<BookDTOs.GetBookRequest>, res: ControllerResponse<BookDTOs.GetBookResponse>) {
-
+const getBookByIsbn = createHandler(BookDTOs.GetBookContract, async (req) => {
     const { isbn } = req.params;
     const { fields } = req.query;
     const book = await BookRepository.getBookByIsbn(isbn);
@@ -71,60 +53,33 @@ async function getBookByIsbn(req: ValidatedRequest<BookDTOs.GetBookRequest>, res
             return acc;
         }, {} as Record<keyof typeof book, any>);
 
-        const output = sanitizeResponse(BookDTOs.GetBookResponseSchema, selectedFields)
-        return res.status(200).json({
-            success: true,
-            data: output,
-            meta: {
-                timestamp: new Date().toISOString(),
-            }
-        });
+        return { data: selectedFields };
     }
 
 
     // const output = BookDTOs.GetBookResponseSchema.parse(book satisfies preprocess)
-    const output = sanitizeResponse(BookDTOs.GetBookResponseSchema, { ...book, w: 2 })
-    return res.status(200).json({
-        success: true,
-        data: output,
-        meta: {
-            timestamp: new Date().toISOString(),
-        }
-    });
-}
+    return { data: { ...book, w: 2 } };
+})
 
-async function updateBook(req: ValidatedRequest<BookDTOs.UpdateBookRequest>, res: ControllerResponse<BookDTOs.UpdateBookResponse>) {
+const updateBook = createHandler(BookDTOs.UpdateBookContract, async (req) => {
     const { isbn } = req.params;
     const updatedBook = await BookRepository.updateBook(isbn, req.body);
     if (!updatedBook) {
-        return res.status(404).json({ success: false, error: 'Book not found' });
+        throw new createHttpError.NotFound('Book not found');
     }
 
-    const output = sanitizeResponse(BookDTOs.UpdateBookResponseSchema, updatedBook)
-    res.status(200).json({
-        success: true,
-        data: output,
-        meta: {
-            timestamp: new Date().toISOString(),
-        }
-    });
-}
+    return { data: updatedBook };
+})
 
-async function deleteBook(req: ValidatedRequest<BookDTOs.DeleteBookRequest>, res: ControllerResponse<BookDTOs.DeleteBookResponse>) {
+const deleteBook = createHandler(BookDTOs.DeleteBookContract, async (req) => {
     const { isbn } = req.params;
     const book = await BookRepository.deleteBook(isbn);
     if (!book) {
-        return res.status(404).json({ success: false, error: 'Book not found' });
+        throw new createHttpError.NotFound('Book not found');
     }
-    res.status(200).json({
-        success: true,
-        data: undefined,
-        meta: {
-            timestamp: new Date().toISOString(),
-        }
-    });
 
-}
+    return { data: undefined };
+})
 
 export const BookController = {
     createBook,

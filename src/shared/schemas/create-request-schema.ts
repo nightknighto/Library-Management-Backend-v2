@@ -10,7 +10,7 @@ import z from "zod";
  * 
  * Example: { body: { name: z.string(), age: z.number() } }
  */
-type RequestSchemaInput = {
+export type RequestSchemaInput = {
     body?: Record<string, z.ZodTypeAny>;
     query?: Record<string, z.ZodTypeAny>;
     params?: Record<string, z.ZodTypeAny>;
@@ -21,7 +21,7 @@ type RequestSchemaInput = {
  * - If a field is provided, it becomes a ZodObject with those fields
  * - If a field is omitted, it becomes an empty ZodObject (matching Express's default {})
  */
-type RequestSchemaOutput<T extends RequestSchemaInput> = {
+export type RequestSchemaOutput<T extends RequestSchemaInput> = {
     body: T['body'] extends Record<string, z.ZodTypeAny>
     ? z.ZodObject<T['body']>
     : z.ZodObject<Record<string, never>>;
