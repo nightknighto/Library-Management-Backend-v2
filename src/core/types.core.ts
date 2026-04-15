@@ -2,26 +2,22 @@
  * @file types.core.ts
  *
  * Shared core type definitions used across contract creation, response building,
- * and handler execution.
+ * handler execution, and access control.
  *
  * SECTIONS:
  * 1. RESPONSE FORMAT TYPES - API envelope and pagination-related types
  * 2. HANDLER DX TYPES - Generic handler return type helpers
+ * 3. HANDLER SECURITY TYPES - Access/auth/authz options and contracts
  */
 
-import type { input as Input, ZodTypeAny } from "zod";
+import type { Request } from "express";
+import type createHttpError from "http-errors";
+import type { input as Input, ZodType, ZodTypeAny } from "zod";
 
 // ============================================================================
 // SECTION 1: RESPONSE FORMAT TYPES
 // ============================================================================
-// Shared response and pagination types used by contract and response modules.
 
-/**
- * Pagination input provided by handlers.
- *
- * Used as input when handlers return paginated results. Missing fields can be
- * computed by response builder helpers.
- */
 export type PaginationInput = {
     totalCount: number;
     page: number;
@@ -30,9 +26,6 @@ export type PaginationInput = {
     hasNextPage?: boolean;
 };
 
-/**
- * Normalized pagination metadata included in successful paginated responses.
- */
 export type PaginationMeta = {
     totalCount: number;
     limit: number;
@@ -40,16 +33,10 @@ export type PaginationMeta = {
     hasNextPage: boolean;
 };
 
-/**
- * Conditionally makes the `data` field optional when the response data type can be undefined.
- */
 export type DataField<TData> = undefined extends TData
     ? { data?: TData }
     : { data: TData };
 
-/**
- * Successful API response envelope shape.
- */
 export type SuccessResponse<TData, TPaginated extends boolean> =
     TPaginated extends true
     ? DataField<TData> & {
@@ -66,24 +53,15 @@ export type SuccessResponse<TData, TPaginated extends boolean> =
         };
     };
 
-/**
- * Error API response envelope shape.
- */
 export type ErrorResponse = {
     success: false;
     error?: unknown;
 };
 
-/**
- * Full API response shape (success or error).
- */
 export type ContractResponse<TData, TPaginated extends boolean> =
     | SuccessResponse<TData, TPaginated>
     | ErrorResponse;
 
-/**
- * Success response payload shape before sanitization.
- */
 export type SuccessResponsePayload<TData> = {
     success: true;
     data: TData;
@@ -96,14 +74,7 @@ export type SuccessResponsePayload<TData> = {
 // ============================================================================
 // SECTION 2: HANDLER DX TYPES
 // ============================================================================
-// Shared type utilities that improve handler return type inference.
 
-/**
- * Generic success result returned by business handlers.
- *
- * For paginated endpoints, pagination is required. For non-paginated endpoints,
- * pagination must be omitted.
- */
 export type HandlerSuccessResult<
     TResponseSchema extends ZodTypeAny,
     TPaginated extends boolean,
@@ -113,3 +84,59 @@ export type HandlerSuccessResult<
 } & (TPaginated extends true
     ? { pagination: PaginationInput }
     : { pagination?: undefined });
+
+// ============================================================================
+// SECTION 3: HANDLER SECURITY TYPES
+// ============================================================================
+
+export type MaybePromise<T> = T | Promise<T>;
+
+export type AccessMode = "public" | "protected" | "optional";
+
+export type Authenticator<
+    TAuthContext,
+    TRequest extends Request<any, any, any, any> = Request,
+> = (
+    req: TRequest,
+) => MaybePromise<TAuthContext | null | undefined>;
+
+export type Authorizer<
+    TAuthContext,
+    TRequest extends Request<any, any, any, any> = Request,
+> = (
+    params: {
+        req: TRequest;
+        auth: TAuthContext;
+    },
+) => MaybePromise<boolean>;
+
+export type AuthErrorMapper<TRequest extends Request<any, any, any, any> = Request> = (
+    req: TRequest,
+) => createHttpError.HttpError;
+
+export type SecurityOptions<
+    TAuthContext,
+    TRequest extends Request<any, any, any, any> = Request,
+> = {
+    authenticate?: Authenticator<TAuthContext, TRequest>;
+    authorizationBeforeValidation?: boolean;
+    authorize?:
+    | Authorizer<TAuthContext, TRequest>
+    | Array<Authorizer<TAuthContext, TRequest>>;
+    authSchema?: ZodType<TAuthContext>;
+};
+
+export type HandlerErrorMappers<TRequest extends Request<any, any, any, any> = Request> = {
+    unauthorized?: AuthErrorMapper<TRequest>;
+    forbidden?: AuthErrorMapper<TRequest>;
+};
+
+export type HandlerOptions<
+    TAccess extends AccessMode,
+    TAuthContext,
+    TRequest extends Request<any, any, any, any> = Request,
+> = {
+    access?: TAccess;
+    security?: SecurityOptions<TAuthContext, TRequest>;
+    errors?: HandlerErrorMappers<TRequest>;
+};

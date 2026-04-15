@@ -1,26 +1,5 @@
-/**
- * @file create-handler.core.ts
- * 
- * Orchestrates HTTP request handling by connecting three stages: validation, execution,
- * and response generation. This is the main execution engine for API endpoints.
- * 
- * A handler processes three stages:
- * 1. Request validation: Ensures incoming request conforms to contract
- * 2. Handler execution: Runs business logic with validated request
- * 3. Response generation: Wraps results in contract-compliant envelope
- * 
- * Response building (pagination, payload construction) is delegated to response-builder.core.ts.
- * Error handling is delegated to error-handler.core.ts module for separation of concerns.
- * 
- * All responses follow the contract structure: { success: true|false, data?, error?, meta }
- * 
- * SECTIONS:
- * 1. DATA STRUCTURES - Shared type usage (types.core.ts)
- * 2. TYPE INFERENCE ENGINE - Advanced TypeScript types for type safety (internal)
- * 3. HANDLER EXECUTION - Main orchestration logic (developer-facing API)
- */
-
-import type { RequestHandler } from "express";
+import type { Request, RequestHandler } from "express";
+import type { Query } from "express-serve-static-core";
 import type { infer as Infer, ZodTypeAny } from "zod";
 import type { Contract } from "./create-contract.core.ts";
 import type { ValidatedRequest } from "../shared/middlewares/validators.middleware.ts";
@@ -28,217 +7,382 @@ import { sanitizeResponse } from "../shared/schemas/sanitize-response.ts";
 import { validateContractRequest } from "./validate-contract-request.core.ts";
 import { handleError } from "./error-handler.core.ts";
 import { buildPaginationMeta, buildSuccessResponsePayload } from "./response-builder.core.ts";
-import type { HandlerSuccessResult } from "./types.core.ts";
+import {
+    executeAuthenticationStage,
+    executeAuthorizationStage,
+    mergeHandlerSecurityDefaults,
+} from "./security.core.ts";
+import type {
+    AccessMode,
+    Authenticator,
+    Authorizer,
+    HandlerErrorMappers,
+    HandlerOptions,
+    HandlerSuccessResult,
+    SecurityOptions,
+} from "./types.core.ts";
 
-// ============================================================================
-// SECTION 1: DATA STRUCTURES - Shared Type Usage
-// ============================================================================
-// Shared handler and response types are defined in types.core.ts.
-
-// ============================================================================
-// SECTION 2: TYPE INFERENCE ENGINE - Advanced TypeScript Types
-// ============================================================================
-// These are "magical" TypeScript constructs that provide automatic type inference
-// for contract shapes, handler inputs, and return types. You likely won't modify these.
-
-/**
- * Generic type matching any contract for simplified type signatures.
- */
 type AnyContract = Contract<ZodTypeAny, ZodTypeAny, boolean>;
 
-/**
- * Extracts the request payload type from a contract.
- * 
- * Infers what the handler will receive as `req` after validation.
- */
-type ContractRequestPayload<TContract extends AnyContract> = Infer<TContract['request']>;
+type ContractRequestPayload<TContract extends AnyContract> = Infer<TContract["request"]>;
 
-/**
- * Contract-specific handler result type.
- * 
- * Automatically infers pagination requirement from the contract's `paginated` flag.
- * This ensures typechecker validates handler return shape matches contract expectations.
- */
 type ContractHandlerSuccessResult<TContract extends AnyContract> =
-    TContract extends Contract<ZodTypeAny, infer TResponseDataSchema extends ZodTypeAny, infer TPaginated extends boolean>
+    TContract extends Contract<
+        ZodTypeAny,
+        infer TResponseDataSchema extends ZodTypeAny,
+        infer TPaginated extends boolean
+    >
     ? HandlerSuccessResult<TResponseDataSchema, TPaginated>
     : never;
 
-// ============================================================================
-// SECTION 3: HANDLER EXECUTION - Main Orchestration Logic
-// ============================================================================
-// Main handler factory. Creates Express RequestHandler that automates validation,
-// execution, response building, and error handling.
+export type HandlerRequest<TContract extends AnyContract> =
+    ValidatedRequest<ContractRequestPayload<TContract>>;
 
-/**
- * Creates an Express request handler with automatic request validation and response wrapping.
- * 
- * ## Three-Stage Processing
- * 
- * **Stage 1: Request Validation**
- * - Validates incoming request (body, query, params) against contract.request schema
- * - Returns 400 with validation issues if invalid
- * - Mutates req object with validated/typed fields
- * 
- * **Stage 2: Handler Execution**
- * - Invokes **your** handler function with validated request
- * - Your handler **must** return { data, statusCode?, pagination? } (types enforced by contract)
- * - Catches exceptions (both expected HttpError and unexpected generic errors)
- * 
- * **Stage 3: Response Wrapping**
- * - Wraps data in contract-compliant response envelope
- * - Generates timestamp and pagination metadata
- * - Sanitizes response to remove extra fields (via sanitizeResponse)
- * - Returns HTTP response with appropriate status code
- * 
- * ## Error Handling Strategy
- * 
- * - **Zod Validation Errors (400)**: Invalid request → { success: false, error: { message, issues } }
- * - **Output Validation Errors (500)**: Handler returned invalid data → { success: false, error: "..." }
- * - **HttpError Exceptions**: Custom status + message → { success: false, error: "..." }
- * - **Generic Errors (500)**: Any other error → { success: false, error: "Internal Server Error" }
- * 
- * ## Usage
- * 
- * ```typescript
- * // Define contract
- * const createBookContract = createContract({
- *   request: { body: { title: z.string(), isbn: z.string() } },
- *   response: BookSchema,
- * });
- * 
- * // Write handler
- * const createBook = createHandler(createBookContract, async (req) => {
- *   const book = await BookRepository.create(req.body);
- *   if (!book) throw new createHttpError.BadRequest("Failed to create");
- *   return {
- *     statusCode: 201,
- *     data: book,
- *   };
- * });
- * 
- * // Route registers handler directly
- * router.post('/books', createBook);
- * ```
- * 
- * @returns Express RequestHandler ready to mount on routes
- * 
- * @typeParam TContract - The contract type (inferred from params)
- * 
- * @throws HTTP response on validation error (400), HTTP error (custom), or server error (500)
- *         (Does not throw; instead sends error response)
- */
-export function createHandler<TContract extends AnyContract>(
-    /**
-     * API contract defining request/response shapes and pagination behavior.
-     * 
-     * The contract acts as a schema definition that:
-     * - Validates incoming request (body, query, params)
-     * - Enforces response data shape returned by handler
-     * - Specifies pagination requirements
-     * 
-     * **Must be created with `createContract()`**
-     * 
-     * @example
-     * ```typescript
-     * const listBooksContract = createContract({
-     *   request: {
-     *     query: { limit: z.number(), offset: z.number() }
-     *   },
-     *   response: BookSchema,
-     *   paginated: true,  // Enables pagination in response
-     * });
-     * 
-     * @see createContract for contract creation
-     */
+type AuthorizerBaseRequest = Request<Record<string, string>, any, unknown, Query>;
+
+export type AfterAuthorizationRequest<TContract extends AnyContract> =
+    AuthorizerBaseRequest & HandlerRequest<TContract>;
+
+type PublicHandlerExecutor<TContract extends AnyContract> = (
+    req: HandlerRequest<TContract>,
+) => Promise<ContractHandlerSuccessResult<TContract>>;
+
+type ProtectedHandlerExecutor<TContract extends AnyContract, TAuthContext> = (
+    req: HandlerRequest<TContract>,
+    auth: TAuthContext,
+) => Promise<ContractHandlerSuccessResult<TContract>>;
+
+type OptionalHandlerExecutor<TContract extends AnyContract, TAuthContext> = (
+    req: HandlerRequest<TContract>,
+    auth?: TAuthContext,
+) => Promise<ContractHandlerSuccessResult<TContract>>;
+
+type HandlerFactoryDefaults<TAuthContext> = {
+    access?: AccessMode;
+    security?: SecurityOptions<TAuthContext, Request>;
+    errors?: HandlerErrorMappers<Request>;
+};
+
+type BeforeSecurityOptions<TAuthContext> =
+    Omit<SecurityOptions<TAuthContext, Request>, "authorizationBeforeValidation"> & {
+        authorizationBeforeValidation?: true | undefined;
+    };
+
+type AfterSecurityOptions<
+    TAuthContext,
+    TContract extends AnyContract,
+> = Omit<
+    SecurityOptions<TAuthContext, Request>,
+    "authorize" | "authorizationBeforeValidation"
+> & {
+    authorizationBeforeValidation: false;
+    authorize?:
+    | Authorizer<TAuthContext, AfterAuthorizationRequest<TContract>>
+    | Array<Authorizer<TAuthContext, AfterAuthorizationRequest<TContract>>>;
+};
+
+type BeforeHandlerOptions<
+    TAccess extends AccessMode,
+    TAuthContext,
+> = Omit<HandlerOptions<TAccess, TAuthContext, Request>, "security"> & {
+    security?: BeforeSecurityOptions<TAuthContext>;
+};
+
+type AfterHandlerOptions<
+    TAccess extends AccessMode,
+    TAuthContext,
+    TContract extends AnyContract,
+> = Omit<HandlerOptions<TAccess, TAuthContext, Request>, "security"> & {
+    security: AfterSecurityOptions<TAuthContext, TContract>;
+};
+
+type HandlerOptionsByAuthorizationMode<
+    TAccess extends AccessMode,
+    TAuthContext,
+    TContract extends AnyContract,
+> =
+    | BeforeHandlerOptions<TAccess, TAuthContext>
+    | AfterHandlerOptions<TAccess, TAuthContext, TContract>;
+
+type WithRequiredAccess<
+    TOptions,
+    TAccess extends AccessMode,
+> = TOptions extends unknown
+    ? Omit<TOptions, "access"> & { access: TAccess }
+    : never;
+
+type HandlerFactoryOptionsArg<
+    TDefaultAccess extends AccessMode,
+    TAccess extends AccessMode,
+    TAuthContext,
+    TContract extends AnyContract,
+> = [TDefaultAccess] extends [TAccess]
+    ? [options?: HandlerOptionsByAuthorizationMode<TAccess, TAuthContext, TContract>]
+    : [
+        options: WithRequiredAccess<
+            HandlerOptionsByAuthorizationMode<TAccess, TAuthContext, TContract>,
+            TAccess
+        >
+    ];
+
+type ConfiguredHandlerFactory<
+    TAuthContext,
+    TDefaultAccess extends AccessMode,
+> = {
+    <TContract extends AnyContract>(
+        contract: TContract,
+        handler: PublicHandlerExecutor<TContract>,
+        ...args: HandlerFactoryOptionsArg<TDefaultAccess, "public", TAuthContext, TContract>
+    ): RequestHandler;
+    <TContract extends AnyContract>(
+        contract: TContract,
+        handler: OptionalHandlerExecutor<TContract, TAuthContext>,
+        ...args: HandlerFactoryOptionsArg<TDefaultAccess, "optional", TAuthContext, TContract>
+    ): RequestHandler;
+    <TContract extends AnyContract>(
+        contract: TContract,
+        handler: ProtectedHandlerExecutor<TContract, TAuthContext>,
+        ...args: HandlerFactoryOptionsArg<TDefaultAccess, "protected", TAuthContext, TContract>
+    ): RequestHandler;
+};
+
+export type {
+    AccessMode,
+    Authenticator,
+    Authorizer,
+    HandlerErrorMappers,
+    HandlerOptions,
+    SecurityOptions,
+} from "./types.core.ts";
+
+export { allOf, anyOf, not } from "./security.core.ts";
+
+function createHandlerRuntime<
+    TContract extends AnyContract,
+    TAuthContext,
+>(
     contract: TContract,
-
-    /**
-     * Business logic function that processes the validated request and returns a typed result.
-     * 
-     * @param req - Validated request object with type-safe body, query, and params properties
-     * @returns Promise resolving to `{ data, statusCode?, pagination? }`
-     *   - `data`: Must match the contract's response schema (validated automatically)
-     *   - `statusCode`: HTTP status code **(default: 200)**. Use 201 for creation, 204 for no content, etc.
-     *   - `pagination`: Pagination metadata `{ limit, offset, total }` - Required only for **paginated contracts**
-     * 
-     * @example
-     * ```typescript
-     * const createBook = createHandler(createBookContract, async (req) => {
-     *   const book = await BookRepository.create(req.body);
-     *   if (!book) throw new createHttpError.BadRequest("Failed to create book");
-     *   return {
-     *     statusCode: 201,
-     *     data: book,
-     *   };
-     * });
-     * ```
-     * 
-     * @throws HttpError - Use for expected errors (400, 404, 409, etc.)
-     * @throws Any other error - Will be caught and returned as 500 Internal Server Error
-     */
-    handler: (
-        req: ValidatedRequest<ContractRequestPayload<TContract>>,
-    ) => Promise<ContractHandlerSuccessResult<TContract>>,
+    handler:
+        | PublicHandlerExecutor<TContract>
+        | OptionalHandlerExecutor<TContract, TAuthContext>
+        | ProtectedHandlerExecutor<TContract, TAuthContext>,
+    options?: HandlerOptionsByAuthorizationMode<AccessMode, TAuthContext, TContract>,
 ): RequestHandler {
     return async (req, res) => {
         try {
-            // ================================================================
-            // STAGE 1: REQUEST VALIDATION
-            // ================================================================
-            // Parse and validate incoming request against contract schema.
-            // Throws ZodError if validation fails (caught below).
-            // Mutates req.body, req.query, req.params with validated data.
+            const access: AccessMode = options?.access ?? "public";
+            const security = options?.security;
 
-            const validatedReq = await validateContractRequest<TContract['request']>(
+            const authenticationResult = await executeAuthenticationStage({
+                req,
+                access,
+                security: security
+                    ? {
+                        authenticate: security.authenticate,
+                        authSchema: security.authSchema,
+                    }
+                    : undefined,
+                errors: options?.errors,
+            });
+
+            if (security?.authorizationBeforeValidation !== false) {
+                await executeAuthorizationStage({
+                    req,
+                    access,
+                    auth: (authenticationResult as { auth?: TAuthContext }).auth,
+                    security: security
+                        ? {
+                            authorize: security.authorize,
+                        }
+                        : undefined,
+                    errors: options?.errors,
+                });
+            }
+
+            const validatedReq = await validateContractRequest<TContract["request"]>(
                 contract.request,
                 req,
             );
 
-            // ================================================================
-            // STAGE 2: HANDLER EXECUTION
-            // ================================================================
-            // Execute business logic with validated, typed request.
-            // Handler returns { data, statusCode?, pagination? } which must
-            // match the contract's expected response data type.
+            const typedReq = validatedReq as HandlerRequest<TContract>;
 
-            const result = await handler(validatedReq);
+            if (security?.authorizationBeforeValidation === false) {
+                await executeAuthorizationStage({
+                    req: typedReq as AfterAuthorizationRequest<TContract>,
+                    access,
+                    auth: (authenticationResult as { auth?: TAuthContext }).auth,
+                    security: {
+                        authorize: security.authorize,
+                    },
+                    errors: options?.errors,
+                });
+            }
 
-            // ================================================================
-            // STAGE 3: RESPONSE WRAPPER
-            // ================================================================
-            // Build response envelope following contract structure.
+            let result: ContractHandlerSuccessResult<TContract>;
+            if (access === "protected") {
+                result = await (handler as ProtectedHandlerExecutor<TContract, TAuthContext>)(
+                    typedReq,
+                    (authenticationResult as { auth: TAuthContext }).auth,
+                );
+            } else if (access === "optional") {
+                result = await (handler as OptionalHandlerExecutor<TContract, TAuthContext>)(
+                    typedReq,
+                    (authenticationResult as { auth?: TAuthContext }).auth,
+                );
+            } else {
+                result = await (handler as PublicHandlerExecutor<TContract>)(typedReq);
+            }
 
-            // Generate ISO timestamp for all successful responses
-            const timestamp = new Date().toISOString();
-
-            // Use handler's statusCode or default to 200
             const statusCode = result.statusCode ?? 200;
-
-            // Build pagination metadata if handler provided pagination input
-            // (computed only for paginated contracts when pagination is present)
-            const pagination = result.pagination
-                ? buildPaginationMeta(result.pagination)
-                : undefined;
-
-            // Construct success response matching contract.response schema
             const successPayload = buildSuccessResponsePayload({
                 data: result.data,
-                timestamp,
-                // Pagination metadata: only included if present
-                pagination,
+                timestamp: new Date().toISOString(),
+                pagination: result.pagination
+                    ? buildPaginationMeta(result.pagination)
+                    : undefined,
             });
 
-            // Validate response against contract.response schema and strip extra fields
-            // (throws error caught in outer catch if output validation fails)
             const output = sanitizeResponse(contract.response, successPayload);
-
-            // Send validated response
             res.status(statusCode).json(output);
         } catch (error) {
-            // All error handling is delegated to the error handler module
-            // which categorizes and responds appropriately (400, 500, or custom status)
             handleError(error, contract.response, res);
         }
     };
+}
+
+export function createHandler<
+    TContract extends AnyContract,
+    TAuthContext = never,
+>(
+    contract: TContract,
+    handler: PublicHandlerExecutor<TContract>,
+    options?: BeforeHandlerOptions<"public", TAuthContext>,
+): RequestHandler;
+export function createHandler<
+    TContract extends AnyContract,
+    TAuthContext = never,
+>(
+    contract: TContract,
+    handler: PublicHandlerExecutor<TContract>,
+    options: AfterHandlerOptions<"public", TAuthContext, TContract>,
+): RequestHandler;
+export function createHandler<
+    TContract extends AnyContract,
+    TAuthContext,
+>(
+    contract: TContract,
+    handler: OptionalHandlerExecutor<TContract, TAuthContext>,
+    options: BeforeHandlerOptions<"optional", TAuthContext>,
+): RequestHandler;
+export function createHandler<
+    TContract extends AnyContract,
+    TAuthContext,
+>(
+    contract: TContract,
+    handler: OptionalHandlerExecutor<TContract, TAuthContext>,
+    options: AfterHandlerOptions<"optional", TAuthContext, TContract>,
+): RequestHandler;
+export function createHandler<
+    TContract extends AnyContract,
+    TAuthContext,
+>(
+    contract: TContract,
+    handler: ProtectedHandlerExecutor<TContract, TAuthContext>,
+    options: BeforeHandlerOptions<"protected", TAuthContext>,
+): RequestHandler;
+export function createHandler<
+    TContract extends AnyContract,
+    TAuthContext,
+>(
+    contract: TContract,
+    handler: ProtectedHandlerExecutor<TContract, TAuthContext>,
+    options: AfterHandlerOptions<"protected", TAuthContext, TContract>,
+): RequestHandler;
+export function createHandler<
+    TContract extends AnyContract,
+    TAuthContext,
+>(
+    contract: TContract,
+    handler:
+        | PublicHandlerExecutor<TContract>
+        | OptionalHandlerExecutor<TContract, TAuthContext>
+        | ProtectedHandlerExecutor<TContract, TAuthContext>,
+    options?: HandlerOptionsByAuthorizationMode<AccessMode, TAuthContext, TContract>,
+): RequestHandler {
+    return createHandlerRuntime(contract, handler, options);
+}
+
+function createHandlerInternal<
+    TContract extends AnyContract,
+    TAuthContext,
+>(
+    contract: TContract,
+    handler:
+        | PublicHandlerExecutor<TContract>
+        | OptionalHandlerExecutor<TContract, TAuthContext>
+        | ProtectedHandlerExecutor<TContract, TAuthContext>,
+    options?: HandlerOptions<AccessMode, TAuthContext, Request>,
+): RequestHandler {
+    return createHandlerRuntime<TContract, TAuthContext>(
+        contract,
+        handler,
+        options as HandlerOptionsByAuthorizationMode<AccessMode, TAuthContext, TContract>,
+    );
+}
+
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults: HandlerFactoryDefaults<TAuthContext> & { access: "public" },
+): ConfiguredHandlerFactory<TAuthContext, "public">;
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults: HandlerFactoryDefaults<TAuthContext> & { access: "optional" },
+): ConfiguredHandlerFactory<TAuthContext, "optional">;
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults: HandlerFactoryDefaults<TAuthContext> & { access: "protected" },
+): ConfiguredHandlerFactory<TAuthContext, "protected">;
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults: HandlerFactoryDefaults<TAuthContext> & { access: AccessMode },
+): ConfiguredHandlerFactory<TAuthContext, AccessMode>;
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults?: HandlerFactoryDefaults<TAuthContext>,
+): ConfiguredHandlerFactory<TAuthContext, "public">;
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults?: HandlerFactoryDefaults<TAuthContext>,
+): ConfiguredHandlerFactory<TAuthContext, AccessMode> {
+    function createConfiguredHandler<TContract extends AnyContract>(
+        contract: TContract,
+        handler:
+            | PublicHandlerExecutor<TContract>
+            | OptionalHandlerExecutor<TContract, TAuthContext>
+            | ProtectedHandlerExecutor<TContract, TAuthContext>,
+        options?: HandlerOptions<AccessMode, TAuthContext, Request>,
+    ): RequestHandler {
+        const merged = mergeHandlerSecurityDefaults(defaults, options);
+
+        const mergedOptions: HandlerOptions<AccessMode, TAuthContext, Request> = {
+            ...options,
+            access: merged.access,
+            security: merged.security,
+            errors: merged.errors,
+        };
+
+        return createHandlerInternal<TContract, TAuthContext>(
+            contract,
+            handler,
+            mergedOptions,
+        );
+    }
+
+    return createConfiguredHandler as ConfiguredHandlerFactory<TAuthContext, AccessMode>;
 }

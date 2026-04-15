@@ -2,9 +2,9 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.ts";
 import { getBookAvailableQuantity } from "@prisma/client/sql";
 
-async function createBook({
-    isbn, title, author, shelf, total_quantity
-}: Omit<Prisma.BookCreateInput, "created_at" | "Borrow">) {
+async function createBook(author: string, {
+    isbn, title, shelf, total_quantity
+}: Omit<Prisma.BookCreateInput, "created_at" | "Borrow" | 'Author'>) {
     try {
         const book = await prisma.book.create({
             data: {
@@ -78,13 +78,12 @@ async function getBookByIsbn(isbn: string) {
     return book[0];
 }
 
-async function updateBook(isbn: string, data: Omit<Prisma.BookUpdateInput, "created_at" | "Borrow">) {
+async function updateBook(isbn: string, author: string, data: Omit<Prisma.BookUpdateInput, "created_at" | "Borrow">) {
     try {
         const updatedBook = await prisma.book.update({
-            where: { isbn },
+            where: { isbn, author },
             data: {
                 title: data.title,
-                author: data.author,
                 total_quantity: data.total_quantity,
                 shelf: data.shelf,
             },
@@ -98,10 +97,10 @@ async function updateBook(isbn: string, data: Omit<Prisma.BookUpdateInput, "crea
     }
 }
 
-async function deleteBook(isbn: string) {
+async function deleteBook(isbn: string, author: string) {
     try {
         const book = await prisma.book.delete({
-            where: { isbn },
+            where: { isbn, author },
         });
         return book;
     } catch (error: any) {
@@ -119,5 +118,4 @@ export const BookRepository = {
     updateBook,
     deleteBook,
     countBooks
-
 } as const;

@@ -5,7 +5,7 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["typedSql"]
 }
 
@@ -17,11 +17,12 @@ datasource db {
 model Book {
   isbn           String   @id
   title          String
-  author         String
+  author         String @map("author")
   shelf          String
   total_quantity Int
   created_at     DateTime @default(now())
 
+  Author User     @relation(fields: [author], references: [email], onDelete: Cascade)
   Borrow Borrow[]
 
   @@index([title])
@@ -35,6 +36,7 @@ model User {
   registered_at DateTime @default(now())
 
   Borrow Borrow[]
+  books  Book[]
 
   @@map("users")
 }

@@ -32,7 +32,6 @@ export const CreateBookContract = createContract({
         body: {
             isbn: isbnSchema,
             title: titleSchema,
-            author: authorSchema,
             shelf: shelfSchema,
             total_quantity: totalQuantitySchema
         },
@@ -44,7 +43,6 @@ export const UpdateBookContract = createContract({
     request: {
         body: {
             title: titleSchema.optional(),
-            author: authorSchema.optional(),
             shelf: shelfSchema.optional(),
             total_quantity: totalQuantitySchema.optional()
         },
