@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
-const reqString = (message: string) => z.string({ required_error: message }).min(1, { message });
-const reqUrl = (message: string) => z.string({ required_error: message }).url({ message });
+const reqString = (message: string) => z.string({
+    error: (issue) => issue.input === undefined ? message : undefined
+}).min(1, { message });
+const reqUrl = (message: string) => z.url({ message });
 
 const defaultPort = 3001;
 
@@ -17,7 +19,7 @@ const defaultPort = 3001;
  */
 const configSchema = z.object({
     jwtSecret: reqString('JWT_SECRET is required'),
-    port: z.coerce.number().default(defaultPort),
+    port: z.coerce.number().prefault(defaultPort),
     databaseURL: reqUrl('DATABASE_URL must be a valid URL'),
 });
 
@@ -32,7 +34,7 @@ const parsedConfig = configSchema.safeParse(rawConfig);
 if (!parsedConfig.success) {
     console.error(
         `Invalid configuration, please set the following variables in your .env file:
-        ${parsedConfig.error.errors.map((error) => `- ${error.message}`).join('\n\t')}`,
+        ${parsedConfig.error.issues.map((error) => `- ${error.message}`).join('\n\t')}`,
     );
 
     process.exit(1);

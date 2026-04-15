@@ -1,6 +1,6 @@
 import type { Request, RequestHandler } from "express";
 import type { Query } from "express-serve-static-core";
-import type { infer as Infer, ZodTypeAny } from "zod";
+import type { infer as Infer, ZodType, ZodTypeAny } from "zod";
 import type { Contract } from "./create-contract.core.ts";
 import type { ValidatedRequest } from "../shared/middlewares/validators.middleware.ts";
 import { sanitizeResponse } from "../shared/schemas/sanitize-response.ts";
@@ -22,7 +22,13 @@ import type {
     SecurityOptions,
 } from "./types.core.ts";
 
-type AnyContract = Contract<ZodTypeAny, ZodTypeAny, boolean>;
+type ContractRequestEnvelope = {
+    body: unknown;
+    query: unknown;
+    params: unknown;
+};
+
+type AnyContract = Contract<ZodType<ContractRequestEnvelope>, ZodTypeAny, boolean>;
 
 type ContractRequestPayload<TContract extends AnyContract> = Infer<TContract["request"]>;
 

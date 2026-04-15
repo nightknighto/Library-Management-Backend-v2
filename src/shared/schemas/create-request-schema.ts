@@ -11,9 +11,9 @@ import z from "zod";
  * Example: { body: { name: z.string(), age: z.number() } }
  */
 export type RequestSchemaInput = {
-    body?: Record<string, z.ZodTypeAny>;
-    query?: Record<string, z.ZodTypeAny>;
-    params?: Record<string, z.ZodTypeAny>;
+    body?: Record<string, z.ZodType>;
+    query?: Record<string, z.ZodType>;
+    params?: Record<string, z.ZodType>;
 }
 
 /**
@@ -22,13 +22,13 @@ export type RequestSchemaInput = {
  * - If a field is omitted, it becomes an empty ZodObject (matching Express's default {})
  */
 export type RequestSchemaOutput<T extends RequestSchemaInput> = {
-    body: T['body'] extends Record<string, z.ZodTypeAny>
+    body: T['body'] extends Record<string, z.ZodType>
     ? z.ZodObject<T['body']>
     : z.ZodObject<Record<string, never>>;
-    query: T['query'] extends Record<string, z.ZodTypeAny>
+    query: T['query'] extends Record<string, z.ZodType>
     ? z.ZodObject<T['query']>
     : z.ZodObject<Record<string, never>>;
-    params: T['params'] extends Record<string, z.ZodTypeAny>
+    params: T['params'] extends Record<string, z.ZodType>
     ? z.ZodObject<T['params']>
     : z.ZodObject<Record<string, never>>;
 }
@@ -37,9 +37,9 @@ export type RequestSchemaOutput<T extends RequestSchemaInput> = {
  * Type used by the validation middleware to accept any request schema.
  */
 export type RequestSchema = z.ZodObject<{
-    body: z.ZodTypeAny;
-    query: z.ZodTypeAny;
-    params: z.ZodTypeAny;
+    body: z.ZodType<any>;
+    query: z.ZodType<any>;
+    params: z.ZodType<any>;
 }>;
 
 // ============================================================================
@@ -53,7 +53,7 @@ export type RequestSchema = z.ZodObject<{
  */
 const emptySchema = z.union([
     z.undefined(),
-    z.record(z.unknown())
+    z.record(z.string(), z.unknown())
 ]).transform(() => ({}));
 
 /**
@@ -89,7 +89,7 @@ export function createRequestSchema<
     T extends RequestSchemaInput & Record<Exclude<keyof T, keyof RequestSchemaInput>, never>
 >(shape: T) {
     const schema = z.object({
-        body: shape.body ? z.object(shape.body).strict() : emptySchema,
+        body: shape.body ? z.strictObject(shape.body) : emptySchema,
         query: shape.query ? z.object(shape.query) : emptySchema,
         params: shape.params ? z.object(shape.params) : emptySchema,
     });

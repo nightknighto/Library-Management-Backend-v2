@@ -116,7 +116,6 @@ export type ContractResponseSchema<
     TPaginated extends boolean,
 > = z.ZodType<
     ContractResponse<z.output<TResponseData>, TPaginated>,
-    z.ZodTypeDef,
     ContractResponse<z.input<TResponseData>, TPaginated>
 >;
 

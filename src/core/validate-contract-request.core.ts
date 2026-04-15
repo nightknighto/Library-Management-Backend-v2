@@ -11,8 +11,14 @@
  */
 
 import type { Request } from "express";
-import { ZodError, type infer as Infer, type ZodTypeAny } from "zod";
+import { ZodError, type infer as Infer, type ZodType } from "zod";
 import type { ValidatedRequest } from "../shared/middlewares/validators.middleware.ts";
+
+type ContractRequestEnvelope = {
+    body: unknown;
+    query: unknown;
+    params: unknown;
+};
 
 // ============================================================================
 // SECTION 1: VALIDATION HELPERS - Type Guards
@@ -101,7 +107,9 @@ export function isZodError(error: unknown): error is ZodError {
  * const validatedReq = await validateContractRequest(contract.request, req);
  * // Now validatedReq.body, query, params are properly typed per contract
  */
-export async function validateContractRequest<TRequestSchema extends ZodTypeAny>(
+export async function validateContractRequest<
+    TRequestSchema extends ZodType<ContractRequestEnvelope>
+>(
     schema: TRequestSchema,
     req: Request,
 ): Promise<ValidatedRequest<Infer<TRequestSchema>>> {
@@ -116,8 +124,8 @@ export async function validateContractRequest<TRequestSchema extends ZodTypeAny>
     // Mutate request: replace raw fields with validated, typed fields
     // This in-place modification serves as type promotion for TypeScript
     req.body = validated.body;
-    req.query = validated.query;
-    req.params = validated.params;
+    req.query = validated.query as Request["query"];
+    req.params = validated.params as Request["params"];
 
     // Return mutated request, now correctly typed as ValidatedRequest
     return req as ValidatedRequest<Infer<TRequestSchema>>;

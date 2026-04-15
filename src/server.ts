@@ -31,6 +31,11 @@ const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
 
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason);
+  process.exit(1);
+});
+
 // Prevent the process from exiting
 process.on('SIGTERM', () => {
     console.log('SIGTERM received, closing server...');

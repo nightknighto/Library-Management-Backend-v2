@@ -2,11 +2,10 @@ import { z } from 'zod';
 import { createRequestSchema } from '../../shared/schemas/create-request-schema.ts';
 
 // Email validation
-const emailInputSchema = z.string()
+const emailInputSchema = z.email("Invalid email format")
     .min(1, "Email is required")
     .trim()
     .toLowerCase()
-    .email("Invalid email format")
     .max(255, "Email must be less than 255 characters");
 
 // Name validation

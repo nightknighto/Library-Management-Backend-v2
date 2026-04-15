@@ -13,8 +13,7 @@ const authorSchema = z.string()
 const shelfSchema = z.string()
 
 // Total quantity validation
-const totalQuantitySchema = z.number()
-    .int("Total quantity must be a whole number")
+const totalQuantitySchema = z.int("Total quantity must be a whole number")
     .min(1, "Total quantity must be at least 1")
     .max(1000, "Total quantity cannot exceed 1000");
 
@@ -61,10 +60,10 @@ export const ListBooksContract = createContract({
             isbn: isbnSchema.optional(),
             page: z.coerce.number()
                 .refine(val => val > 0, "Page must be a positive number")
-                .default(1),
+                .prefault(1),
             limit: z.coerce.number()
                 .refine(val => val > 0 && val <= 100, "Limit must be between 1 and 100")
-                .default(10),
+                .prefault(10),
         }
     },
     response: z.array(bookOutputSchema),
@@ -82,7 +81,7 @@ export const GetBookContract = createContract({
             isbn: isbnSchema
         }
     },
-    response: bookOutputSchema//.partial()
+    response: bookOutputSchema,
 })
 
 export const DeleteBookContract = createContract({

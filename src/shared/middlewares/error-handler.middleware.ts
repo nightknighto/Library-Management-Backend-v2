@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import createHttpError from "http-errors";
-import { ZodError } from "zod";
+import z, { ZodError } from "zod";
 
 type ErrorResponse = {
     success: false;
@@ -24,14 +24,13 @@ export function globalErrorHandler(err: any, req: Request, res: Response<ErrorRe
         if (err instanceof ZodError) {
             if ((err as any).isOutputValidationError) {
                 // Output validation error - internal problem
-                console.error('Zod Validation Error:', err.flatten());
+                console.error('Zod Validation Error:', z.prettifyError(err));
             } else {
-                console.log(err.toString());
                 // Input validation error - client problem
                 statusCode = 400;
                 code = 'VALIDATION_ERROR';
-                message = 'Invalid request data';
-                details = err.flatten();
+                message = 'Invalid request data provided';
+                details = z.prettifyError(err);
             }
         } else if (createHttpError.isHttpError(err)) {
             statusCode = err.statusCode;
