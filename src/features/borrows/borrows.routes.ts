@@ -6,13 +6,11 @@ const borrowsRoutes = Router();
 
 // POST /borrows/borrow/:isbn - Borrow a book (requires authentication)
 borrowsRoutes.post('/borrow/:isbn',
-    authenticate,
     BorrowController.borrowBook
 );
 
 // POST /borrows/return/:isbn - Return a book (requires authentication)
 borrowsRoutes.post('/return/:isbn',
-    authenticate,
     BorrowController.returnBook
 );
 

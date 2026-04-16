@@ -83,6 +83,18 @@ Default checks:
 - Run pnpm check for type safety.
 - Run targeted tests related to touched areas; run full suite only when requested.
 
+## AI Rules Location
+- Store AI instruction and rules documents under [docs/rules](docs/rules/).
+- Treat [docs/create-handler-security-guide.md](docs/create-handler-security-guide.md) as a usage guide, not a rules file.
+
+## Inference Test Governance (Mandatory)
+- Compile-only inference tests live in `src/core/__type-tests__` and are enforced through `pnpm check`.
+- Any change to handler, contract, security, or request-validation typing surfaces must update or extend relevant inference tests.
+- Every workstream that extends `createHandler` behavior must add one capability test, one interaction test, and one backward-compat assertion in invariant/regression suites.
+- Treat inference invariants as framework contracts. Do not weaken or remove them unless an intentional breaking change is approved and documented.
+- Use narrowly scoped `// @ts-expect-error` lines for negative compile assertions.
+- Follow the detailed policy document at [docs/rules/create-handler-inference-policy.md](docs/rules/create-handler-inference-policy.md) when adding or updating type-inference tests.
+
 ## Ask-First Triggers
 Ask for confirmation before:
 - Expanding edits to unrelated feature modules.

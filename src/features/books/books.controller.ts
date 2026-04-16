@@ -9,7 +9,7 @@ import {
     not,
 } from '../../core/create-handler.core.ts';
 import { UserRepository } from '../users/users.repository.ts';
-import { type JwtAuthContext, authenticateJwt, JwtAuthSchema, hasRegisteredUser, isLibraryStaff, hasWriteAccessHeader, editsOwnAuthorName, isSystemReservedBook, createJwtAuthHandler, deleteBookPolicy } from './auth-stuff.ts';
+import { type JwtAuthContext, authenticateJwt, JwtAuthSchema, hasRegisteredUser, isLibraryStaff, hasWriteAccessHeader, editsOwnAuthorName, isSystemReservedBook, createJwtAuthHandler, deleteBookPolicy } from '../auth-stuff.ts';
 
 type IsAny<T> = 0 extends (1 & T) ? true : false;
 type EnsureNotAny<T> = IsAny<T> extends true ? never : T;
@@ -52,11 +52,11 @@ const createBook = createJwtAuthHandler(BookDTOs.CreateBookContract,
                 anyOf([
                     isLibraryStaff,
                     hasWriteAccessHeader,
-                async ({ auth, req }) => {
-                    assertIsString(req.body.title);
+                    async ({ auth, req }) => {
+                        assertIsString(req.body.title);
 
-                    return false
-                },
+                        return false
+                    },
                 ]),
             ]),
             authorizationBeforeValidation: false,

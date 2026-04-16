@@ -93,6 +93,40 @@ export type MaybePromise<T> = T | Promise<T>;
 
 export type AccessMode = "public" | "protected" | "optional";
 
+/**
+ * Authentication callback contract used by framework handlers.
+ *
+ * Important typing note for this repository:
+ * in handler-first call shapes, TypeScript can lose `TAuthContext` inference
+ * when this callback uses an unannotated parameter (for example
+ * `authenticate: async (req) => ({ ... })`).
+ *
+ * If the callback needs `req`, annotate it explicitly:
+ * `authenticate: async (req: Request) => ({ ... })`.
+ *
+ * If `req` is not needed, prefer parameterless:
+ * `authenticate: async () => ({ ... })`.
+ *
+ * @typeParam TAuthContext
+ * Auth context shape returned by authentication and propagated to handlers/authorizers.
+ *
+ * @typeParam TRequest
+ * Request type accepted by the callback.
+ *
+ * @example
+ * type JwtAuth = { email: string };
+ *
+ * const authenticate: Authenticator<JwtAuth> = async (req: Request) => {
+ *   const header = req.headers.authorization;
+ *   if (!header) {
+ *     return null;
+ *   }
+ *
+ *   return { email: "user@example.com" };
+ * };
+ *
+ * @see docs/rules/create-handler-auth-inference-limitations.md
+ */
 export type Authenticator<
     TAuthContext,
     TRequest extends Request<any, any, any, any> = Request,
@@ -118,6 +152,19 @@ export type SecurityOptions<
     TAuthContext,
     TRequest extends Request<any, any, any, any> = Request,
 > = {
+    /**
+     * Authentication callback used to build auth context for protected/optional handlers.
+     *
+        * Edge case:
+        * In generic object-literal call sites, unannotated callback parameters can cause
+        * `TAuthContext` to degrade to `unknown`.
+     *
+     * Recommended patterns:
+     * - `authenticate: async (req: Request) => ({ ... })` when request access is needed.
+     * - `authenticate: async () => ({ ... })` when request access is not needed.
+     *
+        * @see docs/rules/create-handler-auth-inference-limitations.md
+     */
     authenticate?: Authenticator<TAuthContext, TRequest>;
     authorizationBeforeValidation?: boolean;
     authorize?:

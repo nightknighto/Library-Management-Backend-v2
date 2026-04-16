@@ -1,9 +1,9 @@
 import createHttpError from "http-errors";
 import z from "zod";
-import type { Authenticator, Authorizer } from "../../core/types.core.ts";
-import { JwtUtils } from "../../utils/jwt.util.ts";
-import { UserRepository } from "../users/users.repository.ts";
-import { allOf, createHandlerFactory, not } from "../../core/create-handler.core.ts";
+import type { Authenticator, Authorizer } from "../core/types.core.ts";
+import { JwtUtils } from "../utils/jwt.util.ts";
+import { UserRepository } from "./users/users.repository.ts";
+import { allOf, createHandlerFactory, not } from "../core/create-handler.core.ts";
 
 export type JwtAuthContext = {
     email: string;

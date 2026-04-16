@@ -1,12 +1,14 @@
 import * as BorrowDTOs from './borrows.schemas.ts';
 import { BorrowRepository } from './borrows.repository.ts';
 import { BookRepository } from '../books/books.repository.ts';
+import type { Request } from 'express';
 import { createHandler } from '../../core/create-handler.core.ts';
 import createHttpError from 'http-errors';
+import z from 'zod';
 
-const borrowBook = createHandler(BorrowDTOs.BorrowBookContract, async (req) => {
+const borrowBook = createHandler(BorrowDTOs.BorrowBookContract, async (req, auth) => {
     const { isbn } = req.params
-    const user_email = req.user!.email;
+    const user_email = auth.email;
 
     // Check if book is available
     const book = await BookRepository.getBookByIsbn(isbn);
@@ -30,7 +32,30 @@ const borrowBook = createHandler(BorrowDTOs.BorrowBookContract, async (req) => {
         statusCode: 201,
         data: 'Book borrowed successfully'
     }
-})
+},
+    {
+        access: 'protected', // This handler requires authentication
+        security: {
+            authenticate: async (req: Request) => {
+                // This is a placeholder. In a real implementation, you'd verify a JWT or session.
+                const authHeader = req.headers.authorization;
+                if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                    return null;
+                }
+                const token = authHeader.split(' ')[1];
+                // For testing purposes, we'll just return a dummy user based on the token.
+                return { email: token! } as const;
+            },
+            authorize: async ({ auth }) => {
+                // For this example, we'll allow any authenticated user to borrow books.
+                // In a real implementation, you might check user roles or permissions here.
+                return Boolean(auth?.email);
+            }
+            // authSchema: z.object({
+            //     email: z.string().email(),
+            // }),
+        }
+    })
 
 const returnBook = createHandler(BorrowDTOs.ReturnBookContract, async (req) => {
     const { isbn } = req.params
