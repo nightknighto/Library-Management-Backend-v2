@@ -84,8 +84,8 @@ export const createJwtAuthHandler = createHandlerFactory<JwtAuthContext>({
         authSchema: JwtAuthSchema,
     },
     errors: {
-        unauthorized: () => new createHttpError.Unauthorized('Authentication required'),
-        forbidden: () => new createHttpError.Forbidden('Authorization policy denied this operation'),
+        unauthenticated: () => new createHttpError.Unauthorized('Authentication required'),
+        unauthorized: () => new createHttpError.Forbidden('Authorization policy denied this operation'),
     },
 });
 
@@ -98,7 +98,7 @@ export const createJwtAuthHandler2 = createHandlerFactory({
         }),
     },
     errors: {
-        unauthorized: () => new createHttpError.Unauthorized('Authentication required'),
-        forbidden: () => new createHttpError.Forbidden('Authorization policy denied this operation'),
+        unauthenticated: () => new createHttpError.Unauthorized('Authentication required'),
+        unauthorized: () => new createHttpError.Forbidden('Authorization policy denied this operation'),
     },
 });

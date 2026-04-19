@@ -2,9 +2,10 @@ import * as BorrowDTOs from './borrows.schemas.ts';
 import { BorrowRepository } from './borrows.repository.ts';
 import { BookRepository } from '../books/books.repository.ts';
 import type { Request } from 'express';
-import { createHandler } from '../../core/create-handler.core.ts';
+import { createHandler, createHandlerFactory } from '../../core/create-handler.core.ts';
 import createHttpError from 'http-errors';
 import z from 'zod';
+import { authenticateJwt } from '../auth-stuff.ts';
 
 const borrowBook = createHandler(BorrowDTOs.BorrowBookContract, async (req, auth) => {
     const { isbn } = req.params
@@ -39,6 +40,7 @@ const borrowBook = createHandler(BorrowDTOs.BorrowBookContract, async (req, auth
             authenticate: async (req: Request) => {
                 // This is a placeholder. In a real implementation, you'd verify a JWT or session.
                 const authHeader = req.headers.authorization;
+                console.log(authHeader);
                 if (!authHeader || !authHeader.startsWith('Bearer ')) {
                     return null;
                 }
@@ -50,16 +52,24 @@ const borrowBook = createHandler(BorrowDTOs.BorrowBookContract, async (req, auth
                 // For this example, we'll allow any authenticated user to borrow books.
                 // In a real implementation, you might check user roles or permissions here.
                 return Boolean(auth?.email);
-            }
-            // authSchema: z.object({
-            //     email: z.string().email(),
-            // }),
+            },
+            authSchema: z.object({
+                email: z.string().email(),
+            }),
         }
     })
 
-const returnBook = createHandler(BorrowDTOs.ReturnBookContract, async (req) => {
+const createProtectedHandler = createHandlerFactory({
+    access: 'protected',
+    security: {
+        authenticate: authenticateJwt,
+        validateBeforeAuthorization: true
+    }
+})
+
+const returnBook = createProtectedHandler(BorrowDTOs.ReturnBookContract, async (req, auth) => {
     const { isbn } = req.params
-    const user_email = req.user!.email;
+    const user_email = auth.email;
 
     const success = await BorrowRepository.returnBook(user_email, isbn);
     if (!success) {
@@ -69,10 +79,23 @@ const returnBook = createHandler(BorrowDTOs.ReturnBookContract, async (req) => {
     return {
         data: 'Book returned successfully'
     }
-})
+},
+    {
+        security: {
+            authorize: async ({ req, auth }) => {
+                const existingBorrow = await BorrowRepository.getActiveBorrowByUserAndBook(auth.email, req.params.isbn);
+
+                if (!existingBorrow) {
+                    throw new createHttpError.Forbidden('No active borrow record found for this user and book.');
+                }
+
+                return true;
+            }
+        }
+    })
 
 
-const getOverdueBooks = createHandler(BorrowDTOs.OverdueBooksContract, async (req) => {
+const getOverdueBooks = createProtectedHandler(BorrowDTOs.OverdueBooksContract, async (req) => {
     const { page, limit } = req.query;
     const overdueBorrows = await BorrowRepository.getOverdueBorrows({
         page,

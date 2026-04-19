@@ -179,11 +179,29 @@ createHandler(
         security: {
             authenticate: async () => ({ userId: "u-3", role: "staff" as const }),
             authSchema: AuthSchema,
-            authorizationBeforeValidation: false,
+            validateBeforeAuthorization: true,
             authorize: async ({ req, auth }) => {
                 type _authorizedReqBody = Expect<
                     Equal<typeof req.body, { title: string; totalQuantity: number }>
                 >;
+                type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
+                return auth.role === "staff" && req.body.title.length > 0;
+            },
+        },
+    },
+);
+
+createHandler(
+    UpdateBookContract,
+    async (_req, _auth) => ({ data: { updated: true } }),
+    {
+        access: "protected",
+        security: {
+            authenticate: async () => ({ userId: "u-3", role: "staff" as const }),
+            authSchema: AuthSchema,
+            validateBeforeAuthorization: false, // <============
+            authorize: async ({ req, auth }) => {
+                type _authorizedReqBody = Expect<Equal<typeof req, Request>>;
                 type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
                 return auth.role === "staff" && req.body.title.length > 0;
             },
@@ -209,13 +227,13 @@ createHandler(
             authorize: composedPolicy,
         },
         errors: {
+            unauthenticated: (req) => {
+                type _reqShape = Expect<Extends<typeof req, Request>>;
+                return new createHttpError.Unauthorized("Unauthenticated");
+            },
             unauthorized: (req) => {
                 type _reqShape = Expect<Extends<typeof req, Request>>;
                 return new createHttpError.Unauthorized("Unauthorized");
-            },
-            forbidden: (req) => {
-                type _reqShape = Expect<Extends<typeof req, Request>>;
-                return new createHttpError.Forbidden("Forbidden");
             },
         },
     },
@@ -247,3 +265,97 @@ publicFactory(
         },
     },
 );
+
+const privateFactoryAuthSchemaOnly = createHandlerFactory({
+    access: "protected",
+    security: {
+        authSchema: AuthSchema
+    }
+})
+
+privateFactoryAuthSchemaOnly(
+    UpdateBookContract,
+    async (_req, auth) => {
+        type _authExact = Expect<Extends<typeof auth, AuthContext>>;
+        return { data: { updated: true } };
+    },
+    {
+        security: {
+            validateBeforeAuthorization: false, // <===========
+            authorize: async ({ req, auth }) => {
+                type _authorizedReqBody = Expect<Equal<typeof req, Request>>;
+                type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
+                return auth.role === "staff" && req.body.title.length > 0;
+            },
+        }
+    }
+)
+
+privateFactoryAuthSchemaOnly(
+    UpdateBookContract,
+    async (_req, auth) => {
+        type _authExact = Expect<Extends<typeof auth, AuthContext>>;
+        return { data: { updated: true } };
+    },
+    {
+        security: {
+            validateBeforeAuthorization: true, // <===========
+            authorize: async ({ req, auth }) => {
+                type _authorizedReqBody = Expect<
+                    Equal<typeof req.body, { title: string; totalQuantity: number }>
+                >;
+                type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
+                return auth.role === "staff" && req.body.title.length > 0;
+            },
+        }
+    }
+)
+
+const privateFactoryAuthenticateOnly = createHandlerFactory({
+    access: "protected",
+    security: {
+        authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
+    }
+})
+
+privateFactoryAuthenticateOnly(
+    UpdateBookContract,
+    async (req, auth) => {
+        type _authExact = Expect<Extends<typeof auth, AuthContext>>;
+        return { data: { updated: true } };
+    },
+    {
+        security: {
+            authorize: async ({ req, auth }) => {
+                type _authorizedReqBody = Expect<Equal<typeof req, Request>>;
+                type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
+                return auth.role === "staff" && req.body.title.length > 0;
+            },
+        }
+    }
+)
+
+const privateFactoryValidationBeforeAuth = createHandlerFactory({
+    access: "protected",
+    security: {
+        validateBeforeAuthorization: true, // <===========
+        authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
+    }
+})
+
+privateFactoryValidationBeforeAuth(
+    UpdateBookContract,
+    async (_req, auth) => {
+        type _authExact = Expect<Extends<typeof auth, AuthContext>>;
+        return { data: { updated: true } };
+    },
+    {
+        security: {
+            authorize: async ({ req, auth }) => {
+                type _authorizedReqBody = Expect<Equal<typeof req.body, { title: string; totalQuantity: number }>>;
+                type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
+                return auth.role === "staff" && req.body.title.length > 0;
+            },
+        }
+    }
+)

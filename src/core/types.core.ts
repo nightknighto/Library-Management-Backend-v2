@@ -166,7 +166,7 @@ export type SecurityOptions<
         * @see docs/rules/create-handler-auth-inference-limitations.md
      */
     authenticate?: Authenticator<TAuthContext, TRequest>;
-    authorizationBeforeValidation?: boolean;
+    validateBeforeAuthorization?: boolean;
     authorize?:
     | Authorizer<TAuthContext, TRequest>
     | Array<Authorizer<TAuthContext, TRequest>>;
@@ -174,8 +174,8 @@ export type SecurityOptions<
 };
 
 export type HandlerErrorMappers<TRequest extends Request<any, any, any, any> = Request> = {
+    unauthenticated?: AuthErrorMapper<TRequest>;
     unauthorized?: AuthErrorMapper<TRequest>;
-    forbidden?: AuthErrorMapper<TRequest>;
 };
 
 export type HandlerOptions<

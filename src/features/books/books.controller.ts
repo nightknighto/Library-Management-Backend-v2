@@ -59,7 +59,7 @@ const createBook = createJwtAuthHandler(BookDTOs.CreateBookContract,
                     },
                 ]),
             ]),
-            authorizationBeforeValidation: false,
+            validateBeforeAuthorization: true,
         },
     },
 );
@@ -103,10 +103,10 @@ const getAllBooks = createHandler(
                 const existingUser = await UserRepository.getUser(auth.email);
                 return Boolean(existingUser);
             },
-            authorizationBeforeValidation: false,
+            validateBeforeAuthorization: true,
         },
         errors: {
-            forbidden: () => new createHttpError.Forbidden('Invalid authenticated user'),
+            unauthorized: () => new createHttpError.Forbidden('Invalid authenticated user'),
         },
     },
 );

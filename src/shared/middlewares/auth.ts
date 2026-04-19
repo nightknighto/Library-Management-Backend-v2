@@ -1,17 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { JwtUtils } from '../../utils/jwt.util.ts';
 
-// Extend Express Request type to include user
-declare global {
-    namespace Express {
-        interface Request {
-            user?: {
-                email: string;
-            };
-        }
-    }
-}
-
 /**
  * Express middleware for JWT token authentication.
  * 

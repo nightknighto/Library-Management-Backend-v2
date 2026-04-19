@@ -34,8 +34,8 @@ Required axes:
 - Request typing and response typing from createHandler callbacks
 - Pagination result requirements for paginated and non-paginated contracts
 - Authentication typing across public, optional, and protected access modes
-- Authorization callback typing, including authorizationBeforeValidation: false
-- Error mapper typing (unauthorized, forbidden)
+- Authorization callback typing, including validateBeforeAuthorization: true
+- Error mapper typing (unauthenticated, unauthorized)
 - Factory typing behavior for createHandlerFactory
 - Contract inference via createContract
 - Request envelope and promotion typing via request schema and validation utilities
@@ -64,7 +64,7 @@ Examples:
 Preserves past bug fixes and fragile scenarios.
 
 Examples:
-- Typed authorize request when authorizationBeforeValidation: false
+- Typed authorize request when validateBeforeAuthorization: true
 - Pagination metadata requirement for paginated contracts
 - Contract response still includes the error envelope variant
 

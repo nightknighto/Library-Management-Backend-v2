@@ -72,8 +72,8 @@ export async function executeAuthenticationStage<
     if (!authenticate) {
         if (access === "protected") {
             throw (
-                errors?.unauthorized?.(req)
-                ?? new createHttpError.Unauthorized("Unauthorized")
+                errors?.unauthenticated?.(req)
+                ?? new createHttpError.Unauthorized("Unauthenticated")
             );
         }
 
@@ -86,17 +86,26 @@ export async function executeAuthenticationStage<
     if (auth === null) {
         if (access === "protected") {
             throw (
-                errors?.unauthorized?.(req)
-                ?? new createHttpError.Unauthorized("Unauthorized")
+                errors?.unauthenticated?.(req)
+                ?? new createHttpError.Unauthorized("Unauthenticated")
             );
         }
 
         return {} as SecurityExecutionResult<TAuthContext, TAccess>;
     }
 
-    const parsedAuth = security?.authSchema
-        ? security.authSchema.parse(auth)
-        : auth;
+    let parsedAuth: TAuthContext;
+
+    try {
+        parsedAuth = security?.authSchema
+            ? await security.authSchema.parseAsync(auth)
+            : auth;
+    } catch (e) {
+        throw (
+            errors?.unauthenticated?.(req)
+            ?? new createHttpError.Unauthorized("Invalid authentication data")
+        );
+    }
 
     return { auth: parsedAuth } as SecurityExecutionResult<TAuthContext, TAccess>;
 }
@@ -132,7 +141,7 @@ export async function executeAuthorizationStage<
         const isAllowed = await authorize({ req, auth });
         if (!isAllowed) {
             throw (
-                errors?.forbidden?.(req)
+                errors?.unauthorized?.(req)
                 ?? new createHttpError.Forbidden("Forbidden")
             );
         }

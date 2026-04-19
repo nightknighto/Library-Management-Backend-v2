@@ -24,10 +24,10 @@ Security is configured through handler options:
   - Optional Zod schema to validate parsed auth context
 - security.authorize:
   - One policy or list of policies
-- security.authorizationBeforeValidation:
-  - true (default): authorization runs before request validation
-  - false: authorization runs after request validation
-- errors.unauthorized / errors.forbidden:
+- security.validateBeforeAuthorization:
+  - false (default): authorization runs before request validation
+  - true: authorization runs after request validation
+- errors.unauthenticated / errors.unauthorized:
   - Optional custom error mappers
 
 ## 2. Imports You Will Use
@@ -129,7 +129,7 @@ const createBook = createHandler(
 
 ## 5.1 before (default)
 
-If authorizationBeforeValidation is omitted, default is true (before validation).
+If validateBeforeAuthorization is omitted, default is false (authorization runs before validation).
 
 ```ts
 const beforeMode = createHandler(
@@ -139,7 +139,7 @@ const beforeMode = createHandler(
     access: "protected",
     security: {
       authenticate: authenticateJwt,
-      // authorizationBeforeValidation omitted -> true
+      // validateBeforeAuthorization omitted -> false
       authorize: async ({ auth, req }) => {
         // req here is pre-validation request shape
         return auth.role === "staff" && Boolean(req.headers["x-write-access"]);
@@ -161,7 +161,7 @@ const afterMode = createHandler(
     access: "protected",
     security: {
       authenticate: authenticateJwt,
-      authorizationBeforeValidation: false,
+      validateBeforeAuthorization: true,
       authorize: async ({ auth, req }) => {
         // req is validated contract request
         const title = req.body.title;
@@ -212,7 +212,7 @@ const createBook2 = createHandler(
     access: "protected",
     security: {
       authenticate: authenticateJwt,
-      authorizationBeforeValidation: false,
+      validateBeforeAuthorization: true,
       authorize: createBookPolicy,
     },
   },
@@ -250,8 +250,8 @@ const createJwtAuthHandler = createHandlerFactory<JwtAuthContext>({
     authSchema: JwtAuthSchema,
   },
   errors: {
-    unauthorized: () => new createHttpError.Unauthorized("Authentication required"),
-    forbidden: () => new createHttpError.Forbidden("Authorization denied"),
+    unauthenticated: () => new createHttpError.Unauthorized("Authentication required"),
+    unauthorized: () => new createHttpError.Forbidden("Authorization denied"),
   },
 });
 ```
@@ -280,7 +280,7 @@ const getBookOptional = createJwtAuthHandler(
   {
     access: "optional",
     security: {
-      authorizationBeforeValidation: false,
+      validateBeforeAuthorization: true,
       authorize: async ({ req }) => req.params.isbn.length > 0,
     },
   },
@@ -300,8 +300,8 @@ const handler = createHandler(
       authorize: isStaff,
     },
     errors: {
-      unauthorized: () => new createHttpError.Unauthorized("Please login first"),
-      forbidden: () => new createHttpError.Forbidden("Staff role is required"),
+      unauthenticated: () => new createHttpError.Unauthorized("Please login first"),
+      unauthorized: () => new createHttpError.Forbidden("Staff role is required"),
     },
   },
 );
@@ -317,8 +317,8 @@ const handler = createHandler(
 
 ## 10. Quick Cheatsheet
 
-- Default mode: authorizationBeforeValidation = true
-- Enable validated request in policies: security.authorizationBeforeValidation = false
+- Default mode: validateBeforeAuthorization = false
+- Enable validated request in policies: security.validateBeforeAuthorization = true
 - Typed post-validation request helper: AfterAuthorizationRequest<typeof YourContract>
 - Compose policies:
   - allOf([...])

@@ -70,7 +70,7 @@ createHandler(
         access: "protected",
         security: {
             authenticate: async () => ({ userId: "r-1", role: "staff" as const }),
-            authorizationBeforeValidation: false,
+            validateBeforeAuthorization: true,
             authorize: async ({ req, auth }) => {
                 type _body = Expect<Equal<typeof req.body, { title: string }>>;
                 type _auth = Expect<Extends<typeof auth, AuthContext>>;

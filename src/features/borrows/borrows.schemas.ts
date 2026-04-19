@@ -15,7 +15,7 @@ export const BorrowBookContract = createContract({
 export const ReturnBookContract = createContract({
     request: {
         params: {
-            isbn: isbnSchema
+            isbn: isbnSchema,
         }
     },
     response: z.string()

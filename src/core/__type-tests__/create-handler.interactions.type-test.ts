@@ -92,7 +92,7 @@ createHandler(
                 scopes: ["books:read"],
             }),
             authSchema: ScopedAuthSchema,
-            authorizationBeforeValidation: false,
+            validateBeforeAuthorization: true,
             authorize: [
                 async ({ req, auth }) => {
                     type _query = Expect<
@@ -105,7 +105,7 @@ createHandler(
             ],
         },
         errors: {
-            forbidden: () => new createHttpError.Forbidden("Forbidden"),
+            unauthorized: () => new createHttpError.Forbidden("Forbidden"),
         },
     },
 );
@@ -129,7 +129,7 @@ createHandler(
             authorize: async ({ auth }) => auth.scopes.includes("books:write"),
         },
         errors: {
-            unauthorized: () => new createHttpError.Unauthorized("Unauthorized"),
+            unauthenticated: () => new createHttpError.Unauthorized("Unauthorized"),
         },
     },
 );
@@ -155,7 +155,7 @@ protectedFactory(
     {
         access: "protected",
         security: {
-            authorizationBeforeValidation: false,
+            validateBeforeAuthorization: true,
             authorize: async ({ req, auth }) => {
                 type _body = Expect<Equal<typeof req.body, { title: string }>>;
                 type _auth = Expect<Extends<typeof auth, ScopedAuthContext>>;
