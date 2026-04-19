@@ -24,6 +24,7 @@ app.use((req, res, next) => {
 app.use('/api/v1', rootRouter);
 
 // Error handling middleware
+// Keep it. It handles malformed JSON bodies
 app.use(globalErrorHandler);
 
 // Start server

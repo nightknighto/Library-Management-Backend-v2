@@ -11,13 +11,6 @@ import {
 import { UserRepository } from '../users/users.repository.ts';
 import { type JwtAuthContext, authenticateJwt, JwtAuthSchema, hasRegisteredUser, isLibraryStaff, hasWriteAccessHeader, editsOwnAuthorName, isSystemReservedBook, createJwtAuthHandler, deleteBookPolicy } from '../auth-stuff.ts';
 
-type IsAny<T> = 0 extends (1 & T) ? true : false;
-type EnsureNotAny<T> = IsAny<T> extends true ? never : T;
-
-declare function assertIsString<T>(
-    val: T & (T extends string ? T : never) & EnsureNotAny<T>
-): void;
-
 const createBook = createJwtAuthHandler(BookDTOs.CreateBookContract,
     async (req, auth) => {
         const _requestedBy = auth.email;
@@ -41,11 +34,6 @@ const createBook = createJwtAuthHandler(BookDTOs.CreateBookContract,
             >([
                 hasRegisteredUser,
                 async ({ auth, req }) => {
-
-                    // USAGE:
-                    assertIsString(req.body.title);
-                    // 🛑 RED LINE: because 'any' matches the 'never' branch in our logic.
-
                     const existingUser = await UserRepository.getUser(auth.email);
                     return Boolean(existingUser);
                 },
@@ -53,8 +41,6 @@ const createBook = createJwtAuthHandler(BookDTOs.CreateBookContract,
                     isLibraryStaff,
                     hasWriteAccessHeader,
                     async ({ auth, req }) => {
-                        assertIsString(req.body.title);
-
                         return false
                     },
                 ]),
@@ -99,7 +85,6 @@ const getAllBooks = createHandler(
             // authSchema: JwtAuthSchema,
             // could be inline function
             authorize: async ({ auth, req }) => {
-                assertIsString(req.query.title!);
                 const existingUser = await UserRepository.getUser(auth.email);
                 return Boolean(existingUser);
             },
