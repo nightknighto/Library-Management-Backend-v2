@@ -266,14 +266,15 @@ publicFactory(
     },
 );
 
-const privateFactoryAuthSchemaOnly = createHandlerFactory({
+const privateFactoryAuthSchemaAndAuthenticate = createHandlerFactory({
     access: "protected",
     security: {
-        authSchema: AuthSchema
-    }
-})
+        authSchema: AuthSchema,
+        authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
+    },
+});
 
-privateFactoryAuthSchemaOnly(
+privateFactoryAuthSchemaAndAuthenticate(
     UpdateBookContract,
     async (_req, auth) => {
         type _authExact = Expect<Extends<typeof auth, AuthContext>>;
@@ -287,11 +288,11 @@ privateFactoryAuthSchemaOnly(
                 type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
                 return auth.role === "staff" && req.body.title.length > 0;
             },
-        }
-    }
-)
+        },
+    },
+);
 
-privateFactoryAuthSchemaOnly(
+privateFactoryAuthSchemaAndAuthenticate(
     UpdateBookContract,
     async (_req, auth) => {
         type _authExact = Expect<Extends<typeof auth, AuthContext>>;
@@ -307,9 +308,9 @@ privateFactoryAuthSchemaOnly(
                 type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
                 return auth.role === "staff" && req.body.title.length > 0;
             },
-        }
-    }
-)
+        },
+    },
+);
 
 const privateFactoryAuthenticateOnly = createHandlerFactory({
     access: "protected",
@@ -359,3 +360,90 @@ privateFactoryValidationBeforeAuth(
         }
     }
 )
+
+/**
+ * Dedicated negative assertions for missing `security.authenticate`.
+ */
+
+createHandler(
+    UpdateBookContract,
+    async (_req, _auth) => ({ data: { updated: true } }),
+    // @ts-expect-error protected handlers require security.authenticate
+    {
+        access: "protected",
+        // security: {
+            // authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
+        // }
+    },
+);
+
+createHandler(
+    UpdateBookContract,
+    async (_req, _auth) => ({ data: { updated: true } }),
+    {
+        // @ts-expect-error optional handlers require security.authenticate
+        access: "optional",
+        // security: {
+            // authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
+        // }
+    },
+);
+
+const protectedFactoryWithoutAuthenticate = createHandlerFactory<AuthContext>({
+    access: "protected",
+});
+
+// @ts-expect-error protected factory handlers require authenticate from defaults or call options
+protectedFactoryWithoutAuthenticate(
+    UpdateBookContract,
+    async (_req: unknown, _auth: AuthContext) => {
+        return { data: { updated: true } };
+    },
+);
+
+const optionalFactoryWithoutAuthenticate = createHandlerFactory<AuthContext>({
+    access: "optional",
+});
+
+// @ts-expect-error optional factory handlers require authenticate from defaults or call options
+optionalFactoryWithoutAuthenticate(
+    UpdateBookContract,
+    async (_req: unknown, _auth: AuthContext) => {
+        return { data: { updated: true } };
+    },
+    // {
+    //     security: {
+    //         authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
+    //     }
+    // }
+);
+
+const protectedFactoryAuthSchemaWithoutAuthenticate = createHandlerFactory<AuthContext>({
+    access: "protected",
+    security: {
+        authSchema: AuthSchema,
+    },
+});
+
+// @ts-expect-error protected factory handlers with authSchema but no authenticate must fail
+protectedFactoryAuthSchemaWithoutAuthenticate(
+    UpdateBookContract,
+    async (_req: unknown, _auth: AuthContext) => {
+        return { data: { updated: true } };
+    },
+);
+
+const optionalFactoryAuthSchemaWithoutAuthenticate = createHandlerFactory<AuthContext>({
+    access: "optional",
+    security: {
+        authSchema: AuthSchema,
+    },
+});
+
+// @ts-expect-error optional factory handlers with authSchema but no authenticate must fail
+optionalFactoryAuthSchemaWithoutAuthenticate(
+    UpdateBookContract,
+    async (_req: unknown, _auth: AuthContext) => {
+        return { data: { updated: true } };
+    },
+);

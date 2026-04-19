@@ -63,6 +63,8 @@ type OptionalHandlerExecutor<TContract extends AnyContract, TAuthContext> = (
     auth?: TAuthContext,
 ) => Promise<ContractHandlerSuccessResult<TContract>>;
 
+type RequiredAuthenticateAccessMode = "protected" | "optional";
+
 type HandlerFactoryDefaults<TAuthContext> = {
     access?: AccessMode;
     security?: SecurityOptions<TAuthContext, Request>;
@@ -72,6 +74,11 @@ type HandlerFactoryDefaults<TAuthContext> = {
 type BeforeSecurityOptions<TAuthContext> =
     Omit<SecurityOptions<TAuthContext, Request>, "validateBeforeAuthorization"> & {
         validateBeforeAuthorization?: false | undefined;
+    };
+
+type BeforeSecurityOptionsWithRequiredAuthenticate<TAuthContext> =
+    Omit<BeforeSecurityOptions<TAuthContext>, "authenticate"> & {
+        authenticate: Authenticator<TAuthContext, Request>;
     };
 
 type AfterSecurityOptions<
@@ -87,12 +94,45 @@ type AfterSecurityOptions<
     | Array<Authorizer<TAuthContext, AfterAuthorizationRequest<TContract>>>;
 };
 
+type AfterSecurityOptionsWithRequiredAuthenticate<
+    TAuthContext,
+    TContract extends AnyContract,
+> = Omit<AfterSecurityOptions<TAuthContext, TContract>, "authenticate"> & {
+    authenticate: Authenticator<TAuthContext, Request>;
+};
+
 type BeforeHandlerOptions<
     TAccess extends AccessMode,
     TAuthContext,
 > = Omit<HandlerOptions<TAccess, TAuthContext, Request>, "security"> & {
-    security?: BeforeSecurityOptions<TAuthContext>;
+    security: TAccess extends RequiredAuthenticateAccessMode
+    ? BeforeSecurityOptionsWithRequiredAuthenticate<TAuthContext>
+    : BeforeSecurityOptions<TAuthContext> | undefined;
 };
+
+type AfterHandlerOptionsBase<
+    TAccess extends AccessMode,
+    TAuthContext,
+    TContract extends AnyContract,
+> = Omit<HandlerOptions<TAccess, TAuthContext, Request>, "security"> & {
+    security: AfterSecurityOptions<TAuthContext, TContract>;
+};
+
+type AfterHandlerOptionsWithRequiredAuthenticate<
+    TAccess extends RequiredAuthenticateAccessMode,
+    TAuthContext,
+    TContract extends AnyContract,
+> = Omit<HandlerOptions<TAccess, TAuthContext, Request>, "security"> & {
+    security: AfterSecurityOptionsWithRequiredAuthenticate<TAuthContext, TContract>;
+};
+
+type AfterHandlerOptions<
+    TAccess extends AccessMode,
+    TAuthContext,
+    TContract extends AnyContract,
+> = TAccess extends RequiredAuthenticateAccessMode
+    ? AfterHandlerOptionsWithRequiredAuthenticate<TAccess, TAuthContext, TContract>
+    : AfterHandlerOptionsBase<TAccess, TAuthContext, TContract>;
 
 type FactoryBeforeSecurityOptions<TAuthContext> =
     Omit<
@@ -100,6 +140,11 @@ type FactoryBeforeSecurityOptions<TAuthContext> =
         "validateBeforeAuthorization"
     > & {
         validateBeforeAuthorization?: false | undefined;
+    };
+
+type FactoryBeforeSecurityOptionsWithRequiredAuthenticate<TAuthContext> =
+    Omit<FactoryBeforeSecurityOptions<TAuthContext>, "authenticate"> & {
+        authenticate: Authenticator<TAuthContext, Request>;
     };
 
 type FactoryBeforeHandlerOptions<
@@ -112,9 +157,24 @@ type FactoryBeforeHandlerOptions<
     security?: FactoryBeforeSecurityOptions<TAuthContext>;
 };
 
+type FactoryBeforeHandlerOptionsWithRequiredAuthenticate<
+    TAccess extends RequiredAuthenticateAccessMode,
+    TAuthContext,
+> = Omit<
+    HandlerOptions<TAccess, TAuthContext, Request>,
+    "security"
+> & {
+    security: FactoryBeforeSecurityOptionsWithRequiredAuthenticate<TAuthContext>;
+};
+
 type FactoryBeforeSecurityOptionsWithExplicitFalse<TAuthContext> =
     Omit<FactoryBeforeSecurityOptions<TAuthContext>, "validateBeforeAuthorization"> & {
         validateBeforeAuthorization: false;
+    };
+
+type FactoryBeforeSecurityOptionsWithExplicitFalseAndRequiredAuthenticate<TAuthContext> =
+    Omit<FactoryBeforeSecurityOptionsWithExplicitFalse<TAuthContext>, "authenticate"> & {
+        authenticate: Authenticator<TAuthContext, Request>;
     };
 
 type FactoryBeforeHandlerOptionsWithExplicitFalse<
@@ -123,13 +183,11 @@ type FactoryBeforeHandlerOptionsWithExplicitFalse<
 > = Omit<HandlerOptions<TAccess, TAuthContext, Request>, "security"> & {
     security: FactoryBeforeSecurityOptionsWithExplicitFalse<TAuthContext>;
 };
-
-type AfterHandlerOptions<
-    TAccess extends AccessMode,
+type FactoryBeforeHandlerOptionsWithExplicitFalseAndRequiredAuthenticate<
+    TAccess extends RequiredAuthenticateAccessMode,
     TAuthContext,
-    TContract extends AnyContract,
 > = Omit<HandlerOptions<TAccess, TAuthContext, Request>, "security"> & {
-    security: AfterSecurityOptions<TAuthContext, TContract>;
+    security: FactoryBeforeSecurityOptionsWithExplicitFalseAndRequiredAuthenticate<TAuthContext>;
 };
 
 type FactoryAfterSecurityOptionsWithImplicitTrue<
@@ -139,12 +197,30 @@ type FactoryAfterSecurityOptionsWithImplicitTrue<
     validateBeforeAuthorization?: true | undefined;
 };
 
+type FactoryAfterSecurityOptionsWithImplicitTrueAndRequiredAuthenticate<
+    TAuthContext,
+    TContract extends AnyContract,
+> = Omit<FactoryAfterSecurityOptionsWithImplicitTrue<TAuthContext, TContract>, "authenticate"> & {
+    authenticate: Authenticator<TAuthContext, Request>;
+};
+
 type FactoryAfterHandlerOptionsWithImplicitTrue<
     TAccess extends AccessMode,
     TAuthContext,
     TContract extends AnyContract,
 > = Omit<HandlerOptions<TAccess, TAuthContext, Request>, "security"> & {
     security?: FactoryAfterSecurityOptionsWithImplicitTrue<TAuthContext, TContract>;
+};
+
+type FactoryAfterHandlerOptionsWithImplicitTrueAndRequiredAuthenticate<
+    TAccess extends RequiredAuthenticateAccessMode,
+    TAuthContext,
+    TContract extends AnyContract,
+> = Omit<HandlerOptions<TAccess, TAuthContext, Request>, "security"> & {
+    security: FactoryAfterSecurityOptionsWithImplicitTrueAndRequiredAuthenticate<
+        TAuthContext,
+        TContract
+    >;
 };
 
 type HandlerOptionsByAuthorizationMode<
@@ -162,20 +238,85 @@ type WithRequiredAccess<
     ? Omit<TOptions, "access"> & { access: TAccess }
     : never;
 
+type FactoryBeforeOptionsByAuthenticateRequirement<
+    TAccess extends AccessMode,
+    TAuthContext,
+    TDefaultHasAuthenticate extends boolean,
+> = TAccess extends RequiredAuthenticateAccessMode
+    ? [TDefaultHasAuthenticate] extends [true]
+    ? FactoryBeforeHandlerOptions<TAccess, TAuthContext>
+    : FactoryBeforeHandlerOptionsWithRequiredAuthenticate<TAccess, TAuthContext>
+    : FactoryBeforeHandlerOptions<TAccess, TAuthContext>;
+
+type FactoryBeforeOptionsWithExplicitFalseByAuthenticateRequirement<
+    TAccess extends AccessMode,
+    TAuthContext,
+    TDefaultHasAuthenticate extends boolean,
+> = TAccess extends RequiredAuthenticateAccessMode
+    ? [TDefaultHasAuthenticate] extends [true]
+    ? FactoryBeforeHandlerOptionsWithExplicitFalse<TAccess, TAuthContext>
+    : FactoryBeforeHandlerOptionsWithExplicitFalseAndRequiredAuthenticate<TAccess, TAuthContext>
+    : FactoryBeforeHandlerOptionsWithExplicitFalse<TAccess, TAuthContext>;
+
+type FactoryAfterOptionsByAuthenticateRequirement<
+    TAccess extends AccessMode,
+    TAuthContext,
+    TContract extends AnyContract,
+    TDefaultHasAuthenticate extends boolean,
+> = TAccess extends RequiredAuthenticateAccessMode
+    ? [TDefaultHasAuthenticate] extends [true]
+    ? AfterHandlerOptionsBase<TAccess, TAuthContext, TContract>
+    : AfterHandlerOptionsWithRequiredAuthenticate<TAccess, TAuthContext, TContract>
+    : AfterHandlerOptionsBase<TAccess, TAuthContext, TContract>;
+
+type FactoryAfterOptionsWithImplicitTrueByAuthenticateRequirement<
+    TAccess extends AccessMode,
+    TAuthContext,
+    TContract extends AnyContract,
+    TDefaultHasAuthenticate extends boolean,
+> = TAccess extends RequiredAuthenticateAccessMode
+    ? [TDefaultHasAuthenticate] extends [true]
+    ? FactoryAfterHandlerOptionsWithImplicitTrue<TAccess, TAuthContext, TContract>
+    : FactoryAfterHandlerOptionsWithImplicitTrueAndRequiredAuthenticate<
+        TAccess,
+        TAuthContext,
+        TContract
+    >
+    : FactoryAfterHandlerOptionsWithImplicitTrue<TAccess, TAuthContext, TContract>;
+
 type HandlerFactoryBeforeOptionsArg<
     TDefaultAccess extends AccessMode,
     TDefaultValidateBeforeAuthorization extends boolean,
+    TDefaultHasAuthenticate extends boolean,
     TAccess extends AccessMode,
     TAuthContext,
 > = [TDefaultAccess] extends [TAccess]
     ? [TDefaultValidateBeforeAuthorization] extends [true]
-    ? [options: FactoryBeforeHandlerOptionsWithExplicitFalse<TAccess, TAuthContext>]
+    ? [
+        options: FactoryBeforeOptionsWithExplicitFalseByAuthenticateRequirement<
+            TAccess,
+            TAuthContext,
+            TDefaultHasAuthenticate
+        >
+    ]
+    : TAccess extends RequiredAuthenticateAccessMode
+    ? [TDefaultHasAuthenticate] extends [true]
+    ? [options?: FactoryBeforeHandlerOptions<TAccess, TAuthContext>]
+    : [options: FactoryBeforeHandlerOptionsWithRequiredAuthenticate<TAccess, TAuthContext>]
     : [options?: FactoryBeforeHandlerOptions<TAccess, TAuthContext>]
     : [
         options: WithRequiredAccess<
             [TDefaultValidateBeforeAuthorization] extends [true]
-            ? FactoryBeforeHandlerOptionsWithExplicitFalse<TAccess, TAuthContext>
-            : FactoryBeforeHandlerOptions<TAccess, TAuthContext>,
+            ? FactoryBeforeOptionsWithExplicitFalseByAuthenticateRequirement<
+                TAccess,
+                TAuthContext,
+                TDefaultHasAuthenticate
+            >
+            : FactoryBeforeOptionsByAuthenticateRequirement<
+                TAccess,
+                TAuthContext,
+                TDefaultHasAuthenticate
+            >,
             TAccess
         >
     ];
@@ -183,18 +324,46 @@ type HandlerFactoryBeforeOptionsArg<
 type HandlerFactoryAfterOptionsArg<
     TDefaultAccess extends AccessMode,
     TDefaultValidateBeforeAuthorization extends boolean,
+    TDefaultHasAuthenticate extends boolean,
     TAccess extends AccessMode,
     TAuthContext,
     TContract extends AnyContract,
 > = [TDefaultAccess] extends [TAccess]
     ? [TDefaultValidateBeforeAuthorization] extends [true]
+    ? TAccess extends RequiredAuthenticateAccessMode
+    ? [TDefaultHasAuthenticate] extends [true]
     ? [options?: FactoryAfterHandlerOptionsWithImplicitTrue<TAccess, TAuthContext, TContract>]
-    : [options: AfterHandlerOptions<TAccess, TAuthContext, TContract>]
+    : [
+        options: FactoryAfterHandlerOptionsWithImplicitTrueAndRequiredAuthenticate<
+            TAccess,
+            TAuthContext,
+            TContract
+        >
+    ]
+    : [options?: FactoryAfterHandlerOptionsWithImplicitTrue<TAccess, TAuthContext, TContract>]
+    : [
+        options: FactoryAfterOptionsByAuthenticateRequirement<
+            TAccess,
+            TAuthContext,
+            TContract,
+            TDefaultHasAuthenticate
+        >
+    ]
     : [
         options: WithRequiredAccess<
             [TDefaultValidateBeforeAuthorization] extends [true]
-            ? FactoryAfterHandlerOptionsWithImplicitTrue<TAccess, TAuthContext, TContract>
-            : AfterHandlerOptions<TAccess, TAuthContext, TContract>,
+            ? FactoryAfterOptionsWithImplicitTrueByAuthenticateRequirement<
+                TAccess,
+                TAuthContext,
+                TContract,
+                TDefaultHasAuthenticate
+            >
+            : FactoryAfterOptionsByAuthenticateRequirement<
+                TAccess,
+                TAuthContext,
+                TContract,
+                TDefaultHasAuthenticate
+            >,
             TAccess
         >
     ];
@@ -203,6 +372,7 @@ type ConfiguredHandlerFactory<
     TAuthContext,
     TDefaultAccess extends AccessMode,
     TDefaultValidateBeforeAuthorization extends boolean,
+    TDefaultHasAuthenticate extends boolean,
 > = {
     <TContract extends AnyContract>(
         contract: TContract,
@@ -210,6 +380,7 @@ type ConfiguredHandlerFactory<
         ...args: HandlerFactoryBeforeOptionsArg<
             TDefaultAccess,
             TDefaultValidateBeforeAuthorization,
+            TDefaultHasAuthenticate,
             "public",
             TAuthContext
         >
@@ -220,6 +391,7 @@ type ConfiguredHandlerFactory<
         ...args: HandlerFactoryAfterOptionsArg<
             TDefaultAccess,
             TDefaultValidateBeforeAuthorization,
+            TDefaultHasAuthenticate,
             "public",
             TAuthContext,
             TContract
@@ -231,6 +403,7 @@ type ConfiguredHandlerFactory<
         ...args: HandlerFactoryBeforeOptionsArg<
             TDefaultAccess,
             TDefaultValidateBeforeAuthorization,
+            TDefaultHasAuthenticate,
             "optional",
             TAuthContext
         >
@@ -241,6 +414,7 @@ type ConfiguredHandlerFactory<
         ...args: HandlerFactoryAfterOptionsArg<
             TDefaultAccess,
             TDefaultValidateBeforeAuthorization,
+            TDefaultHasAuthenticate,
             "optional",
             TAuthContext,
             TContract
@@ -252,6 +426,7 @@ type ConfiguredHandlerFactory<
         ...args: HandlerFactoryBeforeOptionsArg<
             TDefaultAccess,
             TDefaultValidateBeforeAuthorization,
+            TDefaultHasAuthenticate,
             "protected",
             TAuthContext
         >
@@ -262,6 +437,7 @@ type ConfiguredHandlerFactory<
         ...args: HandlerFactoryAfterOptionsArg<
             TDefaultAccess,
             TDefaultValidateBeforeAuthorization,
+            TDefaultHasAuthenticate,
             "protected",
             TAuthContext,
             TContract
@@ -453,6 +629,21 @@ function createHandlerInternal<
     );
 }
 
+type FactorySecurityWithRequiredAuthenticate<TAuthContext> =
+    SecurityOptions<TAuthContext, Request> & {
+        authenticate: Authenticator<TAuthContext, Request>;
+    };
+
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults: HandlerFactoryDefaults<TAuthContext> & {
+        access: "public";
+        security: FactorySecurityWithRequiredAuthenticate<TAuthContext> & {
+            validateBeforeAuthorization: true;
+        };
+    },
+): ConfiguredHandlerFactory<TAuthContext, "public", true, true>;
 export function createHandlerFactory<
     TAuthContext,
 >(
@@ -462,7 +653,17 @@ export function createHandlerFactory<
             validateBeforeAuthorization: true;
         };
     },
-): ConfiguredHandlerFactory<TAuthContext, "public", true>;
+): ConfiguredHandlerFactory<TAuthContext, "public", true, false>;
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults: HandlerFactoryDefaults<TAuthContext> & {
+        access: "optional";
+        security: FactorySecurityWithRequiredAuthenticate<TAuthContext> & {
+            validateBeforeAuthorization: true;
+        };
+    },
+): ConfiguredHandlerFactory<TAuthContext, "optional", true, true>;
 export function createHandlerFactory<
     TAuthContext,
 >(
@@ -472,7 +673,17 @@ export function createHandlerFactory<
             validateBeforeAuthorization: true;
         };
     },
-): ConfiguredHandlerFactory<TAuthContext, "optional", true>;
+): ConfiguredHandlerFactory<TAuthContext, "optional", true, false>;
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults: HandlerFactoryDefaults<TAuthContext> & {
+        access: "protected";
+        security: FactorySecurityWithRequiredAuthenticate<TAuthContext> & {
+            validateBeforeAuthorization: true;
+        };
+    },
+): ConfiguredHandlerFactory<TAuthContext, "protected", true, true>;
 export function createHandlerFactory<
     TAuthContext,
 >(
@@ -482,7 +693,17 @@ export function createHandlerFactory<
             validateBeforeAuthorization: true;
         };
     },
-): ConfiguredHandlerFactory<TAuthContext, "protected", true>;
+): ConfiguredHandlerFactory<TAuthContext, "protected", true, false>;
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults: HandlerFactoryDefaults<TAuthContext> & {
+        access: AccessMode;
+        security: FactorySecurityWithRequiredAuthenticate<TAuthContext> & {
+            validateBeforeAuthorization: true;
+        };
+    },
+): ConfiguredHandlerFactory<TAuthContext, AccessMode, true, true>;
 export function createHandlerFactory<
     TAuthContext,
 >(
@@ -492,37 +713,76 @@ export function createHandlerFactory<
             validateBeforeAuthorization: true;
         };
     },
-): ConfiguredHandlerFactory<TAuthContext, AccessMode, true>;
+): ConfiguredHandlerFactory<TAuthContext, AccessMode, true, false>;
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults: HandlerFactoryDefaults<TAuthContext> & {
+        access: "public";
+        security: FactorySecurityWithRequiredAuthenticate<TAuthContext>;
+    },
+): ConfiguredHandlerFactory<TAuthContext, "public", false, true>;
 export function createHandlerFactory<
     TAuthContext,
 >(
     defaults: HandlerFactoryDefaults<TAuthContext> & { access: "public" },
-): ConfiguredHandlerFactory<TAuthContext, "public", false>;
+): ConfiguredHandlerFactory<TAuthContext, "public", false, false>;
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults: HandlerFactoryDefaults<TAuthContext> & {
+        access: "optional";
+        security: FactorySecurityWithRequiredAuthenticate<TAuthContext>;
+    },
+): ConfiguredHandlerFactory<TAuthContext, "optional", false, true>;
 export function createHandlerFactory<
     TAuthContext,
 >(
     defaults: HandlerFactoryDefaults<TAuthContext> & { access: "optional" },
-): ConfiguredHandlerFactory<TAuthContext, "optional", false>;
+): ConfiguredHandlerFactory<TAuthContext, "optional", false, false>;
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults: HandlerFactoryDefaults<TAuthContext> & {
+        access: "protected";
+        security: FactorySecurityWithRequiredAuthenticate<TAuthContext>;
+    },
+): ConfiguredHandlerFactory<TAuthContext, "protected", false, true>;
 export function createHandlerFactory<
     TAuthContext,
 >(
     defaults: HandlerFactoryDefaults<TAuthContext> & { access: "protected" },
-): ConfiguredHandlerFactory<TAuthContext, "protected", false>;
+): ConfiguredHandlerFactory<TAuthContext, "protected", false, false>;
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults: HandlerFactoryDefaults<TAuthContext> & {
+        access: AccessMode;
+        security: FactorySecurityWithRequiredAuthenticate<TAuthContext>;
+    },
+): ConfiguredHandlerFactory<TAuthContext, AccessMode, false, true>;
 export function createHandlerFactory<
     TAuthContext,
 >(
     defaults: HandlerFactoryDefaults<TAuthContext> & { access: AccessMode },
-): ConfiguredHandlerFactory<TAuthContext, AccessMode, false>;
+): ConfiguredHandlerFactory<TAuthContext, AccessMode, false, false>;
+export function createHandlerFactory<
+    TAuthContext,
+>(
+    defaults: HandlerFactoryDefaults<TAuthContext> & {
+        security: FactorySecurityWithRequiredAuthenticate<TAuthContext>;
+    },
+): ConfiguredHandlerFactory<TAuthContext, "public", false, true>;
 export function createHandlerFactory<
     TAuthContext,
 >(
     defaults?: HandlerFactoryDefaults<TAuthContext>,
-): ConfiguredHandlerFactory<TAuthContext, "public", false>;
+): ConfiguredHandlerFactory<TAuthContext, "public", false, false>;
 export function createHandlerFactory<
     TAuthContext,
 >(
     defaults?: HandlerFactoryDefaults<TAuthContext>,
-): ConfiguredHandlerFactory<TAuthContext, AccessMode, boolean> {
+): ConfiguredHandlerFactory<TAuthContext, AccessMode, boolean, boolean> {
     function createConfiguredHandler<TContract extends AnyContract>(
         contract: TContract,
         handler:
@@ -550,6 +810,7 @@ export function createHandlerFactory<
     return createConfiguredHandler as ConfiguredHandlerFactory<
         TAuthContext,
         AccessMode,
+        boolean,
         boolean
     >;
 }

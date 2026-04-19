@@ -21,7 +21,7 @@ booksRoutes.get('/:isbn',
 
 // PUT /books/:isbn - Update a book
 booksRoutes.put('/:isbn',
-    rateLimiter,
+    rateLimiter(1000, 3),
     BookController.updateBook
 );
 
