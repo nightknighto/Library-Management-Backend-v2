@@ -134,6 +134,26 @@ createHandler(
     },
 );
 
+createHandler(
+    UpdateBookContract,
+    // @ts-expect-error interaction: protected/authSchema handlers reject unknown top-level result keys
+    async (_req, _auth) => ({
+        data: { updated: true },
+        metax: { traceId: "trace-1" },
+    }),
+    {
+        access: "protected",
+        security: {
+            authenticate: async () => ({
+                userId: "u-11b",
+                role: "staff" as const,
+                scopes: ["books:write"],
+            }),
+            authSchema: ScopedAuthSchema,
+        },
+    },
+);
+
 const protectedFactory = createHandlerFactory<ScopedAuthContext>({
     access: "protected",
     security: {

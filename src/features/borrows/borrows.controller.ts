@@ -1,33 +1,17 @@
 import * as BorrowDTOs from './borrows.schemas.ts';
-import { BorrowRepository } from './borrows.repository.ts';
-import { BookRepository } from '../books/books.repository.ts';
 import type { Request } from 'express';
 import { createHandler, createHandlerFactory } from '../../core/create-handler.core.ts';
 import createHttpError from 'http-errors';
 import z from 'zod';
 import { authenticateJwt } from '../auth-stuff.ts';
+import { BorrowsService } from './borrows.service.ts';
+import { BorrowRepository } from './borrows.repository.ts';
 
 const borrowBook = createHandler(BorrowDTOs.BorrowBookContract, async (req, auth) => {
     const { isbn } = req.params
     const user_email = auth.email;
 
-    // Check if book is available
-    const book = await BookRepository.getBookByIsbn(isbn);
-    if (!book || book.available_quantity! <= 0) {
-        throw new createHttpError.BadRequest('Book not available')
-    }
-
-    // Check if user already has active borrow for this book
-    const activeBorrow = await BorrowRepository.getActiveBorrowByUserAndBook(user_email, isbn);
-    if (activeBorrow) {
-        throw new createHttpError.BadRequest('User already has an active borrow for this book')
-    }
-
-    // Create borrow record with due date (e.g., 14 days from now)
-    const due_date = new Date();
-    due_date.setDate(due_date.getDate() + 14);
-
-    await BorrowRepository.createBorrow(user_email, isbn, due_date);
+    await BorrowsService.borrowBook(isbn, user_email);
 
     return {
         statusCode: 201,
@@ -71,10 +55,7 @@ const returnBook = createProtectedHandler(BorrowDTOs.ReturnBookContract, async (
     const { isbn } = req.params
     const user_email = auth.email;
 
-    const success = await BorrowRepository.returnBook(user_email, isbn);
-    if (!success) {
-        throw new createHttpError.BadRequest('No active borrow record found for this user and book.')
-    }
+    await BorrowsService.returnBook(isbn, user_email);
 
     return {
         data: 'Book returned successfully'
@@ -97,10 +78,8 @@ const returnBook = createProtectedHandler(BorrowDTOs.ReturnBookContract, async (
 
 const getOverdueBooks = createProtectedHandler(BorrowDTOs.OverdueBooksContract, async (req) => {
     const { page, limit } = req.query;
-    const overdueBorrows = await BorrowRepository.getOverdueBorrows({
-        page,
-        limit
-    });
+
+    const overdueBorrows = await BorrowsService.getOverdueBooks(page, limit);
 
     const response = overdueBorrows.map(borrow => ({
         userEmail: borrow.user_email,

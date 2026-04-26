@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { authenticate } from "../../shared/middlewares/auth.ts";
 import { BorrowController } from "./borrows.controller.ts";
 
 const borrowsRoutes = Router();

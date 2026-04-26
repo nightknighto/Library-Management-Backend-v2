@@ -108,6 +108,23 @@ createHandler(UpdateBookContract, async (_req) => ({
     },
 }));
 
+// @ts-expect-error handlers do not accept unknown top-level result keys
+createHandler(UpdateBookContract, async (_req) => ({
+    data: { updated: true },
+    metax: { timestamp: "2026-01-01T00:00:00.000Z" },
+}));
+
+// @ts-expect-error paginated handlers do not accept unknown top-level result keys
+createHandler(ListBooksContract, async (_req) => ({
+    data: ["book-1"],
+    pagination: {
+        totalCount: 1,
+        page: 1,
+        limit: 10,
+    },
+    metax: { timestamp: "2026-01-01T00:00:00.000Z" },
+}));
+
 createHandler(
     UpdateBookContract,
     async (_req, auth) => {

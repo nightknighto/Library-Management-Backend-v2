@@ -1,4 +1,3 @@
-import { BookRepository } from './books.repository.ts';
 import * as BookDTOs from './books.schemas.ts';
 import createHttpError from 'http-errors';
 import {
@@ -10,15 +9,12 @@ import {
 } from '../../core/create-handler.core.ts';
 import { UserRepository } from '../users/users.repository.ts';
 import { type JwtAuthContext, authenticateJwt, JwtAuthSchema, hasRegisteredUser, isLibraryStaff, hasWriteAccessHeader, editsOwnAuthorName, isSystemReservedBook, createJwtAuthHandler, deleteBookPolicy } from '../auth-stuff.ts';
+import z from 'zod';
+import { BookService } from './books.service.ts';
 
 const createBook = createJwtAuthHandler(BookDTOs.CreateBookContract,
     async (req, auth) => {
-        const _requestedBy = auth.email;
-        const book = await BookRepository.createBook(auth.email, req.body);
-        if (!book) {
-            throw new createHttpError.BadRequest('Book with this ISBN already exists');
-        }
-
+        await BookService.createBook(auth.email, req.body);
         return {
             statusCode: 201,
             data: 'Book created successfully',
@@ -41,7 +37,7 @@ const createBook = createJwtAuthHandler(BookDTOs.CreateBookContract,
                     isLibraryStaff,
                     hasWriteAccessHeader,
                     async ({ auth, req }) => {
-                        return false
+                        return true
                     },
                 ]),
             ]),
@@ -58,15 +54,13 @@ const getAllBooks = createHandler(
         const { title, author, isbn, page, limit } = req.query;
         const effectiveLimit = auth ? limit : Math.min(limit, 5);
 
-        const books = await BookRepository.getAllBooks({
+        const { books, totalCount } = await BookService.getAllBooks({
             title: title,
             author: author,
             isbn: isbn,
             page: page,
             limit: effectiveLimit,
         });
-
-        const totalCount = await BookRepository.countBooks({ title, author: author, isbn });
 
         return {
             data: books,
@@ -82,7 +76,7 @@ const getAllBooks = createHandler(
 
         security: {
             authenticate: authenticateJwt,
-            // authSchema: JwtAuthSchema,
+            authSchema: JwtAuthSchema,
             // could be inline function
             authorize: async ({ auth, req }) => {
                 const existingUser = await UserRepository.getUser(auth.email);
@@ -100,21 +94,7 @@ const getBookByIsbn = createJwtAuthHandler(BookDTOs.GetBookContract,
     async (req, auth) => {
         const { isbn } = req.params;
         const { fields } = req.query;
-        const book = await BookRepository.getBookByIsbn(isbn);
-        if (!book) {
-            // return res.status(404).json({ success: false, error: 'Book not found' });
-            throw new createHttpError.NotFound('Book not found');
-        }
-
-        if (fields.length > 0) {
-            const selectedFields = fields.reduce((acc, field) => {
-                acc[field] = book[field];
-                return acc;
-            }, {} as Record<keyof typeof book, any>);
-
-            return { data: selectedFields };
-        }
-
+        const book = await BookService.getBookByISBN(isbn, fields);
 
         return { data: book };
     },
@@ -126,12 +106,8 @@ const getBookByIsbn = createJwtAuthHandler(BookDTOs.GetBookContract,
 const updateBook = createJwtAuthHandler(
     BookDTOs.UpdateBookContract,
     async (req, auth) => {
-        const _requestedBy = auth.email;
         const { isbn } = req.params;
-        const updatedBook = await BookRepository.updateBook(isbn, auth.email, req.body);
-        if (!updatedBook) {
-            throw new createHttpError.NotFound('Book not found');
-        }
+        const updatedBook = await BookService.updateBook(isbn, auth.email, req.body);
 
         return { data: updatedBook };
     },
@@ -160,12 +136,8 @@ const updateBook = createJwtAuthHandler(
 const deleteBook = createJwtAuthHandler(
     BookDTOs.DeleteBookContract,
     async (req, auth) => {
-        const _requestedBy = auth.email;
         const { isbn } = req.params;
-        const book = await BookRepository.deleteBook(isbn, auth.email);
-        if (!book) {
-            throw new createHttpError.NotFound('Book not found');
-        }
+        await BookService.deleteBook(isbn, auth.email);
 
         return { data: undefined };
     },

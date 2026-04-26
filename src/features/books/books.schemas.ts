@@ -81,7 +81,7 @@ export const GetBookContract = createContract({
             isbn: isbnSchema
         }
     },
-    response: bookOutputSchema,
+    response: bookOutputSchema.partial(),
 })
 
 export const DeleteBookContract = createContract({

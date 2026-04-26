@@ -118,3 +118,12 @@ createHandler(UpdateBookContract, async (req) => {
 type UpdateBookContractResponse = z.infer<typeof UpdateBookContract.response>;
 type UpdateBookErrorResponse = Extract<UpdateBookContractResponse, { success: false }>;
 type _hasErrorEnvelope = Expect<Equal<UpdateBookErrorResponse["success"], false>>;
+
+/**
+ * Regression-006: handlers must not allow unknown top-level success result keys.
+ */
+// @ts-expect-error unknown top-level keys must be rejected
+createHandler(UpdateBookContract, async (_req) => ({
+    data: { updated: true },
+    metax: { timestamp: "2026-01-01T00:00:00.000Z" },
+}));
