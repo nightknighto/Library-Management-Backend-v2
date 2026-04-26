@@ -21,34 +21,7 @@ type ContractRequestEnvelope = {
 };
 
 // ============================================================================
-// SECTION 1: VALIDATION HELPERS - Type Guards
-// ============================================================================
-// Helper functions for detecting and working with Zod errors.
-
-/**
- * Type guard to detect if an error is a ZodError.
- * 
- * Works both in browsers and Node, checking both instanceof and the error's name property
- * to handle cases where ZodError instance checks might fail (e.g., cross-realm errors).
- * 
- * @param error - Any error to check
- * @returns True if error is a ZodError, false otherwise
- * 
- * @example
- * try {
- *   schema.parse(data);
- * } catch (error) {
- *   if (isZodError(error)) {
- *     console.log("Validation issues:", error.issues);
- *   }
- * }
- */
-export function isZodError(error: unknown): error is ZodError {
-    return error instanceof ZodError || (error as { name?: string })?.name === "ZodError";
-}
-
-// ============================================================================
-// SECTION 2: VALIDATION EXECUTION - Main Validation Function
+// SECTION 1: VALIDATION EXECUTION - Main Validation Function
 // ============================================================================
 // Core validation function that validates and type-promotes requests.
 

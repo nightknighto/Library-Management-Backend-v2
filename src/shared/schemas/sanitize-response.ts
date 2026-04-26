@@ -11,11 +11,5 @@ export function sanitizeResponse<S extends z.ZodTypeAny, D extends z.input<S>>(
     schema: S,
     data: D
 ): z.output<S> {
-    try {
-        return schema.parse(data);
-    } catch (error: any) {
-        // Rethrow as an output validation error
-        error.isOutputValidationError = true;
-        throw error;
-    }
+    return schema.parse(data);
 }

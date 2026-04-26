@@ -5,7 +5,7 @@ import type { Contract } from "./create-contract.core.ts";
 import type { ValidatedRequest } from "../shared/middlewares/validators.middleware.ts";
 import { sanitizeResponse } from "../shared/schemas/sanitize-response.ts";
 import { validateContractRequest } from "./validate-contract-request.core.ts";
-import { handleError } from "./error-handler.core.ts";
+import { handleError, handleRequestValidationError, handleResponseValidationError, isZodError } from "./error-handler.core.ts";
 import { buildPaginationMeta, buildSuccessResponsePayload } from "./response-builder.core.ts";
 import {
     executeAuthenticationStage,
@@ -16,6 +16,7 @@ import type {
     AccessMode,
     Authenticator,
     Authorizer,
+    ContractResponse,
     HandlerErrorMappers,
     HandlerOptions,
     HandlerSuccessResult,
@@ -498,16 +499,23 @@ function createHandlerRuntime<
                 });
             }
 
-            const validatedReq = await validateContractRequest<TContract["request"]>(
-                contract.request,
-                req,
-            );
-
-            const typedReq = validatedReq as HandlerRequest<TContract>;
+            let validatedReq: HandlerRequest<TContract>;
+            try {
+                validatedReq = await validateContractRequest<TContract["request"]>(
+                    contract.request,
+                    req,
+                );
+            } catch (error) {
+                // If validation fails, check if it's a ZodError and handle it accordingly
+                if (isZodError(error)) {
+                    handleRequestValidationError(error, res);
+                    return;
+                } else { throw error };
+            }
 
             if (security?.validateBeforeAuthorization === true) {
                 await executeAuthorizationStage({
-                    req: typedReq as AfterAuthorizationRequest<TContract>,
+                    req: validatedReq as AfterAuthorizationRequest<TContract>,
                     access,
                     auth: (authenticationResult as { auth?: TAuthContext }).auth,
                     security: {
@@ -520,16 +528,16 @@ function createHandlerRuntime<
             let result: ContractHandlerSuccessResult<TContract>;
             if (access === "protected") {
                 result = await (handler as ProtectedHandlerExecutor<TContract, TAuthContext>)(
-                    typedReq,
+                    validatedReq,
                     (authenticationResult as { auth: TAuthContext }).auth,
                 );
             } else if (access === "optional") {
                 result = await (handler as OptionalHandlerExecutor<TContract, TAuthContext>)(
-                    typedReq,
+                    validatedReq,
                     (authenticationResult as { auth?: TAuthContext }).auth,
                 );
             } else {
-                result = await (handler as PublicHandlerExecutor<TContract>)(typedReq);
+                result = await (handler as PublicHandlerExecutor<TContract>)(validatedReq);
             }
 
             const statusCode = result.statusCode ?? 200;
@@ -541,10 +549,20 @@ function createHandlerRuntime<
                     : undefined,
             });
 
-            const output = sanitizeResponse(contract.response, successPayload);
+            let output: ContractResponse<unknown, boolean>
+            try {
+                output = sanitizeResponse(contract.response, successPayload);
+            } catch (error) {
+                // If response validation fails, check if it's a ZodError and handle it accordingly
+                if (isZodError(error)) {
+                    handleResponseValidationError(error, res);
+                    return;
+                } else { throw error }
+            }
+
             res.status(statusCode).json(output);
         } catch (error) {
-            handleError(error, contract.response, res);
+            handleError(error, res);
         }
     };
 }

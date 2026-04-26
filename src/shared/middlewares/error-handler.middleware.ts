@@ -19,20 +19,7 @@ export function globalErrorHandler(err: any, req: Request, res: Response<ErrorRe
         let message = 'An unexpected error occurred';
         let details: any = null;
 
-
-        // Handle Zod validation errors (e.g., response validation failures)
-        if (err instanceof ZodError) {
-            if ((err as any).isOutputValidationError) {
-                // Output validation error - internal problem
-                console.error('Zod Validation Error:', z.prettifyError(err));
-            } else {
-                // Input validation error - client problem
-                statusCode = 400;
-                code = 'VALIDATION_ERROR';
-                message = 'Invalid request data provided';
-                details = z.prettifyError(err);
-            }
-        } else if (createHttpError.isHttpError(err)) {
+        if (createHttpError.isHttpError(err)) {
             statusCode = err.statusCode;
             code = err.name;
             message = err.message;
@@ -47,7 +34,7 @@ export function globalErrorHandler(err: any, req: Request, res: Response<ErrorRe
                 message,
                 ...(details && { details })
             }
-        });
+        } satisfies ErrorResponse);
     } catch (handlerError) {
         console.error('Error in globalErrorHandler:', handlerError);
         res.status(500).json({
@@ -57,6 +44,6 @@ export function globalErrorHandler(err: any, req: Request, res: Response<ErrorRe
                 status: 500,
                 message: 'An unexpected error occurred'
             }
-        });
+        } satisfies ErrorResponse);
     }
 }
