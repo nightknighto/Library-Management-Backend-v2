@@ -389,7 +389,7 @@ createHandler(
     {
         access: "protected",
         // security: {
-            // authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
+        // authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
         // }
     },
 );
@@ -401,7 +401,7 @@ createHandler(
         // @ts-expect-error optional handlers require security.authenticate
         access: "optional",
         // security: {
-            // authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
+        // authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
         // }
     },
 );
@@ -462,5 +462,66 @@ optionalFactoryAuthSchemaWithoutAuthenticate(
     UpdateBookContract,
     async (_req: unknown, _auth: AuthContext) => {
         return { data: { updated: true } };
+    },
+);
+
+createHandler(
+    UpdateBookContract,
+    async (_req) => ({ data: { updated: true } }),
+    {
+        // @ts-expect-error public handlers must not accept security options
+        security: {
+            authenticate: async () => ({ userId: "u-public-1", role: "staff" as const }),
+        },
+    },
+);
+
+createHandler(
+    UpdateBookContract,
+    async (_req) => ({ data: { updated: true } }),
+    {
+        // @ts-expect-error public handlers must not accept security options
+        security: {
+            authorize: async () => true,
+        },
+    },
+);
+
+publicFactory(
+    UpdateBookContract,
+    async (_req) => ({ data: { updated: true } }),
+    {
+        // @ts-expect-error public factory handlers must not accept security options
+        security: {
+            authenticate: async () => ({ userId: "u-public-2", role: "staff" as const }),
+        },
+    },
+);
+
+createHandlerFactory<AuthContext>({
+    access: "public",
+    // @ts-expect-error public factories must not accept security defaults
+    security: {
+        authenticate: async () => ({ userId: "u-public-default-1", role: "staff" as const }),
+    },
+});
+
+createHandlerFactory<AuthContext>({
+    // @ts-expect-error public factories must not accept security defaults when access is omitted
+    security: {
+        authenticate: async () => ({ userId: "u-public-default-2", role: "staff" as const }),
+    },
+});
+
+publicFactory(
+    UpdateBookContract,
+    async (_req) => ({ data: { updated: true } }),
+    {
+        // @ts-expect-error public factory handlers must not accept security options even when access is explicit
+        access: "public",
+        // @ts-expect-error public factory handlers must not accept security options even when access is explicit
+        security: {
+            authorize: async () => true,
+        },
     },
 );

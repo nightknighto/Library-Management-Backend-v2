@@ -287,7 +287,71 @@ const getBookOptional = createJwtAuthHandler(
 );
 ```
 
-## 8. Error Customization
+## 8. Public Access Security Constraints
+
+### Important: public handlers cannot have security configuration
+
+When you declare an endpoint as `access: "public"`, the framework enforces a strict constraint: **no security object is allowed**, either in direct handler creation or factory defaults.
+
+This is enforced both at **compile time** (TypeScript will reject the code) and at **runtime** (an error is thrown).
+
+**Why?** Public handlers skip the entire authentication/authorization pipeline. Accepting security configuration would be misleading—the security options would be silently ignored, creating a dangerous false sense of security.
+
+#### ❌ INCORRECT: Public handlers cannot accept security
+
+```ts
+// This will not compile
+const listBooks = createHandler(
+  ListBooksContract,
+  async (req) => ({ data: [] }),
+  {
+    access: "public",
+    security: {  // ❌ TypeError: public handlers must not accept security options
+      authenticate: authenticateJwt,
+    },
+  },
+);
+
+// This will also not compile
+const publicFactory = createHandlerFactory({
+  access: "public",
+  security: {  // ❌ TypeError: public factory must not accept security options
+    authenticate: authenticateJwt,
+  },
+});
+```
+
+#### ✅ CORRECT: Use optional for conditional auth
+
+If you need to optionally authenticate users (like "guests can read, but if logged in must be valid"):
+
+```ts
+const listBooks = createHandler(
+  ListBooksContract,
+  async (req, auth) => {
+    // auth is undefined for unauthenticated users
+    // auth has context for authenticated users
+    const limit = auth ? 100 : 10;
+    return { data: [], limit };
+  },
+  {
+    access: "optional",  // ✅ Correct: use optional for conditional auth
+    security: {
+      authenticate: authenticateJwt,
+    },
+  },
+);
+```
+
+### Access Mode Summary
+
+| Mode | Auth Required | Handler Receives Auth | Security Config | Use Case |
+|------|---------------|-----------------------|-----------------|----------|
+| `public` | No | No (`req` only) | ❌ Forbidden | Open endpoints (read public data) |
+| `optional` | No | Yes (`req`, `auth?`) | ✅ Required | Conditional auth (treat guests differently) |
+| `protected` | Yes | Yes (`req`, `auth`) | ✅ Required | Guarded endpoints (create/update/delete) |
+
+## 9. Error Customization
 
 ```ts
 const handler = createHandler(
@@ -307,7 +371,7 @@ const handler = createHandler(
 );
 ```
 
-## 9. Practical Guidance
+## 10. Practical Guidance
 
 - Use before when policy only needs headers/auth and should run early.
 - Use after when policy depends on validated body/query/params.
@@ -315,7 +379,7 @@ const handler = createHandler(
 - When combining broad and narrow policies in after mode, pin request type using the second generic argument.
 - Keep authSchema enabled for safer auth context guarantees.
 
-## 10. Quick Cheatsheet
+## 11. Quick Cheatsheet
 
 - Default mode: validateBeforeAuthorization = false
 - Enable validated request in policies: security.validateBeforeAuthorization = true

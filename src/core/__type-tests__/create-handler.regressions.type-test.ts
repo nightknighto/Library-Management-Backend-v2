@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { createHandler } from "../create-handler.core.ts";
+import {
+    createHandler,
+    createHandlerFactory,
+} from "../create-handler.core.ts";
 import { createContract } from "../create-contract.core.ts";
 import type {
     Equal,
@@ -127,3 +130,30 @@ createHandler(UpdateBookContract, async (_req) => ({
     data: { updated: true },
     metax: { timestamp: "2026-01-01T00:00:00.000Z" },
 }));
+
+/**
+ * Regression-007: public access must reject security options in handler calls.
+ */
+createHandler(
+    UpdateBookContract,
+    async (_req) => ({ data: { updated: true } }),
+    {
+        // @ts-expect-error public handlers must not accept security options
+        security: {
+            authenticate: async () => ({ userId: "r-7", role: "staff" as const }),
+        },
+    },
+);
+
+const publicFactory = createHandlerFactory<AuthContext>({ access: "public" });
+
+publicFactory(
+    UpdateBookContract,
+    async (_req) => ({ data: { updated: true } }),
+    {
+        // @ts-expect-error public factory handlers must not accept security options
+        security: {
+            authorize: async ({ auth }) => auth.role === "staff",
+        },
+    },
+);
