@@ -94,6 +94,13 @@ export async function validateContractRequest<
         params: req.params,
     });
 
+    // Overwrite the 'query' property with a new, writable one
+    Object.defineProperty(req, 'query', {
+        ...Object.getOwnPropertyDescriptor(req, 'query'),
+        value: req.query,
+        writable: true,
+    });
+
     // Mutate request: replace raw fields with validated, typed fields
     // This in-place modification serves as type promotion for TypeScript
     req.body = validated.body;

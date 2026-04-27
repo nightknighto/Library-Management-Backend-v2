@@ -11,17 +11,6 @@ const PORT = CONFIG.port;
 // Middleware
 app.use(express.json());
 
-app.use((req, res, next) => {
-    // Overwrite the 'query' property with a new, writable one
-    Object.defineProperty(req, 'query', {
-        ...Object.getOwnPropertyDescriptor(req, 'query'),
-        value: req.query,
-        writable: true,
-    });
-
-    next();
-});
-
 app.use('/api/v1', rootRouter);
 
 // 404 handler for unmatched routes
