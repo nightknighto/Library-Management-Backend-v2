@@ -188,10 +188,9 @@ protectedFactory(
 
 protectedFactory(
     UpdateBookContract,
+    // @ts-expect-error interaction: overriding protected factory call to public must reject security options
     {
-        // @ts-expect-error interaction: overriding protected factory call to public must reject security options
         access: "public",
-        // @ts-expect-error interaction: overriding protected factory call to public must reject security options
         security: {
             authorize: async ({ auth }) => auth.role === "staff",
         },
