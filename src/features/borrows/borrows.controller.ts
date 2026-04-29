@@ -7,17 +7,7 @@ import { authenticateJwt } from '../auth-stuff.ts';
 import { BorrowsService } from './borrows.service.ts';
 import { BorrowRepository } from './borrows.repository.ts';
 
-const borrowBook = createHandler(BorrowDTOs.BorrowBookContract, async (req, auth) => {
-    const { isbn } = req.params
-    const user_email = auth.email;
-
-    await BorrowsService.borrowBook(isbn, user_email);
-
-    return {
-        statusCode: 201,
-        data: 'Book borrowed successfully'
-    }
-},
+const borrowBook = createHandler(BorrowDTOs.BorrowBookContract,
     {
         access: 'protected', // This handler requires authentication
         security: {
@@ -41,7 +31,19 @@ const borrowBook = createHandler(BorrowDTOs.BorrowBookContract, async (req, auth
                 email: z.string().email(),
             }),
         }
-    })
+    },
+    async (req, auth) => {
+        const { isbn } = req.params
+        const user_email = auth.email;
+
+        await BorrowsService.borrowBook(isbn, user_email);
+
+        return {
+            statusCode: 201,
+            data: 'Book borrowed successfully'
+        }
+    },
+)
 
 const createProtectedHandler = createHandlerFactory({
     access: 'protected',
@@ -51,16 +53,7 @@ const createProtectedHandler = createHandlerFactory({
     }
 })
 
-const returnBook = createProtectedHandler(BorrowDTOs.ReturnBookContract, async (req, auth) => {
-    const { isbn } = req.params
-    const user_email = auth.email;
-
-    await BorrowsService.returnBook(isbn, user_email);
-
-    return {
-        data: 'Book returned successfully'
-    }
-},
+const returnBook = createProtectedHandler(BorrowDTOs.ReturnBookContract,
     {
         security: {
             authorize: async ({ req, auth }) => {
@@ -73,7 +66,18 @@ const returnBook = createProtectedHandler(BorrowDTOs.ReturnBookContract, async (
                 return true;
             }
         }
-    })
+    },
+    async (req, auth) => {
+        const { isbn } = req.params
+        const user_email = auth.email;
+
+        await BorrowsService.returnBook(isbn, user_email);
+
+        return {
+            data: 'Book returned successfully'
+        }
+    },
+)
 
 
 const getOverdueBooks = createProtectedHandler(BorrowDTOs.OverdueBooksContract, async (req) => {

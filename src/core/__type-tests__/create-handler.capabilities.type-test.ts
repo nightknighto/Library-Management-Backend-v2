@@ -127,10 +127,6 @@ createHandler(ListBooksContract, async (_req) => ({
 
 createHandler(
     UpdateBookContract,
-    async (_req, auth) => {
-        type _authExact = Expect<Extends<typeof auth, AuthContext>>;
-        return { data: { updated: true } };
-    },
     {
         access: "protected",
         security: {
@@ -138,50 +134,54 @@ createHandler(
             authSchema: AuthSchema,
         },
     },
-);
-
-createHandler(
-    UpdateBookContract,
     async (_req, auth) => {
         type _authExact = Expect<Extends<typeof auth, AuthContext>>;
         return { data: { updated: true } };
     },
+);
+
+createHandler(
+    UpdateBookContract,
     {
         access: "protected",
         security: {
             authenticate: async () => ({ userId: "u-1", role: "staff" as const }),
         },
     },
+    async (_req, auth) => {
+        type _authExact = Expect<Extends<typeof auth, AuthContext>>;
+        return { data: { updated: true } };
+    },
 );
 
 createHandler(
     UpdateBookContract,
+    {
+        access: "protected",
+        security: {
+            authenticate: async () => ({ userId: "u-1", role: "staff" as const }),
+        },
+    },
     async (_req, auth) => {
         type _authNotAny = ExpectFalse<IsAny<typeof auth>>;
         type _authExact = Expect<Extends<typeof auth, AuthContext>>;
         return { data: { updated: true } };
     },
-    {
-        access: "protected",
-        security: {
-            authenticate: async () => ({ userId: "u-1", role: "staff" as const }),
-        },
-    },
 );
 
 createHandler(
     UpdateBookContract,
+    {
+        access: "optional",
+        security: {
+            authenticate: async (_req) => ({ userId: "u-2", role: "member" as const }),
+        },
+    },
     async (_req, auth) => {
         type _authHasUndefined = Expect<Extends<undefined, typeof auth>>;
         type _authNotAny = ExpectFalse<IsAny<typeof auth>>;
         type _authShape = Expect<Extends<Exclude<typeof auth, undefined>, AuthContext>>;
         return { data: { updated: true } };
-    },
-    {
-        access: "optional",
-        security: {
-            authenticate: async (_req: Request) => ({ userId: "u-2", role: "member" as const }),
-        },
     },
 );
 
@@ -190,7 +190,6 @@ createHandler(UpdateBookContract, async (_req, _auth) => ({ data: { updated: tru
 
 createHandler(
     UpdateBookContract,
-    async (_req, _auth) => ({ data: { updated: true } }),
     {
         access: "protected",
         security: {
@@ -206,11 +205,11 @@ createHandler(
             },
         },
     },
+    async (_req, _auth) => ({ data: { updated: true } }),
 );
 
 createHandler(
     UpdateBookContract,
-    async (_req, _auth) => ({ data: { updated: true } }),
     {
         access: "protected",
         security: {
@@ -224,6 +223,7 @@ createHandler(
             },
         },
     },
+    async (_req, _auth) => ({ data: { updated: true } }),
 );
 
 const composedPolicy = allOf<AuthContext>([
@@ -236,7 +236,6 @@ const composedPolicy = allOf<AuthContext>([
 
 createHandler(
     UpdateBookContract,
-    async (_req, _auth) => ({ data: { updated: true } }),
     {
         access: "protected",
         security: {
@@ -254,6 +253,7 @@ createHandler(
             },
         },
     },
+    async (_req, _auth) => ({ data: { updated: true } }),
 );
 
 const publicFactory = createHandlerFactory<AuthContext>({
@@ -270,16 +270,16 @@ publicFactory(
 
 publicFactory(
     UpdateBookContract,
-    async (_req, auth) => {
-        type _authExact = Expect<Extends<typeof auth, AuthContext>>;
-        return { data: { updated: true } };
-    },
     {
         access: "protected",
         security: {
             authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
             authSchema: AuthSchema,
         },
+    },
+    async (_req, auth) => {
+        type _authExact = Expect<Extends<typeof auth, AuthContext>>;
+        return { data: { updated: true } };
     },
 );
 
@@ -293,10 +293,6 @@ const privateFactoryAuthSchemaAndAuthenticate = createHandlerFactory({
 
 privateFactoryAuthSchemaAndAuthenticate(
     UpdateBookContract,
-    async (_req, auth) => {
-        type _authExact = Expect<Extends<typeof auth, AuthContext>>;
-        return { data: { updated: true } };
-    },
     {
         security: {
             validateBeforeAuthorization: false, // <===========
@@ -307,14 +303,14 @@ privateFactoryAuthSchemaAndAuthenticate(
             },
         },
     },
-);
-
-privateFactoryAuthSchemaAndAuthenticate(
-    UpdateBookContract,
     async (_req, auth) => {
         type _authExact = Expect<Extends<typeof auth, AuthContext>>;
         return { data: { updated: true } };
     },
+);
+
+privateFactoryAuthSchemaAndAuthenticate(
+    UpdateBookContract,
     {
         security: {
             validateBeforeAuthorization: true, // <===========
@@ -327,6 +323,10 @@ privateFactoryAuthSchemaAndAuthenticate(
             },
         },
     },
+    async (_req, auth) => {
+        type _authExact = Expect<Extends<typeof auth, AuthContext>>;
+        return { data: { updated: true } };
+    },
 );
 
 const privateFactoryAuthenticateOnly = createHandlerFactory({
@@ -338,10 +338,6 @@ const privateFactoryAuthenticateOnly = createHandlerFactory({
 
 privateFactoryAuthenticateOnly(
     UpdateBookContract,
-    async (req, auth) => {
-        type _authExact = Expect<Extends<typeof auth, AuthContext>>;
-        return { data: { updated: true } };
-    },
     {
         security: {
             authorize: async ({ req, auth }) => {
@@ -350,7 +346,11 @@ privateFactoryAuthenticateOnly(
                 return auth.role === "staff" && req.body.title.length > 0;
             },
         }
-    }
+    },
+    async (req, auth) => {
+        type _authExact = Expect<Extends<typeof auth, AuthContext>>;
+        return { data: { updated: true } };
+    },
 )
 
 const privateFactoryValidationBeforeAuth = createHandlerFactory({
@@ -363,10 +363,6 @@ const privateFactoryValidationBeforeAuth = createHandlerFactory({
 
 privateFactoryValidationBeforeAuth(
     UpdateBookContract,
-    async (_req, auth) => {
-        type _authExact = Expect<Extends<typeof auth, AuthContext>>;
-        return { data: { updated: true } };
-    },
     {
         security: {
             authorize: async ({ req, auth }) => {
@@ -375,7 +371,11 @@ privateFactoryValidationBeforeAuth(
                 return auth.role === "staff" && req.body.title.length > 0;
             },
         }
-    }
+    },
+    async (_req, auth) => {
+        type _authExact = Expect<Extends<typeof auth, AuthContext>>;
+        return { data: { updated: true } };
+    },
 )
 
 /**
@@ -384,7 +384,6 @@ privateFactoryValidationBeforeAuth(
 
 createHandler(
     UpdateBookContract,
-    async (_req, _auth) => ({ data: { updated: true } }),
     // @ts-expect-error protected handlers require security.authenticate
     {
         access: "protected",
@@ -392,11 +391,11 @@ createHandler(
         // authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
         // }
     },
+    async (_req: unknown, _auth: AuthContext) => ({ data: { updated: true } }),
 );
 
 createHandler(
     UpdateBookContract,
-    async (_req, _auth) => ({ data: { updated: true } }),
     {
         // @ts-expect-error optional handlers require security.authenticate
         access: "optional",
@@ -404,6 +403,7 @@ createHandler(
         // authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
         // }
     },
+    async (_req: unknown, _auth: AuthContext) => ({ data: { updated: true } }),
 );
 
 const protectedFactoryWithoutAuthenticate = createHandlerFactory<AuthContext>({
@@ -467,35 +467,35 @@ optionalFactoryAuthSchemaWithoutAuthenticate(
 
 createHandler(
     UpdateBookContract,
-    async (_req) => ({ data: { updated: true } }),
     {
         // @ts-expect-error public handlers must not accept security options
         security: {
             authenticate: async () => ({ userId: "u-public-1", role: "staff" as const }),
         },
     },
+    async (_req: unknown) => ({ data: { updated: true } }),
 );
 
 createHandler(
     UpdateBookContract,
-    async (_req) => ({ data: { updated: true } }),
     {
         // @ts-expect-error public handlers must not accept security options
         security: {
             authorize: async () => true,
         },
     },
+    async (_req: unknown) => ({ data: { updated: true } }),
 );
 
 publicFactory(
     UpdateBookContract,
-    async (_req) => ({ data: { updated: true } }),
     {
         // @ts-expect-error public factory handlers must not accept security options
         security: {
             authenticate: async () => ({ userId: "u-public-2", role: "staff" as const }),
         },
     },
+    async (_req: unknown) => ({ data: { updated: true } }),
 );
 
 createHandlerFactory<AuthContext>({
@@ -515,7 +515,6 @@ createHandlerFactory<AuthContext>({
 
 publicFactory(
     UpdateBookContract,
-    async (_req) => ({ data: { updated: true } }),
     {
         // @ts-expect-error public factory handlers must not accept security options even when access is explicit
         access: "public",
@@ -524,4 +523,5 @@ publicFactory(
             authorize: async () => true,
         },
     },
+    async (_req: unknown) => ({ data: { updated: true } }),
 );

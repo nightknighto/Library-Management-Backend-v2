@@ -55,6 +55,12 @@ const getAllUsers = createHandler(UserDTOs.GetAllUsersContract, async (req) => {
 })
 
 const updateUser = createHandler(UserDTOs.UpdateUserContract,
+    {
+        access: 'protected',
+        security: {
+            authenticate: authenticateJwt,
+        },
+    },
     async (req, auth) => {
         const email = auth.email;
         const { name } = req.body;
@@ -66,12 +72,6 @@ const updateUser = createHandler(UserDTOs.UpdateUserContract,
             data: updatedUser,
         };
     },
-    {
-        access: 'protected',
-        security: {
-            authenticate: authenticateJwt,
-        },
-    }
 )
 
 
@@ -87,6 +87,12 @@ const deleteUser = createHandler(UserDTOs.DeleteUserContract, async (req) => {
 })
 
 const getUserBorrows = createHandler(UserDTOs.GetUserBorrowsContract,
+    {
+        access: 'protected',
+        security: {
+            authenticate: authenticateJwt,
+        },
+    },
     async (req, auth) => {
         const email = auth.email;
         const userWithBorrows = await UserRepository.getUserWithActiveBorrows(email);
@@ -109,12 +115,6 @@ const getUserBorrows = createHandler(UserDTOs.GetUserBorrowsContract,
             data: response,
         };
     },
-    {
-        access: 'protected',
-        security: {
-            authenticate: authenticateJwt,
-        },
-    }
 )
 
 export const UserController = {

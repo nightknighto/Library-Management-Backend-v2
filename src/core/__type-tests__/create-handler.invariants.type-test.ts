@@ -80,21 +80,27 @@ type _afterAuthReqQueryExact = Expect<
 
 createHandler(
     UpdateBookContract,
-    async (_req, auth) => {
-        type _optionalHasUndefined = Expect<Extends<undefined, typeof auth>>;
-        type _optionalAuthShape = Expect<Extends<Exclude<typeof auth, undefined>, AuthContext>>;
-        return { data: { updated: true } };
-    },
     {
         access: "optional",
         security: {
             authenticate: async () => ({ userId: "user-optional" }),
         },
     },
+    async (_req, auth) => {
+        type _optionalHasUndefined = Expect<Extends<undefined, typeof auth>>;
+        type _optionalAuthShape = Expect<Extends<Exclude<typeof auth, undefined>, AuthContext>>;
+        return { data: { updated: true } };
+    },
 );
 
 createHandler(
     UpdateBookContract,
+    {
+        access: "protected",
+        security: {
+            authenticate: async () => ({ userId: "user-protected" }),
+        },
+    },
     async (_req, auth) => {
         type _protectedAuth = Expect<Extends<typeof auth, AuthContext>>;
         // @ts-expect-error protected auth is never undefined
@@ -102,11 +108,5 @@ createHandler(
         void mustBeUndefined;
 
         return { data: { updated: true } };
-    },
-    {
-        access: "protected",
-        security: {
-            authenticate: async () => ({ userId: "user-protected" }),
-        },
     },
 );

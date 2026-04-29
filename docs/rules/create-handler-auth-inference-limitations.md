@@ -22,9 +22,12 @@ After a long investigation, the final decision is:
 
 This is not a stylistic preference. It is a targeted mitigation for a known TypeScript inference limitation in this API shape.
 
+> Historical note: this investigation originated before the signature update to
+> `createHandler(contract, options, handler)` (or `createHandler(contract, handler)` when no options are needed).
+
 ## The actual problem in our framework
 
-Our `createHandler` API shape is handler-first:
+During the original investigation, `createHandler` used a handler-first shape:
 
 ```ts
 createHandler(contract, handler, options)
@@ -109,7 +112,7 @@ A temporary helper-based approach worked technically, but exposed extra ceremony
 
 To be acceptable, an "internal-only" fix would need to satisfy all of these at once:
 
-1. Keep the existing API shape exactly (`createHandler(contract, handler, options)`).
+1. Keep the old API shape exactly as it was during investigation (`createHandler(contract, handler, options)`).
 2. Require no helper wrappers at call sites.
 3. Require no explicit generic arguments at call sites.
 4. Preserve strong auth inference for parameterful unannotated `authenticate` callbacks.

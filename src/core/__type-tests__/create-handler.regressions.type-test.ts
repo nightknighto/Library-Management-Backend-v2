@@ -68,7 +68,6 @@ const ListBooksContract = createContract({
  */
 createHandler(
     UpdateBookContract,
-    async (_req, _auth) => ({ data: { updated: true } }),
     {
         access: "protected",
         security: {
@@ -81,6 +80,7 @@ createHandler(
             },
         },
     },
+    async (_req, _auth) => ({ data: { updated: true } }),
 );
 
 /**
@@ -94,16 +94,16 @@ createHandler(ListBooksContract, async (_req) => ({ data: [{ isbn: "x" }] }));
  */
 createHandler(
     UpdateBookContract,
-    async (_req, auth) => {
-        type _optionalHasUndefined = Expect<Extends<undefined, typeof auth>>;
-        type _optionalAuthShape = Expect<Extends<Exclude<typeof auth, undefined>, AuthContext>>;
-        return { data: { updated: true } };
-    },
     {
         access: "optional",
         security: {
             authenticate: async () => ({ userId: "r-2", role: "member" as const }),
         },
+    },
+    async (_req, auth) => {
+        type _optionalHasUndefined = Expect<Extends<undefined, typeof auth>>;
+        type _optionalAuthShape = Expect<Extends<Exclude<typeof auth, undefined>, AuthContext>>;
+        return { data: { updated: true } };
     },
 );
 
@@ -136,24 +136,24 @@ createHandler(UpdateBookContract, async (_req) => ({
  */
 createHandler(
     UpdateBookContract,
-    async (_req) => ({ data: { updated: true } }),
     {
         // @ts-expect-error public handlers must not accept security options
         security: {
             authenticate: async () => ({ userId: "r-7", role: "staff" as const }),
         },
     },
+    async (_req: unknown) => ({ data: { updated: true } }),
 );
 
 const publicFactory = createHandlerFactory<AuthContext>({ access: "public" });
 
 publicFactory(
     UpdateBookContract,
-    async (_req) => ({ data: { updated: true } }),
     {
         // @ts-expect-error public factory handlers must not accept security options
         security: {
             authorize: async ({ auth }) => auth.role === "staff",
         },
     },
+    async (_req) => ({ data: { updated: true } }),
 );

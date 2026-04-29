@@ -14,6 +14,10 @@ It covers:
 
 Security is configured through handler options:
 
+- Signature forms:
+  - `createHandler(contract, handler)` when no options are needed
+  - `createHandler(contract, options, handler)` when options are provided
+
 - access:
   - public: no auth required
   - optional: auth is optional, handler can receive auth if present
@@ -93,15 +97,15 @@ const listBooks = createHandler(ListBooksContract, async (req) => {
 ```ts
 const listBooksOptional = createHandler(
   ListBooksContract,
-  async (req, auth) => {
-    const limit = auth ? req.query.limit : Math.min(req.query.limit, 5);
-    return { data: [], pagination: { totalCount: 0, page: 1, limit } };
-  },
   {
     access: "optional",
     security: {
       authenticate: authenticateJwt,
     },
+  },
+  async (req, auth) => {
+    const limit = auth ? req.query.limit : Math.min(req.query.limit, 5);
+    return { data: [], pagination: { totalCount: 0, page: 1, limit } };
   },
 );
 ```
@@ -111,9 +115,6 @@ const listBooksOptional = createHandler(
 ```ts
 const createBook = createHandler(
   CreateBookContract,
-  async (req, auth) => {
-    return { statusCode: 201, data: "created" };
-  },
   {
     access: "protected",
     security: {
@@ -121,6 +122,9 @@ const createBook = createHandler(
       authSchema: JwtAuthSchema,
       authorize: isStaff,
     },
+  },
+  async (req, auth) => {
+    return { statusCode: 201, data: "created" };
   },
 );
 ```
@@ -134,7 +138,6 @@ If validateBeforeAuthorization is omitted, default is false (authorization runs 
 ```ts
 const beforeMode = createHandler(
   UpdateBookContract,
-  async (req, auth) => ({ data: req.body }),
   {
     access: "protected",
     security: {
@@ -146,6 +149,7 @@ const beforeMode = createHandler(
       },
     },
   },
+  async (req, auth) => ({ data: req.body }),
 );
 ```
 
@@ -156,7 +160,6 @@ When timing is after, authorization runs after contract validation.
 ```ts
 const afterMode = createHandler(
   CreateBookContract,
-  async (req, auth) => ({ statusCode: 201, data: "created" }),
   {
     access: "protected",
     security: {
@@ -169,6 +172,7 @@ const afterMode = createHandler(
       },
     },
   },
+  async (req, auth) => ({ statusCode: 201, data: "created" }),
 );
 ```
 
@@ -207,7 +211,6 @@ const createBookPolicy = allOf<
 
 const createBook2 = createHandler(
   CreateBookContract,
-  async (req, auth) => ({ statusCode: 201, data: "created" }),
   {
     access: "protected",
     security: {
@@ -216,6 +219,7 @@ const createBook2 = createHandler(
       authorize: createBookPolicy,
     },
   },
+  async (req, auth) => ({ statusCode: 201, data: "created" }),
 );
 ```
 
@@ -261,13 +265,13 @@ Then use the factory per endpoint:
 ```ts
 const deleteBook = createJwtAuthHandler(
   DeleteBookContract,
-  async (req, auth) => ({ data: undefined }),
   {
     security: {
       // inherits authenticate and authSchema
       authorize: allOf([isStaff]),
     },
   },
+  async (req, auth) => ({ data: undefined }),
 );
 ```
 
@@ -276,7 +280,6 @@ You can still override access or timing per endpoint:
 ```ts
 const getBookOptional = createJwtAuthHandler(
   GetBookContract,
-  async (req, auth) => ({ data: { isbn: req.params.isbn, title: "x", author: "y", shelf: "A1", total_quantity: 1 } }),
   {
     access: "optional",
     security: {
@@ -284,6 +287,7 @@ const getBookOptional = createJwtAuthHandler(
       authorize: async ({ req }) => req.params.isbn.length > 0,
     },
   },
+  async (req, auth) => ({ data: { isbn: req.params.isbn, title: "x", author: "y", shelf: "A1", total_quantity: 1 } }),
 );
 ```
 
@@ -303,13 +307,13 @@ This is enforced both at **compile time** (TypeScript will reject the code) and 
 // This will not compile
 const listBooks = createHandler(
   ListBooksContract,
-  async (req) => ({ data: [] }),
   {
     access: "public",
     security: {  // ❌ TypeError: public handlers must not accept security options
       authenticate: authenticateJwt,
     },
   },
+  async (req) => ({ data: [] }),
 );
 
 // This will also not compile
@@ -328,17 +332,17 @@ If you need to optionally authenticate users (like "guests can read, but if logg
 ```ts
 const listBooks = createHandler(
   ListBooksContract,
-  async (req, auth) => {
-    // auth is undefined for unauthenticated users
-    // auth has context for authenticated users
-    const limit = auth ? 100 : 10;
-    return { data: [], limit };
-  },
   {
     access: "optional",  // ✅ Correct: use optional for conditional auth
     security: {
       authenticate: authenticateJwt,
     },
+  },
+  async (req, auth) => {
+    // auth is undefined for unauthenticated users
+    // auth has context for authenticated users
+    const limit = auth ? 100 : 10;
+    return { data: [], limit };
   },
 );
 ```
@@ -356,7 +360,6 @@ const listBooks = createHandler(
 ```ts
 const handler = createHandler(
   SomeContract,
-  async (req, auth) => ({ data: "ok" }),
   {
     access: "protected",
     security: {
@@ -368,6 +371,7 @@ const handler = createHandler(
       unauthorized: () => new createHttpError.Forbidden("Staff role is required"),
     },
   },
+  async (req, auth) => ({ data: "ok" }),
 );
 ```
 

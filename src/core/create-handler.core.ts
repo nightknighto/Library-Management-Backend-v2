@@ -427,6 +427,13 @@ type HandlerFactoryAfterOptionsArg<
         >
     ];
 
+type HandlerFactoryArgsWithHandlerLast<
+    TArgs extends unknown[],
+    THandler,
+> = [] extends TArgs
+    ? [handler: THandler] | [options: TArgs[0], handler: THandler]
+    : [options: TArgs[0], handler: THandler];
+
 type ConfiguredHandlerFactory<
     TAuthContext,
     TDefaultAccess extends AccessMode,
@@ -438,13 +445,15 @@ type ConfiguredHandlerFactory<
         TResult extends ContractHandlerSuccessResult<TContract>,
     >(
         contract: TContract,
-        handler: PublicHandlerExecutor<TContract, TResult>,
-        ...args: HandlerFactoryBeforeOptionsArg<
-            TDefaultAccess,
-            TDefaultValidateBeforeAuthorization,
-            TDefaultHasAuthenticate,
-            "public",
-            TAuthContext
+        ...args: HandlerFactoryArgsWithHandlerLast<
+            HandlerFactoryBeforeOptionsArg<
+                TDefaultAccess,
+                TDefaultValidateBeforeAuthorization,
+                TDefaultHasAuthenticate,
+                "public",
+                TAuthContext
+            >,
+            PublicHandlerExecutor<TContract, TResult>
         >
     ): RequestHandler;
     <
@@ -452,14 +461,16 @@ type ConfiguredHandlerFactory<
         TResult extends ContractHandlerSuccessResult<TContract>,
     >(
         contract: TContract,
-        handler: PublicHandlerExecutor<TContract, TResult>,
-        ...args: HandlerFactoryAfterOptionsArg<
-            TDefaultAccess,
-            TDefaultValidateBeforeAuthorization,
-            TDefaultHasAuthenticate,
-            "public",
-            TAuthContext,
-            TContract
+        ...args: HandlerFactoryArgsWithHandlerLast<
+            HandlerFactoryAfterOptionsArg<
+                TDefaultAccess,
+                TDefaultValidateBeforeAuthorization,
+                TDefaultHasAuthenticate,
+                "public",
+                TAuthContext,
+                TContract
+            >,
+            PublicHandlerExecutor<TContract, TResult>
         >
     ): RequestHandler;
     <
@@ -467,13 +478,15 @@ type ConfiguredHandlerFactory<
         TResult extends ContractHandlerSuccessResult<TContract>,
     >(
         contract: TContract,
-        handler: OptionalHandlerExecutor<TContract, TAuthContext, TResult>,
-        ...args: HandlerFactoryBeforeOptionsArg<
-            TDefaultAccess,
-            TDefaultValidateBeforeAuthorization,
-            TDefaultHasAuthenticate,
-            "optional",
-            TAuthContext
+        ...args: HandlerFactoryArgsWithHandlerLast<
+            HandlerFactoryBeforeOptionsArg<
+                TDefaultAccess,
+                TDefaultValidateBeforeAuthorization,
+                TDefaultHasAuthenticate,
+                "optional",
+                TAuthContext
+            >,
+            OptionalHandlerExecutor<TContract, TAuthContext, TResult>
         >
     ): RequestHandler;
     <
@@ -481,14 +494,16 @@ type ConfiguredHandlerFactory<
         TResult extends ContractHandlerSuccessResult<TContract>,
     >(
         contract: TContract,
-        handler: OptionalHandlerExecutor<TContract, TAuthContext, TResult>,
-        ...args: HandlerFactoryAfterOptionsArg<
-            TDefaultAccess,
-            TDefaultValidateBeforeAuthorization,
-            TDefaultHasAuthenticate,
-            "optional",
-            TAuthContext,
-            TContract
+        ...args: HandlerFactoryArgsWithHandlerLast<
+            HandlerFactoryAfterOptionsArg<
+                TDefaultAccess,
+                TDefaultValidateBeforeAuthorization,
+                TDefaultHasAuthenticate,
+                "optional",
+                TAuthContext,
+                TContract
+            >,
+            OptionalHandlerExecutor<TContract, TAuthContext, TResult>
         >
     ): RequestHandler;
     <
@@ -496,13 +511,15 @@ type ConfiguredHandlerFactory<
         TResult extends ContractHandlerSuccessResult<TContract>,
     >(
         contract: TContract,
-        handler: ProtectedHandlerExecutor<TContract, TAuthContext, TResult>,
-        ...args: HandlerFactoryBeforeOptionsArg<
-            TDefaultAccess,
-            TDefaultValidateBeforeAuthorization,
-            TDefaultHasAuthenticate,
-            "protected",
-            TAuthContext
+        ...args: HandlerFactoryArgsWithHandlerLast<
+            HandlerFactoryBeforeOptionsArg<
+                TDefaultAccess,
+                TDefaultValidateBeforeAuthorization,
+                TDefaultHasAuthenticate,
+                "protected",
+                TAuthContext
+            >,
+            ProtectedHandlerExecutor<TContract, TAuthContext, TResult>
         >
     ): RequestHandler;
     <
@@ -510,14 +527,16 @@ type ConfiguredHandlerFactory<
         TResult extends ContractHandlerSuccessResult<TContract>,
     >(
         contract: TContract,
-        handler: ProtectedHandlerExecutor<TContract, TAuthContext, TResult>,
-        ...args: HandlerFactoryAfterOptionsArg<
-            TDefaultAccess,
-            TDefaultValidateBeforeAuthorization,
-            TDefaultHasAuthenticate,
-            "protected",
-            TAuthContext,
-            TContract
+        ...args: HandlerFactoryArgsWithHandlerLast<
+            HandlerFactoryAfterOptionsArg<
+                TDefaultAccess,
+                TDefaultValidateBeforeAuthorization,
+                TDefaultHasAuthenticate,
+                "protected",
+                TAuthContext,
+                TContract
+            >,
+            ProtectedHandlerExecutor<TContract, TAuthContext, TResult>
         >
     ): RequestHandler;
 };
@@ -650,20 +669,25 @@ function createHandlerRuntime<
 export function createHandler<
     TContract extends AnyContract,
     TResult extends ContractHandlerSuccessResult<TContract>,
-    TAuthContext = never,
 >(
     contract: TContract,
     handler: PublicHandlerExecutor<TContract, TResult>,
-    options?: BeforeHandlerOptions<"public", TAuthContext>,
 ): RequestHandler;
 export function createHandler<
     TContract extends AnyContract,
     TResult extends ContractHandlerSuccessResult<TContract>,
-    TAuthContext = never,
 >(
     contract: TContract,
+    options: BeforeHandlerOptions<"public", never>,
     handler: PublicHandlerExecutor<TContract, TResult>,
-    options: AfterHandlerOptions<"public", TAuthContext, TContract>,
+): RequestHandler;
+export function createHandler<
+    TContract extends AnyContract,
+    TResult extends ContractHandlerSuccessResult<TContract>,
+>(
+    contract: TContract,
+    options: AfterHandlerOptions<"public", never, TContract>,
+    handler: PublicHandlerExecutor<TContract, TResult>,
 ): RequestHandler;
 export function createHandler<
     TContract extends AnyContract,
@@ -671,10 +695,10 @@ export function createHandler<
     TResult extends ContractHandlerSuccessResult<TContract>,
 >(
     contract: TContract,
-    handler: OptionalHandlerExecutor<TContract, TAuthContext, TResult>,
     options: Omit<BeforeHandlerOptions<"optional", TAuthContext>, "access"> & {
         access: "optional";
     },
+    handler: OptionalHandlerExecutor<TContract, TAuthContext, TResult>,
 ): RequestHandler;
 export function createHandler<
     TContract extends AnyContract,
@@ -682,10 +706,10 @@ export function createHandler<
     TResult extends ContractHandlerSuccessResult<TContract>,
 >(
     contract: TContract,
-    handler: OptionalHandlerExecutor<TContract, TAuthContext, TResult>,
     options: Omit<AfterHandlerOptions<"optional", TAuthContext, TContract>, "access"> & {
         access: "optional";
     },
+    handler: OptionalHandlerExecutor<TContract, TAuthContext, TResult>,
 ): RequestHandler;
 export function createHandler<
     TContract extends AnyContract,
@@ -693,10 +717,10 @@ export function createHandler<
     TResult extends ContractHandlerSuccessResult<TContract>,
 >(
     contract: TContract,
-    handler: ProtectedHandlerExecutor<TContract, TAuthContext, TResult>,
     options: Omit<BeforeHandlerOptions<"protected", TAuthContext>, "access"> & {
         access: "protected";
     },
+    handler: ProtectedHandlerExecutor<TContract, TAuthContext, TResult>,
 ): RequestHandler;
 export function createHandler<
     TContract extends AnyContract,
@@ -704,23 +728,40 @@ export function createHandler<
     TResult extends ContractHandlerSuccessResult<TContract>,
 >(
     contract: TContract,
-    handler: ProtectedHandlerExecutor<TContract, TAuthContext, TResult>,
     options: Omit<AfterHandlerOptions<"protected", TAuthContext, TContract>, "access"> & {
         access: "protected";
     },
+    handler: ProtectedHandlerExecutor<TContract, TAuthContext, TResult>,
 ): RequestHandler;
 export function createHandler<
     TContract extends AnyContract,
     TAuthContext,
 >(
     contract: TContract,
-    handler:
+    arg2:
         | AnyPublicHandlerExecutor<TContract>
         | AnyOptionalHandlerExecutor<TContract, TAuthContext>
-        | AnyProtectedHandlerExecutor<TContract, TAuthContext>,
-    options?: HandlerOptionsByAuthorizationMode<AccessMode, TAuthContext, TContract>,
+        | AnyProtectedHandlerExecutor<TContract, TAuthContext>
+        | HandlerOptionsByAuthorizationMode<AccessMode, TAuthContext, TContract>,
+    arg3?:
+        | AnyPublicHandlerExecutor<TContract>
+        | AnyOptionalHandlerExecutor<TContract, TAuthContext>
+        | AnyProtectedHandlerExecutor<TContract, TAuthContext>
+        | HandlerOptionsByAuthorizationMode<AccessMode, TAuthContext, TContract>,
 ): RequestHandler {
-    return createHandlerRuntime(contract, handler, options);
+    if (typeof arg2 === "function") {
+        return createHandlerRuntime(
+            contract,
+            arg2,
+            arg3 as HandlerOptionsByAuthorizationMode<AccessMode, TAuthContext, TContract> | undefined,
+        );
+    }
+
+    if (typeof arg3 !== "function") {
+        throw new Error("createHandler requires a handler function as the last argument.");
+    }
+
+    return createHandlerRuntime(contract, arg3, arg2);
 }
 
 function createHandlerInternal<
@@ -848,12 +889,36 @@ export function createHandlerFactory<
 
     function createConfiguredHandler<TContract extends AnyContract>(
         contract: TContract,
-        handler:
+        arg2:
             | AnyPublicHandlerExecutor<TContract>
             | AnyOptionalHandlerExecutor<TContract, TAuthContext>
-            | AnyProtectedHandlerExecutor<TContract, TAuthContext>,
-        options?: HandlerOptions<AccessMode, TAuthContext, Request>,
+            | AnyProtectedHandlerExecutor<TContract, TAuthContext>
+            | HandlerOptions<AccessMode, TAuthContext, Request>,
+        arg3?:
+            | AnyPublicHandlerExecutor<TContract>
+            | AnyOptionalHandlerExecutor<TContract, TAuthContext>
+            | AnyProtectedHandlerExecutor<TContract, TAuthContext>
+            | HandlerOptions<AccessMode, TAuthContext, Request>,
     ): RequestHandler {
+        let options: HandlerOptions<AccessMode, TAuthContext, Request> | undefined;
+        let handler:
+            | AnyPublicHandlerExecutor<TContract>
+            | AnyOptionalHandlerExecutor<TContract, TAuthContext>
+            | AnyProtectedHandlerExecutor<TContract, TAuthContext>;
+
+        if (typeof arg2 === "function") {
+            handler = arg2;
+            options = arg3 as HandlerOptions<AccessMode, TAuthContext, Request> | undefined;
+        } else {
+            options = arg2;
+
+            if (typeof arg3 !== "function") {
+                throw new Error("Configured handlers require a handler function as the last argument.");
+            }
+
+            handler = arg3;
+        }
+
         const merged = mergeHandlerSecurityDefaults(defaults, options);
 
         const mergedOptions: HandlerOptions<AccessMode, TAuthContext, Request> = {

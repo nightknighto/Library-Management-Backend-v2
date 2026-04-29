@@ -13,13 +13,6 @@ import z from 'zod';
 import { BookService } from './books.service.ts';
 
 const createBook = createJwtAuthHandler(BookDTOs.CreateBookContract,
-    async (req, auth) => {
-        await BookService.createBook(auth.email, req.body);
-        return {
-            statusCode: 201,
-            data: 'Book created successfully',
-        };
-    },
     {
         security: {
             // Example 1: allOf + anyOf
@@ -44,12 +37,36 @@ const createBook = createJwtAuthHandler(BookDTOs.CreateBookContract,
             validateBeforeAuthorization: true,
         },
     },
+    async (req, auth) => {
+        await BookService.createBook(auth.email, req.body);
+        return {
+            statusCode: 201,
+            data: 'Book created successfully',
+        };
+    },
 );
 
 // Example 4: optional mode
 // Guests can read books, but if token is present it must belong to a real user.
 const getAllBooks = createHandler(
     BookDTOs.ListBooksContract,
+    {
+        access: 'protected',
+
+        security: {
+            authenticate: authenticateJwt,
+            authSchema: JwtAuthSchema,
+            // could be inline function
+            authorize: async ({ auth, req }) => {
+                const existingUser = await UserRepository.getUser(auth.email);
+                return Boolean(existingUser);
+            },
+            validateBeforeAuthorization: true,
+        },
+        errors: {
+            unauthorized: () => new createHttpError.Forbidden('Invalid authenticated user'),
+        },
+    },
     async (req, auth) => {
         const { title, author, isbn, page, limit } = req.query;
         const effectiveLimit = auth ? limit : Math.min(limit, 5);
@@ -71,26 +88,12 @@ const getAllBooks = createHandler(
             },
         };
     },
-    {
-        access: 'protected',
-
-        security: {
-            authenticate: authenticateJwt,
-            authSchema: JwtAuthSchema,
-            // could be inline function
-            authorize: async ({ auth, req }) => {
-                const existingUser = await UserRepository.getUser(auth.email);
-                return Boolean(existingUser);
-            },
-            validateBeforeAuthorization: true,
-        },
-        errors: {
-            unauthorized: () => new createHttpError.Forbidden('Invalid authenticated user'),
-        },
-    },
 );
 
 const getBookByIsbn = createJwtAuthHandler(BookDTOs.GetBookContract,
+    {
+        access: 'optional',
+    },
     async (req, auth) => {
         const { isbn } = req.params;
         const { fields } = req.query;
@@ -98,19 +101,10 @@ const getBookByIsbn = createJwtAuthHandler(BookDTOs.GetBookContract,
 
         return { data: book };
     },
-    {
-        access: 'optional',
-    }
 )
 
 const updateBook = createJwtAuthHandler(
     BookDTOs.UpdateBookContract,
-    async (req, auth) => {
-        const { isbn } = req.params;
-        const updatedBook = await BookService.updateBook(isbn, auth.email, req.body);
-
-        return { data: updatedBook };
-    },
     {
         access: 'protected',
 
@@ -122,6 +116,12 @@ const updateBook = createJwtAuthHandler(
                 editsOwnAuthorName,
             ])
         },
+    },
+    async (req, auth) => {
+        const { isbn } = req.params;
+        const updatedBook = await BookService.updateBook(isbn, auth.email, req.body);
+
+        return { data: updatedBook };
     },
 );
 
@@ -135,16 +135,16 @@ const updateBook = createJwtAuthHandler(
 
 const deleteBook = createJwtAuthHandler(
     BookDTOs.DeleteBookContract,
+    {
+        security: {
+            authorize: deleteBookPolicy,
+        },
+    },
     async (req, auth) => {
         const { isbn } = req.params;
         await BookService.deleteBook(isbn, auth.email);
 
         return { data: undefined };
-    },
-    {
-        security: {
-            authorize: deleteBookPolicy,
-        },
     },
 );
 
