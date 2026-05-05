@@ -8,7 +8,7 @@ import {
     not,
 } from '../../core/create-handler.core.ts';
 import { UserRepository } from '../users/users.repository.ts';
-import { type JwtAuthContext, authenticateJwt, JwtAuthSchema, hasRegisteredUser, isLibraryStaff, hasWriteAccessHeader, editsOwnAuthorName, isSystemReservedBook, createJwtAuthHandler, deleteBookPolicy } from '../auth-stuff.ts';
+import { type JwtAuthContext, authenticateJwt, JwtAuthSchema, hasRegisteredUser, isLibraryStaff, hasWriteAccessHeader, editsOwnAuthorName, isSystemReservedBook, createJwtAuthHandler, deleteBookPolicy } from '../../shared/auth-stuff.ts';
 import z from 'zod';
 import { BookService } from './books.service.ts';
 

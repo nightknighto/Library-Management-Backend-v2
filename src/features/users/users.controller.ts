@@ -5,7 +5,7 @@ import type { ValidatedRequest } from '../../shared/middlewares/validators.middl
 import type { ControllerResponse, PaginatedControllerResponse } from '../../shared/schemas/controller-responses.schema.ts';
 import { createHandler } from '../../core/create-handler.core.ts';
 import createHttpError from 'http-errors';
-import { authenticateJwt } from '../auth-stuff.ts';
+import { authenticateJwt } from '../../shared/auth-stuff.ts';
 
 // const registerUser = createHandler(UserDTOs., handler)
 

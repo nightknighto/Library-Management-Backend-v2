@@ -3,7 +3,7 @@ import type { Request } from 'express';
 import { createHandler, createHandlerFactory } from '../../core/create-handler.core.ts';
 import createHttpError from 'http-errors';
 import z from 'zod';
-import { authenticateJwt } from '../auth-stuff.ts';
+import { authenticateJwt } from '../../shared/auth-stuff.ts';
 import { BorrowsService } from './borrows.service.ts';
 import { BorrowRepository } from './borrows.repository.ts';
 
