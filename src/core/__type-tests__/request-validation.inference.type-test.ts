@@ -1,8 +1,8 @@
 import type { Request } from "express";
 import { z } from "zod";
-import { createContract } from "../create-contract.core.ts";
+import { createContract } from "../index.ts";
 import { validateContractRequest } from "../validate-contract-request.core.ts";
-import { createRequestSchema } from "../../shared/schemas/create-request-schema.ts";
+import { createRequestSchema } from "../index.ts";
 import type {
     Equal,
     Expect,

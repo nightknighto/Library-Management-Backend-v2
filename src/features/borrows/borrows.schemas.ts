@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { createContract } from '../../core/create-contract.core.ts';
+import { createContract } from '../../core/index.ts';
 
 const isbnSchema = z.string()
 

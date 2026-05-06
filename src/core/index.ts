@@ -1,0 +1,46 @@
+/**
+ * @file index.ts
+ *
+ * Public exports for the core framework surface.
+ * Use this entry point for application and feature imports.
+ */
+
+export { createContract } from "./create-contract.core.ts";
+export type { Contract, ContractResponseSchema } from "./create-contract.core.ts";
+
+export { createHandler, createHandlerFactory } from "./create-handler.core.ts";
+export type { AfterAuthorizationRequest, HandlerRequest } from "./create-handler.core.ts";
+
+export { createRequestSchema } from "./create-request-schema.core.ts";
+export type {
+    RequestSchema,
+    RequestSchemaInput,
+    RequestSchemaOutput,
+} from "./create-request-schema.core.ts";
+
+export { validateContractRequest } from "./validate-contract-request.core.ts";
+
+export { buildPaginationMeta, buildSuccessResponsePayload } from "./response-builder.core.ts";
+
+export { allOf, anyOf, not } from "./security.core.ts";
+
+export { sanitizeResponse } from "./sanitize-response.core.ts";
+
+export type {
+    AccessMode,
+    Authenticator,
+    Authorizer,
+    AuthErrorMapper,
+    ContractResponse,
+    ErrorResponse,
+    HandlerErrorMappers,
+    HandlerOptions,
+    HandlerSuccessResult,
+    MaybePromise,
+    PaginationInput,
+    PaginationMeta,
+    SecurityOptions,
+    SuccessResponse,
+    SuccessResponsePayload,
+    ValidatedRequest,
+} from "./types.core.ts";

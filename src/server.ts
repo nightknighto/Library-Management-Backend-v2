@@ -2,7 +2,7 @@ import express from 'express';
 import { CONFIG } from './config/config.ts';
 import rootRouter from './routes.ts';
 import { globalErrorHandler } from './shared/middlewares/error-handler.middleware.ts';
-import type { ErrorResponse } from './core/types.core.ts';
+import type { ErrorResponse } from './core/index.ts';
 
 // Create Express app
 const app = express();

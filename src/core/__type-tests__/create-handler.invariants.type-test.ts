@@ -3,8 +3,8 @@ import {
     createHandler,
     type AfterAuthorizationRequest,
     type HandlerRequest,
-} from "../create-handler.core.ts";
-import { createContract } from "../create-contract.core.ts";
+} from "../index.ts";
+import { createContract } from "../index.ts";
 import type {
     Equal,
     Expect,

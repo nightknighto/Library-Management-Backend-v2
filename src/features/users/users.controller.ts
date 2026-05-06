@@ -1,9 +1,7 @@
 import * as UserDTOs from './users.schemas.ts';
 import { UserRepository } from './users.repository.ts';
 import { JwtUtils } from '../../utils/jwt.util.ts';
-import type { ValidatedRequest } from '../../shared/middlewares/validators.middleware.ts';
-import type { ControllerResponse, PaginatedControllerResponse } from '../../shared/schemas/controller-responses.schema.ts';
-import { createHandler } from '../../core/create-handler.core.ts';
+import { createHandler } from '../../core/index.ts';
 import createHttpError from 'http-errors';
 import { authenticateJwt } from '../../shared/auth-stuff.ts';
 

@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
-import { ZodError, type z } from 'zod';
-import type { RequestSchema } from '../schemas/create-request-schema.ts';
+import { ZodError } from 'zod';
+import type { RequestSchema } from '../../core/index.ts';
 
 function isZodError(error: any): error is ZodError {
     return error instanceof ZodError || error?.name === 'ZodError';
@@ -40,34 +40,7 @@ export function validateRequest(schema: RequestSchema) {
 
 /**
  * Type for a validated Express request with strong typing.
- * 
- * Maps a validated request schema type to Express's `Request` type, automatically
- * extracting and typing the `params`, `body`, and `query` properties based on the
- * inferred schema type. If a property is not defined in the schema, it defaults to
- * a sensible fallback type.
- * 
- * @template T - The inferred type from a request schema (e.g., `z.infer<typeof GetBookRequestSchema>`).
- *               Should have `params?`, `body?`, and `query?` properties matching your schema.
- * 
- * @example
- * ```typescript
- * const GetBookRequestSchema = createRequestSchema({
- *   params: z.object({ id: z.string() }),
- *   query: z.object({ includeDetails: z.boolean().optional() }),
- * });
- * 
- * type GetBookRequest = z.infer<typeof GetBookRequestSchema>;
- * 
- * function getBook(req: ValidatedRequest<GetBookRequest>, res: Response) {
- *   // req.params.id is typed as string
- *   // req.query.includeDetails is typed as boolean | undefined
- * }
- * ```
+ *
+ * Import `ValidatedRequest` from [src/core/index.ts](../../core/index.ts).
  */
-export type ValidatedRequest<T> = Request<
-    T extends { params: infer P } ? P : Record<string, string>,
-    any,
-    T extends { body: infer B } ? B : unknown,
-    T extends { query: infer Q } ? Q : Record<string, unknown>
->;
 

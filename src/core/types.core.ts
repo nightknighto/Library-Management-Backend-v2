@@ -18,6 +18,12 @@ import type { input as Input, ZodType, ZodTypeAny } from "zod";
 // SECTION 1: RESPONSE FORMAT TYPES
 // ============================================================================
 
+/**
+ * Input shape for pagination metadata returned by handlers.
+ *
+ * `page` is 1-based. `offset` and `hasNextPage` are optional and will be
+ * computed if omitted.
+ */
 export type PaginationInput = {
     totalCount: number;
     page: number;
@@ -26,6 +32,9 @@ export type PaginationInput = {
     hasNextPage?: boolean;
 };
 
+/**
+ * Fully computed pagination metadata used in response envelopes.
+ */
 export type PaginationMeta = {
     totalCount: number;
     limit: number;
@@ -33,10 +42,16 @@ export type PaginationMeta = {
     hasNextPage: boolean;
 };
 
+/**
+ * Helper that makes `data` optional when the response data itself is optional.
+ */
 export type DataField<TData> = undefined extends TData
     ? { data?: TData }
     : { data: TData };
 
+/**
+ * Successful response envelope for contract responses.
+ */
 export type SuccessResponse<TData, TPaginated extends boolean> =
     TPaginated extends true
     ? DataField<TData> & {
@@ -53,15 +68,24 @@ export type SuccessResponse<TData, TPaginated extends boolean> =
         };
     };
 
+/**
+ * Error response envelope for contract responses.
+ */
 export type ErrorResponse = {
     success: false;
     error?: unknown;
 };
 
+/**
+ * Full response union for a contract (success or error).
+ */
 export type ContractResponse<TData, TPaginated extends boolean> =
     | SuccessResponse<TData, TPaginated>
     | ErrorResponse;
 
+/**
+ * Success payload used before response validation/sanitization.
+ */
 export type SuccessResponsePayload<TData> = {
     success: true;
     data: TData;
@@ -75,6 +99,12 @@ export type SuccessResponsePayload<TData> = {
 // SECTION 2: HANDLER DX TYPES
 // ============================================================================
 
+/**
+ * Successful handler result shape required by createHandler.
+ *
+ * For paginated contracts, `pagination` is required. For non-paginated
+ * contracts, `pagination` must be omitted.
+ */
 export type HandlerSuccessResult<
     TResponseSchema extends ZodTypeAny,
     TPaginated extends boolean,
@@ -85,12 +115,33 @@ export type HandlerSuccessResult<
     ? { pagination: PaginationInput }
     : { pagination?: undefined });
 
+/**
+ * Type for a validated Express request with strong typing.
+ *
+ * Maps a validated request schema type to Express's `Request` type, automatically
+ * extracting and typing the `params`, `body`, and `query` properties based on the
+ * inferred schema type. If a property is not defined in the schema, it defaults to
+ * a sensible fallback type.
+ */
+export type ValidatedRequest<T> = Request<
+    T extends { params: infer P } ? P : Record<string, string>,
+    any,
+    T extends { body: infer B } ? B : unknown,
+    T extends { query: infer Q } ? Q : Record<string, unknown>
+>;
+
 // ============================================================================
 // SECTION 3: HANDLER SECURITY TYPES
 // ============================================================================
 
+/**
+ * Utility that allows both sync and async returns.
+ */
 export type MaybePromise<T> = T | Promise<T>;
 
+/**
+ * Access modes supported by createHandler.
+ */
 export type AccessMode = "public" | "protected" | "optional";
 
 /**
@@ -134,6 +185,11 @@ export type Authenticator<
     req: TRequest,
 ) => MaybePromise<TAuthContext | null | undefined>;
 
+/**
+ * Authorization policy callback.
+ *
+ * Return true to allow the request; false to deny.
+ */
 export type Authorizer<
     TAuthContext,
     TRequest extends Request<any, any, any, any> = Request,
@@ -144,10 +200,18 @@ export type Authorizer<
     },
 ) => MaybePromise<boolean>;
 
+/**
+ * Error mapper for authentication/authorization failures.
+ */
 export type AuthErrorMapper<TRequest extends Request<any, any, any, any> = Request> = (
     req: TRequest,
 ) => createHttpError.HttpError;
 
+/**
+ * Security configuration for createHandler.
+ *
+ * Provides authentication, authorization, and auth schema validation options.
+ */
 export type SecurityOptions<
     TAuthContext,
     TRequest extends Request<any, any, any, any> = Request,
@@ -155,29 +219,45 @@ export type SecurityOptions<
     /**
      * Authentication callback used to build auth context for protected/optional handlers.
      *
-        * Edge case:
-        * In generic object-literal call sites, unannotated callback parameters can cause
-        * `TAuthContext` to degrade to `unknown`.
+     * Edge case:
+     * In generic object-literal call sites, unannotated callback parameters can cause
+     * `TAuthContext` to degrade to `unknown`.
      *
      * Recommended patterns:
      * - `authenticate: async (req: Request) => ({ ... })` when request access is needed.
      * - `authenticate: async () => ({ ... })` when request access is not needed.
      *
-        * @see docs/rules/create-handler-auth-inference-limitations.md
+     * @see docs/rules/create-handler-auth-inference-limitations.md
      */
     authenticate?: Authenticator<TAuthContext, TRequest>;
+    /**
+     * When true, run authorization after request validation so `authorize` receives
+     * typed body/query/params.
+     */
     validateBeforeAuthorization?: boolean;
+    /**
+     * Authorization policy or policies evaluated for the request.
+     */
     authorize?:
     | Authorizer<TAuthContext, TRequest>
     | Array<Authorizer<TAuthContext, TRequest>>;
+    /**
+     * Optional schema to validate the authentication result.
+     */
     authSchema?: ZodType<TAuthContext>;
 };
 
+/**
+ * Error mapper overrides for auth-related failures.
+ */
 export type HandlerErrorMappers<TRequest extends Request<any, any, any, any> = Request> = {
     unauthenticated?: AuthErrorMapper<TRequest>;
     unauthorized?: AuthErrorMapper<TRequest>;
 };
 
+/**
+ * Top-level handler options accepted by createHandler.
+ */
 export type HandlerOptions<
     TAccess extends AccessMode,
     TAuthContext,

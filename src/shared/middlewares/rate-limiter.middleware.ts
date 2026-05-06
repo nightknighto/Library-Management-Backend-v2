@@ -1,5 +1,5 @@
 import rateLimit from 'express-rate-limit';
-import type { ErrorResponse } from '../../core/types.core.ts';
+import type { ErrorResponse } from '../../core/index.ts';
 
 export const rateLimiter = (windowMs: number, maxRequests: number) => rateLimit({
     windowMs,

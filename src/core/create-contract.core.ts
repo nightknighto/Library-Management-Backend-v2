@@ -19,7 +19,7 @@ import {
     createRequestSchema,
     type RequestSchemaInput,
     type RequestSchemaOutput,
-} from "../shared/schemas/create-request-schema.ts";
+} from "./create-request-schema.core.ts";
 import type { ContractResponse } from "./types.core.ts";
 
 // ============================================================================
@@ -81,6 +81,24 @@ function createNonPaginatedSuccessResponseSchema<TResponseData extends z.ZodType
             timestamp: z.string(),
         }),
     });
+}
+
+/**
+ * Helper function to create the full response schema (success + error).
+ *
+ * Keeps response schema composition in one place so the contract builder
+ * is easy to scan and extend.
+ */
+function createContractResponseSchema<TResponseData extends z.ZodTypeAny>(
+    responseDataSchema: TResponseData,
+    paginated: boolean,
+) {
+    const successResponseSchema = paginated
+        ? createPaginatedSuccessResponseSchema(responseDataSchema)
+        : createNonPaginatedSuccessResponseSchema(responseDataSchema);
+
+    const errorResponseSchema = createErrorResponseSchema();
+    return z.union([successResponseSchema, errorResponseSchema]);
 }
 
 // ============================================================================
@@ -321,7 +339,6 @@ type CreateNonPaginatedContractParams<
     TResponseData extends z.ZodTypeAny,
 > = CreateContractBaseParams<TRequest, TResponseData> & {
     /**
-     * 
      * When `true`, includes pagination metadata in the response.
      * The response will include `meta.pagination` with totalCount, limit, offset, and hasNextPage.
      * 
@@ -401,25 +418,15 @@ export function createContract({
 }): unknown {
     // Build the validated request schema (body, query, params)
     const requestSchema = createRequestSchema(request);
-
-    // Create error response schema (shared for both paginated and non-paginated)
-    const errorResponseSchema = createErrorResponseSchema();
+    const responseSchema = createContractResponseSchema(response, paginated === true);
 
     if (paginated === true) {
-        // For paginated responses: include pagination metadata in success schema
-        const successResponseSchema = createPaginatedSuccessResponseSchema(response);
-        const responseSchema = z.union([successResponseSchema, errorResponseSchema]);
-
         return {
             request: requestSchema,
             response: responseSchema,
             paginated: true,
         };
     }
-
-    // For non-paginated responses: omit pagination metadata from success schema
-    const successResponseSchema = createNonPaginatedSuccessResponseSchema(response);
-    const responseSchema = z.union([successResponseSchema, errorResponseSchema]);
 
     return {
         request: requestSchema,

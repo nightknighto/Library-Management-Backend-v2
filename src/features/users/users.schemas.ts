@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { createRequestSchema } from '../../shared/schemas/create-request-schema.ts';
-import { createContract } from '../../core/create-contract.core.ts';
+import { createContract } from '../../core/index.ts';
 
 // Email validation
 const emailInputSchema = z.email("Invalid email format")

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createContract } from "../create-contract.core.ts";
+import { createContract } from "../index.ts";
 import type {
     Equal,
     Expect,

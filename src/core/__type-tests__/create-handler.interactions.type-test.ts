@@ -21,8 +21,8 @@ import {
     createHandler,
     createHandlerFactory,
     type AfterAuthorizationRequest,
-} from "../create-handler.core.ts";
-import { createContract } from "../create-contract.core.ts";
+} from "../index.ts";
+import { createContract } from "../index.ts";
 import type { Equal, Expect, Extends } from "./type-test.utils.ts";
 
 type ScopedAuthContext = {

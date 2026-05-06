@@ -17,7 +17,7 @@
 
 import type { Response } from "express";
 import createHttpError from "http-errors";
-import z, { prettifyError, ZodError } from "zod";
+import z, { ZodError } from "zod";
 import { createErrorMap, fromError } from "zod-validation-error";
 import type { ErrorResponse } from "./types.core.ts";
 
@@ -98,10 +98,9 @@ export function handleRequestValidationError(
     error: ZodError,
     res: Response,
 ): void {
-    // Input validation error: client request didn't match contract
-    // Return 400 with structured validation issues for client debugging
-    // use zod-validation-error's fromError to get a more user-friendly error message
-    const validationError = fromError(error)
+    // Input validation error: client request didn't match contract.
+    // Return 400 with structured issues for client debugging.
+    const validationError = fromError(error);
 
     res.status(400).json({
         success: false,
@@ -125,24 +124,14 @@ export function handleResponseValidationError(
     error: ZodError,
     res: Response,
 ): void {
-    // Output validation error: handler returned invalid data (internal server error)
-    // use zod-validation-error's fromError to get a more user-friendly error message
-    console.error("Output validation error:", fromError(error))
+    // Output validation error: handler returned invalid data (internal server error).
+    console.error("Output validation error:", fromError(error));
 
     res.status(500).json({ success: false, error: "Internal Server Error" } satisfies ErrorResponse);
 }
 
-
-
-
 /**
  * Handles HttpError exceptions (custom HTTP errors with status codes).
- * 
- * Extracts error message and status code from http-errors package.
- * 
- * @param error - HttpError instance
- * @param responseSchema - Contract response schema for sanitization
- * @param res - Express response object
  */
 function handleHttpError(
     error: createHttpError.HttpError,
@@ -155,12 +144,6 @@ function handleHttpError(
 
 /**
  * Handles generic unexpected errors (500).
- * 
- * For any error that doesn't fit the above categories.
- * 
- * @param error - Unknown error
- * @param responseSchema - Contract response schema for sanitization
- * @param res - Express response object
  */
 function handleGenericError(
     error: unknown,
@@ -201,6 +184,8 @@ export function handleError(
     error: unknown,
     res: Response,
 ): void {
+    // Zod request/response validation errors are handled at the call site.
+    // This handler deals with HttpError and unexpected errors.
 
     // HttpError exceptions (custom status code + message)
     if (error instanceof createHttpError.HttpError) {
@@ -208,6 +193,6 @@ export function handleError(
         return;
     }
 
-    //Generic unexpected errors (500)
+    // Generic unexpected errors (500)
     handleGenericError(error, res);
 }

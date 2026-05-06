@@ -1,3 +1,10 @@
+/**
+ * @file create-request-schema.core.ts
+ *
+ * Builds a unified Zod request schema for body/query/params and exports
+ * related types for contract and middleware usage.
+ */
+
 import z from "zod";
 
 // ============================================================================
@@ -7,14 +14,14 @@ import z from "zod";
 /**
  * The shape of fields that can be passed to createRequestSchema.
  * Each field (body, query, params) is a record of Zod schemas.
- * 
+ *
  * Example: { body: { name: z.string(), age: z.number() } }
  */
 export type RequestSchemaInput = {
     body?: Record<string, z.ZodType>;
     query?: Record<string, z.ZodType>;
     params?: Record<string, z.ZodType>;
-}
+};
 
 /**
  * Converts the input shape to the actual Zod schema types.
@@ -22,16 +29,16 @@ export type RequestSchemaInput = {
  * - If a field is omitted, it becomes an empty ZodObject (matching Express's default {})
  */
 export type RequestSchemaOutput<T extends RequestSchemaInput> = {
-    body: T['body'] extends Record<string, z.ZodType>
-    ? z.ZodObject<T['body']>
-    : z.ZodObject<Record<string, never>>;
-    query: T['query'] extends Record<string, z.ZodType>
-    ? z.ZodObject<T['query']>
-    : z.ZodObject<Record<string, never>>;
-    params: T['params'] extends Record<string, z.ZodType>
-    ? z.ZodObject<T['params']>
-    : z.ZodObject<Record<string, never>>;
-}
+    body: T["body"] extends Record<string, z.ZodType>
+        ? z.ZodObject<T["body"]>
+        : z.ZodObject<Record<string, never>>;
+    query: T["query"] extends Record<string, z.ZodType>
+        ? z.ZodObject<T["query"]>
+        : z.ZodObject<Record<string, never>>;
+    params: T["params"] extends Record<string, z.ZodType>
+        ? z.ZodObject<T["params"]>
+        : z.ZodObject<Record<string, never>>;
+};
 
 /**
  * Type used by the validation middleware to accept any request schema.
@@ -46,29 +53,29 @@ export type RequestSchema = z.ZodObject<{
 // SCHEMA FACTORY
 // ============================================================================
 
-/** 
+/**
  * Schema for fields not defined in the request schema.
  * Accepts undefined or any object, transforms to empty object.
  * This handles cases like GET requests where req.body may be undefined.
  */
 const emptySchema = z.union([
     z.undefined(),
-    z.record(z.string(), z.unknown())
+    z.record(z.string(), z.unknown()),
 ]).transform(() => ({}));
 
 /**
  * Creates a unified request validation schema for Express routes.
- * 
+ *
  * **Behavior:**
  * - `body`: Uses strict mode (rejects unknown properties with error)
  * - `query`: Strips unknown properties (lenient for framework-added params)
  * - `params`: Strips unknown properties
  * - Omitted fields default to empty object `{}` (matching Express convention)
- * 
+ *
  * **Type Safety:**
  * - Only allows `body`, `query`, `params` keys (typos like `boby` cause compile error)
  * - Infers exact types for use with `ValidatedRequest<T>` in controllers
- * 
+ *
  * @example
  * export const CreateBookRequestSchema = createRequestSchema({
  *   body: {
@@ -76,7 +83,8 @@ const emptySchema = z.union([
  *     author: z.string(),
  *   }
  * });
- * 
+ *
+ * @example
  * export const GetBookRequestSchema = createRequestSchema({
  *   params: { id: z.string().uuid() },
  *   query: { includeDetails: z.coerce.boolean().default(false) },

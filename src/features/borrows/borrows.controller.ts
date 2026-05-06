@@ -1,6 +1,6 @@
 import * as BorrowDTOs from './borrows.schemas.ts';
 import type { Request } from 'express';
-import { createHandler, createHandlerFactory } from '../../core/create-handler.core.ts';
+import { createHandler, createHandlerFactory } from '../../core/index.ts';
 import createHttpError from 'http-errors';
 import z from 'zod';
 import { authenticateJwt } from '../../shared/auth-stuff.ts';

@@ -88,7 +88,7 @@ export function buildPaginationMeta(input: PaginationInput): PaginationMeta {
  *   timestamp: new Date().toISOString(),
  *   pagination: buildPaginationMeta({ totalCount: 100, page: 1, limit: 10 }),
  * });
- * // Payload sent to sanitizeResponse for validation/stripping
+ * // Payload sent to sanitizeResponse from core/index for validation/stripping
  * ```
  * 
  * @param options - Response data and optional pagination

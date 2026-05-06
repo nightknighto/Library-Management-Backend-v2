@@ -11,8 +11,8 @@
  */
 
 import type { Request } from "express";
-import { ZodError, type infer as Infer, type ZodType } from "zod";
-import type { ValidatedRequest } from "../shared/middlewares/validators.middleware.ts";
+import { type infer as Infer, type ZodType } from "zod";
+import type { ValidatedRequest } from "./types.core.ts";
 
 type ContractRequestEnvelope = {
     body: unknown;
@@ -94,17 +94,16 @@ export async function validateContractRequest<
         params: req.params,
     });
 
-    // Overwrite the 'query' property with a new, writable one
-    Object.defineProperty(req, 'query', {
-        ...Object.getOwnPropertyDescriptor(req, 'query'),
-        value: req.query,
+    // Ensure query is writable (Express can define it as read-only in some setups)
+    Object.defineProperty(req, "query", {
+        ...Object.getOwnPropertyDescriptor(req, "query"),
+        value: validated.query as Request["query"],
         writable: true,
     });
 
-    // Mutate request: replace raw fields with validated, typed fields
-    // This in-place modification serves as type promotion for TypeScript
+    // Mutate request: replace raw fields with validated, typed fields.
+    // This in-place modification serves as type promotion for TypeScript.
     req.body = validated.body;
-    req.query = validated.query as Request["query"];
     req.params = validated.params as Request["params"];
 
     // Return mutated request, now correctly typed as ValidatedRequest

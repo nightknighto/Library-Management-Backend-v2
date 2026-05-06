@@ -6,7 +6,7 @@ import {
     anyOf,
     createHandler,
     not,
-} from '../../core/create-handler.core.ts';
+} from '../../core/index.ts';
 import { UserRepository } from '../users/users.repository.ts';
 import { type JwtAuthContext, authenticateJwt, JwtAuthSchema, hasRegisteredUser, isLibraryStaff, hasWriteAccessHeader, editsOwnAuthorName, isSystemReservedBook, createJwtAuthHandler, deleteBookPolicy } from '../../shared/auth-stuff.ts';
 import z from 'zod';
@@ -155,3 +155,14 @@ export const BookController = {
     updateBook,
     deleteBook
 };
+
+const dummy = createHandler(BookDTOs.UpdateBookContract,
+    {
+        access: "public"
+    },
+    () => {
+        return {
+            data: 2 as any
+        }
+    }
+)

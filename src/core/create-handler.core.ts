@@ -1,9 +1,26 @@
-import type { Request, RequestHandler } from "express";
+/**
+ * @file create-handler.core.ts
+ *
+ * Contract-aware Express handler builder with integrated request validation,
+ * authentication, authorization, and response validation.
+ *
+ * Pipeline:
+ * 1. Resolve access/security options.
+ * 2. Authenticate (optional/protected).
+ * 3. Authorize before validation (optional).
+ * 4. Validate and promote request (body/query/params).
+ * 5. Authorize after validation (optional).
+ * 6. Execute handler.
+ * 7. Build success payload + pagination metadata.
+ * 8. Validate/sanitize response envelope.
+ * 9. Send response or error.
+ */
+
+import type { Request, RequestHandler, Response } from "express";
 import type { Query } from "express-serve-static-core";
 import type { infer as Infer, ZodType, ZodTypeAny } from "zod";
 import type { Contract } from "./create-contract.core.ts";
-import type { ValidatedRequest } from "../shared/middlewares/validators.middleware.ts";
-import { sanitizeResponse } from "../shared/schemas/sanitize-response.ts";
+import { sanitizeResponse } from "./sanitize-response.core.ts";
 import { validateContractRequest } from "./validate-contract-request.core.ts";
 import { handleError, handleRequestValidationError, handleResponseValidationError, isZodError } from "./error-handler.core.ts";
 import { buildPaginationMeta, buildSuccessResponsePayload } from "./response-builder.core.ts";
@@ -21,7 +38,12 @@ import type {
     HandlerOptions,
     HandlerSuccessResult,
     SecurityOptions,
+    ValidatedRequest,
 } from "./types.core.ts";
+
+// =========================================================================
+// SECTION 1: CONTRACT AND REQUEST TYPING
+// =========================================================================
 
 type ContractRequestEnvelope = {
     body: unknown;
@@ -29,6 +51,7 @@ type ContractRequestEnvelope = {
     params: unknown;
 };
 
+// The core handler pipeline accepts any contract that matches the request envelope.
 type AnyContract = Contract<ZodType<ContractRequestEnvelope>, ZodTypeAny, boolean>;
 
 type ContractRequestPayload<TContract extends AnyContract> = Infer<TContract["request"]>;
@@ -42,6 +65,8 @@ type ContractHandlerSuccessResult<TContract extends AnyContract> =
     ? HandlerSuccessResult<TResponseDataSchema, TPaginated>
     : never;
 
+// Enforces that handler results do not include extra top-level keys beyond the contract.
+// This keeps response envelopes predictable and prevents accidental payload leakage.
 type NoExtraTopLevelKeys<
     TExpected,
     TActual extends TExpected,
@@ -64,7 +89,7 @@ export type HandlerRequest<TContract extends AnyContract> =
 type AuthorizerBaseRequest = Request<Record<string, string>, any, unknown, Query>;
 
 /**
- * Request type passed to authorizers when validation runs before authorization.
+ * Request type passed to authorizers when authorization runs after validation.
  *
  * Combines the validated request payload with an Express Request base.
  *
@@ -129,6 +154,15 @@ type AnyOptionalHandlerExecutor<TContract extends AnyContract, TAuthContext> = (
     auth?: TAuthContext,
 ) => Promise<ContractHandlerSuccessResult<TContract>>;
 
+type AnyHandlerExecutor<TContract extends AnyContract, TAuthContext> =
+    | AnyPublicHandlerExecutor<TContract>
+    | AnyOptionalHandlerExecutor<TContract, TAuthContext>
+    | AnyProtectedHandlerExecutor<TContract, TAuthContext>;
+
+// =========================================================================
+// SECTION 2: HANDLER OPTIONS TYPING
+// =========================================================================
+
 type PublicNoSecurityOptions<
     TAccess extends AccessMode,
     TAuthContext,
@@ -141,6 +175,8 @@ type HandlerFactoryDefaults<TAuthContext> = {
     security?: SecurityOptions<TAuthContext, Request>;
     errors?: HandlerErrorMappers<Request>;
 };
+
+// Forces validateBeforeAuthorization to be optional/required based on defaults.
 type ValidateFlag<TValue extends boolean, TOptional extends boolean> =
     TOptional extends true
     ? { validateBeforeAuthorization?: TValue }
@@ -165,6 +201,8 @@ type SecurityAfter<
     | Array<Authorizer<TAuthContext, AfterAuthorizationRequest<TContract>>>;
 } & ValidateFlag<true, TOptionalTrue>;
 
+// Derived flags for whether validateBeforeAuthorization is optional.
+
 type OptionalFalse<TDefaultValidate extends boolean> =
     TDefaultValidate extends true ? false : true;
 
@@ -180,6 +218,7 @@ type SecurityForMode<
     ? SecurityAfter<TAuthContext, TContract, OptionalTrue<TDefaultValidate>>
     : SecurityBefore<TAuthContext, OptionalFalse<TDefaultValidate>>;
 
+// Determine if authenticate is required for an access mode given factory defaults.
 type RequiresAuthenticate<
     TAccess extends AccessMode,
     TDefaultHasAuthenticate extends boolean,
@@ -201,6 +240,8 @@ type RequireAuthenticate<
         authenticate: Authenticator<TAuthContext, Request>;
     }
     : TSecurity;
+
+// Shape the security field presence based on access mode and defaults.
 
 type SecurityField<
     TAccess extends AccessMode,
@@ -359,6 +400,10 @@ type HandlerFactoryAfterOptionsArg<
     >
 >;
 
+// =========================================================================
+// SECTION 3: HANDLER FACTORY TYPE SIGNATURES
+// =========================================================================
+
 type HandlerFactoryArgsWithHandlerLast<
     TArgs extends unknown[],
     THandler,
@@ -476,37 +521,129 @@ type ConfiguredHandlerFactory<
     ): RequestHandler;
 };
 
-export type {
-    AccessMode,
-    Authenticator,
-    Authorizer,
-    HandlerErrorMappers,
-    HandlerOptions,
-    SecurityOptions,
-} from "./types.core.ts";
+// =========================================================================
+// SECTION 4: RUNTIME HELPERS
+// =========================================================================
 
-export { allOf, anyOf, not } from "./security.core.ts";
+type HandlerArgsResolution<TOptions, THandler> = {
+    options?: TOptions;
+    handler: THandler;
+};
 
+/**
+ * Resolves handler arguments to `{ options, handler }` ensuring handler is last.
+ */
+function resolveHandlerArgs<TOptions, THandler>(
+    arg2: THandler | TOptions,
+    arg3: THandler | TOptions | undefined,
+    errorMessage: string,
+): HandlerArgsResolution<TOptions, THandler> {
+    if (typeof arg2 === "function") {
+        return {
+            handler: arg2 as THandler,
+            options: arg3 as TOptions | undefined,
+        };
+    }
+
+    if (typeof arg3 !== "function") {
+        throw new Error(errorMessage);
+    }
+
+    return {
+        handler: arg3 as THandler,
+        options: arg2 as TOptions,
+    };
+}
+
+/**
+ * Validates the request and sends a 400 response when validation fails.
+ */
+async function validateRequestOrRespond<TContract extends AnyContract>(
+    contract: TContract,
+    req: Request,
+    res: Response,
+): Promise<HandlerRequest<TContract> | null> {
+    try {
+        return await validateContractRequest<TContract["request"]>(
+            contract.request,
+            req,
+        );
+    } catch (error) {
+        if (isZodError(error)) {
+            handleRequestValidationError(error, res);
+            return null;
+        }
+
+        throw error;
+    }
+}
+
+/**
+ * Sanitizes the response and sends a 500 response when output validation fails.
+ */
+function sanitizeResponseOrRespond<TContract extends AnyContract>(
+    contract: TContract,
+    payload: ReturnType<typeof buildSuccessResponsePayload>,
+    res: Response,
+): ContractResponse<unknown, boolean> | null {
+    try {
+        return sanitizeResponse(contract.response, payload);
+    } catch (error) {
+        if (isZodError(error)) {
+            handleResponseValidationError(error, res);
+            return null;
+        }
+
+        throw error;
+    }
+}
+
+/**
+ * Executes the handler with the correct access-mode signature.
+ */
+async function executeHandlerByAccess<TContract extends AnyContract, TAuthContext>(
+    access: AccessMode,
+    handler: AnyHandlerExecutor<TContract, TAuthContext>,
+    req: HandlerRequest<TContract>,
+    auth: TAuthContext | undefined,
+): Promise<ContractHandlerSuccessResult<TContract>> {
+    if (access === "protected") {
+        return (handler as AnyProtectedHandlerExecutor<TContract, TAuthContext>)(
+            req,
+            auth as TAuthContext,
+        );
+    }
+
+    if (access === "optional") {
+        return (handler as AnyOptionalHandlerExecutor<TContract, TAuthContext>)(
+            req,
+            auth,
+        );
+    }
+
+    return (handler as AnyPublicHandlerExecutor<TContract>)(req);
+}
+
+/**
+ * Internal runtime pipeline for createHandler and createHandlerFactory.
+ */
 function createHandlerRuntime<
     TContract extends AnyContract,
     TAuthContext,
 >(
     contract: TContract,
-    handler:
-        | AnyPublicHandlerExecutor<TContract>
-        | AnyOptionalHandlerExecutor<TContract, TAuthContext>
-        | AnyProtectedHandlerExecutor<TContract, TAuthContext>,
+    handler: AnyHandlerExecutor<TContract, TAuthContext>,
     options?: HandlerOptionsByAuthorizationMode<AccessMode, TAuthContext, TContract>,
 ): RequestHandler {
     return async (req, res) => {
         try {
-            const access: AccessMode = options?.access ?? "public";
+            const access = options?.access ?? "public";
             const security = options?.security;
+            const errors = options?.errors;
 
-            let authenticationResult: { auth?: TAuthContext } = {};
-
-            if (access !== "public") {
-                authenticationResult = await executeAuthenticationStage({
+            const authenticationResult = access === "public"
+                ? ({ auth: undefined } as { auth?: TAuthContext })
+                : await executeAuthenticationStage({
                     req,
                     access,
                     security: security
@@ -515,36 +652,26 @@ function createHandlerRuntime<
                             authSchema: security.authSchema,
                         }
                         : undefined,
-                    errors: options?.errors,
+                    errors,
                 }) as { auth?: TAuthContext };
 
-                if (security?.validateBeforeAuthorization !== true) {
-                    await executeAuthorizationStage({
-                        req,
-                        access,
-                        auth: authenticationResult.auth,
-                        security: security
-                            ? {
-                                authorize: security.authorize,
-                            }
-                            : undefined,
-                        errors: options?.errors,
-                    });
-                }
+            if (access !== "public" && security?.validateBeforeAuthorization !== true) {
+                await executeAuthorizationStage({
+                    req,
+                    access,
+                    auth: authenticationResult.auth,
+                    security: security
+                        ? {
+                            authorize: security.authorize,
+                        }
+                        : undefined,
+                    errors,
+                });
             }
 
-            let validatedReq: HandlerRequest<TContract>;
-            try {
-                validatedReq = await validateContractRequest<TContract["request"]>(
-                    contract.request,
-                    req,
-                );
-            } catch (error) {
-                // If validation fails, check if it's a ZodError and handle it accordingly
-                if (isZodError(error)) {
-                    handleRequestValidationError(error, res);
-                    return;
-                } else { throw error };
+            const validatedReq = await validateRequestOrRespond(contract, req, res);
+            if (!validatedReq) {
+                return;
             }
 
             if (access !== "public" && security?.validateBeforeAuthorization === true) {
@@ -555,24 +682,16 @@ function createHandlerRuntime<
                     security: {
                         authorize: security.authorize,
                     },
-                    errors: options?.errors,
+                    errors,
                 });
             }
 
-            let result: ContractHandlerSuccessResult<TContract>;
-            if (access === "protected") {
-                result = await (handler as AnyProtectedHandlerExecutor<TContract, TAuthContext>)(
-                    validatedReq,
-                    (authenticationResult as { auth: TAuthContext }).auth,
-                );
-            } else if (access === "optional") {
-                result = await (handler as AnyOptionalHandlerExecutor<TContract, TAuthContext>)(
-                    validatedReq,
-                    (authenticationResult as { auth?: TAuthContext }).auth,
-                );
-            } else {
-                result = await (handler as AnyPublicHandlerExecutor<TContract>)(validatedReq);
-            }
+            const result = await executeHandlerByAccess(
+                access,
+                handler,
+                validatedReq,
+                authenticationResult.auth,
+            );
 
             const statusCode = result.statusCode ?? 200;
             const successPayload = buildSuccessResponsePayload({
@@ -583,15 +702,9 @@ function createHandlerRuntime<
                     : undefined,
             });
 
-            let output: ContractResponse<unknown, boolean>
-            try {
-                output = sanitizeResponse(contract.response, successPayload);
-            } catch (error) {
-                // If response validation fails, check if it's a ZodError and handle it accordingly
-                if (isZodError(error)) {
-                    handleResponseValidationError(error, res);
-                    return;
-                } else { throw error }
+            const output = sanitizeResponseOrRespond(contract, successPayload, res);
+            if (!output) {
+                return;
             }
 
             res.status(statusCode).json(output);
@@ -601,16 +714,32 @@ function createHandlerRuntime<
     };
 }
 
+// =========================================================================
+// SECTION 5: PUBLIC API - CREATE HANDLER
+// =========================================================================
+
 /**
  * Creates an Express handler from a contract and an async implementation.
  *
- * The handler validates request payloads, runs authentication/authorization
- * stages, and validates/sanitizes the response against the contract schema.
+ * The generated handler enforces the contract end-to-end: it validates incoming
+ * requests, orchestrates authentication/authorization, and validates the
+ * outgoing response against the contract schema.
  *
  * Access modes:
- * - public: no auth context
- * - optional: auth context is optional in the handler
- * - protected: auth context is required in the handler
+ * - `public`: no auth context, no security options allowed
+ * - `optional`: auth context is optional in the handler
+ * - `protected`: auth context is required in the handler
+ *
+ * Authorization timing:
+ * - `validateBeforeAuthorization: false` (default) runs authorization before
+ *   request validation, so `authorize` receives a plain Express Request.
+ * - `validateBeforeAuthorization: true` runs authorization after validation,
+ *   so `authorize` receives typed body/query/params.
+ *
+ * Auth inference note:
+ * When providing `security.authenticate` with a parameter, explicitly annotate
+ * it as `Request` to avoid auth context degrading to `unknown`.
+ * See docs/rules/create-handler-auth-inference-limitations.md.
  *
  * @param contract - Contract describing request and response schemas.
  * @param options - Optional access/security/errors configuration.
@@ -623,7 +752,7 @@ function createHandlerRuntime<
  * createHandler(updateBookContract, {
  *   access: "protected",
  *   security: {
- *     authenticate: async () => ({ userId: "u-1" }),
+ *     authenticate: async (_req: Request) => ({ userId: "u-1" }),
  *     validateBeforeAuthorization: true,
  *     authorize: async ({ req, auth }) => auth.userId === req.params.id,
  *   },
@@ -702,40 +831,33 @@ export function createHandler<
 >(
     contract: TContract,
     arg2:
-        | AnyPublicHandlerExecutor<TContract>
-        | AnyOptionalHandlerExecutor<TContract, TAuthContext>
-        | AnyProtectedHandlerExecutor<TContract, TAuthContext>
+        | AnyHandlerExecutor<TContract, TAuthContext>
         | HandlerOptionsByAuthorizationMode<AccessMode, TAuthContext, TContract>,
     arg3?:
-        | AnyPublicHandlerExecutor<TContract>
-        | AnyOptionalHandlerExecutor<TContract, TAuthContext>
-        | AnyProtectedHandlerExecutor<TContract, TAuthContext>
+        | AnyHandlerExecutor<TContract, TAuthContext>
         | HandlerOptionsByAuthorizationMode<AccessMode, TAuthContext, TContract>,
 ): RequestHandler {
-    if (typeof arg2 === "function") {
-        return createHandlerRuntime(
-            contract,
-            arg2,
-            arg3 as HandlerOptionsByAuthorizationMode<AccessMode, TAuthContext, TContract> | undefined,
-        );
-    }
+    const { handler, options } = resolveHandlerArgs<
+        HandlerOptionsByAuthorizationMode<AccessMode, TAuthContext, TContract>,
+        AnyHandlerExecutor<TContract, TAuthContext>
+    >(
+        arg2,
+        arg3,
+        "createHandler requires a handler function as the last argument.",
+    );
 
-    if (typeof arg3 !== "function") {
-        throw new Error("createHandler requires a handler function as the last argument.");
-    }
-
-    return createHandlerRuntime(contract, arg3, arg2);
+    return createHandlerRuntime(contract, handler, options);
 }
 
+/**
+ * Thin wrapper used by handler factories after defaults are merged.
+ */
 function createHandlerInternal<
     TContract extends AnyContract,
     TAuthContext,
 >(
     contract: TContract,
-    handler:
-        | AnyPublicHandlerExecutor<TContract>
-        | AnyOptionalHandlerExecutor<TContract, TAuthContext>
-        | AnyProtectedHandlerExecutor<TContract, TAuthContext>,
+    handler: AnyHandlerExecutor<TContract, TAuthContext>,
     options?: HandlerOptions<AccessMode, TAuthContext, Request>,
 ): RequestHandler {
     return createHandlerRuntime<TContract, TAuthContext>(
@@ -762,12 +884,20 @@ type AccessOnlyFactoryDefaults<TAuthContext> =
         security?: never;
     };
 
+// =========================================================================
+// SECTION 6: PUBLIC API - HANDLER FACTORIES
+// =========================================================================
+
 /**
  * Creates a preconfigured handler factory with default access/security/errors.
  *
- * Defaults are merged with per-handler options. If defaults include
- * validateBeforeAuthorization: true, callers must explicitly set
- * validateBeforeAuthorization: false to authorize before validation.
+ * Defaults are shallow-merged with per-handler options. If defaults include
+ * `validateBeforeAuthorization: true`, callers must explicitly set
+ * `validateBeforeAuthorization: false` to authorize before validation.
+ *
+ * Access restriction:
+ * - Factories with `access: "public"` cannot specify `security` defaults.
+ * - Per-handler options must follow the same rule when access is `public`.
  *
  * @param defaults - Default access, security, and error mapping settings.
  * @returns A handler factory that enforces the configured defaults.
@@ -779,6 +909,14 @@ type AccessOnlyFactoryDefaults<TAuthContext> =
  * });
  *
  * protectedFactory(contract, async (req, auth) => ({ data: { id: auth.userId } }));
+ *
+ * @example
+ * const optionalFactory = createHandlerFactory({
+ *   access: "optional",
+ *   security: { authenticate: async (_req: Request) => ({ userId: "u-2" }) },
+ * });
+ *
+ * optionalFactory(contract, async (_req, auth) => ({ data: { userId: auth?.userId } }));
  */
 export function createHandlerFactory<
     TAuthContext,
@@ -871,34 +1009,20 @@ export function createHandlerFactory<
     function createConfiguredHandler<TContract extends AnyContract>(
         contract: TContract,
         arg2:
-            | AnyPublicHandlerExecutor<TContract>
-            | AnyOptionalHandlerExecutor<TContract, TAuthContext>
-            | AnyProtectedHandlerExecutor<TContract, TAuthContext>
+            | AnyHandlerExecutor<TContract, TAuthContext>
             | HandlerOptions<AccessMode, TAuthContext, Request>,
         arg3?:
-            | AnyPublicHandlerExecutor<TContract>
-            | AnyOptionalHandlerExecutor<TContract, TAuthContext>
-            | AnyProtectedHandlerExecutor<TContract, TAuthContext>
+            | AnyHandlerExecutor<TContract, TAuthContext>
             | HandlerOptions<AccessMode, TAuthContext, Request>,
     ): RequestHandler {
-        let options: HandlerOptions<AccessMode, TAuthContext, Request> | undefined;
-        let handler:
-            | AnyPublicHandlerExecutor<TContract>
-            | AnyOptionalHandlerExecutor<TContract, TAuthContext>
-            | AnyProtectedHandlerExecutor<TContract, TAuthContext>;
-
-        if (typeof arg2 === "function") {
-            handler = arg2;
-            options = arg3 as HandlerOptions<AccessMode, TAuthContext, Request> | undefined;
-        } else {
-            options = arg2;
-
-            if (typeof arg3 !== "function") {
-                throw new Error("Configured handlers require a handler function as the last argument.");
-            }
-
-            handler = arg3;
-        }
+        const { handler, options } = resolveHandlerArgs<
+            HandlerOptions<AccessMode, TAuthContext, Request>,
+            AnyHandlerExecutor<TContract, TAuthContext>
+        >(
+            arg2,
+            arg3,
+            "Configured handlers require a handler function as the last argument.",
+        );
 
         const merged = mergeHandlerSecurityDefaults(defaults, options);
 
