@@ -125,6 +125,22 @@ createHandler(ListBooksContract, async (_req) => ({
     metax: { timestamp: "2026-01-01T00:00:00.000Z" },
 }));
 
+createHandler(UpdateBookContract, async (_req) => ({
+    data: { updated: true },
+    cookies: [
+        {
+            action: "set",
+            name: "session",
+            value: "token",
+            options: { httpOnly: true, sameSite: "lax" },
+        },
+        {
+            action: "clear",
+            name: "legacy-session",
+        },
+    ],
+}));
+
 createHandler(
     UpdateBookContract,
     {

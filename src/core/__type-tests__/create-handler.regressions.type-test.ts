@@ -132,6 +132,16 @@ createHandler(UpdateBookContract, async (_req) => ({
 }));
 
 /**
+ * Regression-008: cookies must not weaken top-level key validation.
+ */
+// @ts-expect-error unknown top-level keys must still be rejected with cookies
+createHandler(UpdateBookContract, async (_req) => ({
+    data: { updated: true },
+    cookies: [{ action: "set", name: "session", value: "token" }],
+    metax: { traceId: "trace-8" },
+}));
+
+/**
  * Regression-007: public access must reject security options in handler calls.
  */
 createHandler(

@@ -110,6 +110,24 @@ createHandler(
     },
 );
 
+createHandler(SearchBooksContract, async (_req) => ({
+    statusCode: 206,
+    data: ["book-1"],
+    pagination: {
+        totalCount: 1,
+        page: 1,
+        limit: 10,
+    },
+    cookies: [
+        {
+            action: "set",
+            name: "result-token",
+            value: "partial",
+            options: { httpOnly: true },
+        },
+    ],
+}));
+
 createHandler(
     UpdateBookContract,
     {

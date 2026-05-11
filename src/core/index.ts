@@ -32,6 +32,7 @@ export type {
     Authorizer,
     AuthErrorMapper,
     ContractResponse,
+    CookieOperation,
     ErrorResponse,
     HandlerErrorMappers,
     HandlerOptions,

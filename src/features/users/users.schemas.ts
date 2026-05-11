@@ -38,6 +38,11 @@ export const LoginUserContract = createContract({
     })
 })
 
+export const LogoutUserContract = createContract({
+    request: {},
+    response: z.void(),
+})
+
 export const UpdateUserContract = createContract({
     request: {
         body: {

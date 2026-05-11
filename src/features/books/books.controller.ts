@@ -156,13 +156,12 @@ export const BookController = {
     deleteBook
 };
 
-const dummy = createHandler(BookDTOs.UpdateBookContract,
-    {
-        access: "public"
-    },
-    () => {
-        return {
-            data: 2 as any
-        }
-    }
-)
+// const dummy = createHandler(BookDTOs.UpdateBookContract,
+//     {
+//         access: 'protected',
+//         security: {
+
+//         }
+//     },
+//     () => {}
+// )

@@ -16,6 +16,11 @@ usersRoutes.post('/login',
     UserController.loginUser
 );
 
+// POST /users/logout - Logout user
+usersRoutes.post('/logout',
+    UserController.logout
+);
+
 // GET /users - Get all users with pagination
 usersRoutes.get('/',
     UserController.getAllUsers as any

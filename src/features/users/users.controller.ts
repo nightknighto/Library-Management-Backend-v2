@@ -18,7 +18,15 @@ const registerUser = createHandler(UserDTOs.RegisterUserContract, async (req) =>
 
     return {
         statusCode: 201,
-        data: { token }
+        data: { token },
+        cookies: [
+            {
+                action: 'set',
+                name: 'session',
+                value: token,
+                options: { httpOnly: true, sameSite: 'lax' },
+            },
+        ],
     }
 })
 
@@ -30,7 +38,34 @@ const loginUser = createHandler(UserDTOs.LoginUserContract, async (req) => {
     }
     const token = JwtUtils.createToken({ email });
     return {
-        data: { token }
+        data: { token },
+        cookies: [
+            {
+                action: 'set',
+                name: 'session',
+                value: token,
+                options: { httpOnly: true, sameSite: 'lax' },
+            },
+            {
+                action: 'set',
+                name: 'hi',
+                value: '2'
+            }
+        ],
+    }
+})
+
+const logout = createHandler(UserDTOs.LogoutUserContract, async (req) => {
+    return {
+        statusCode: 204,
+        data: undefined,
+        cookies: [
+            {
+                action: 'clear',
+                name: 'session',
+                options: { httpOnly: true, sameSite: 'lax' },
+            }
+        ]
     }
 })
 
@@ -72,7 +107,6 @@ const updateUser = createHandler(UserDTOs.UpdateUserContract,
     },
 )
 
-
 const deleteUser = createHandler(UserDTOs.DeleteUserContract, async (req) => {
     const { email } = req.params;
     const user = await UserRepository.deleteUser(email);
@@ -81,6 +115,13 @@ const deleteUser = createHandler(UserDTOs.DeleteUserContract, async (req) => {
     }
     return {
         data: 'User deleted successfully',
+        cookies: [
+            {
+                action: 'clear',
+                name: 'session',
+                options: { sameSite: 'lax' },
+            },
+        ],
     };
 })
 
@@ -118,6 +159,7 @@ const getUserBorrows = createHandler(UserDTOs.GetUserBorrowsContract,
 export const UserController = {
     registerUser,
     loginUser,
+    logout,
     getAllUsers,
     updateUser,
     deleteUser,

@@ -707,6 +707,17 @@ function createHandlerRuntime<
                 return;
             }
 
+            if (result.cookies?.length) {
+                for (const operation of result.cookies) {
+                    if (operation.action === "set") {
+                        const options = operation.options ?? {};
+                        res.cookie(operation.name, operation.value, options);
+                    } else {
+                        res.clearCookie(operation.name, operation.options);
+                    }
+                }
+            }
+
             res.status(statusCode).json(output);
         } catch (error) {
             handleError(error, res);
@@ -757,6 +768,19 @@ function createHandlerRuntime<
  *     authorize: async ({ req, auth }) => auth.userId === req.params.id,
  *   },
  * }, async (req, auth) => ({ data: { updated: true } }));
+ *
+ * @example
+ * createHandler(loginContract, async (req) => ({
+ *   data: { token: "jwt" },
+ *   cookies: [
+ *     {
+ *       action: "set",
+ *       name: "session",
+ *       value: "jwt",
+ *       options: { httpOnly: true, sameSite: "lax" },
+ *     },
+ *   ],
+ * }));
  */
 export function createHandler<
     TContract extends AnyContract,

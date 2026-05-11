@@ -10,7 +10,7 @@
  * 3. HANDLER SECURITY TYPES - Access/auth/authz options and contracts
  */
 
-import type { Request } from "express";
+import type { CookieOptions, Request } from "express";
 import type createHttpError from "http-errors";
 import type { input as Input, ZodType, ZodTypeAny } from "zod";
 
@@ -100,10 +100,47 @@ export type SuccessResponsePayload<TData> = {
 // ============================================================================
 
 /**
+ * Declarative cookie operation returned by createHandler.
+ *
+ * Operations are applied in array order after the response payload is validated
+ * and before the JSON body is sent. Cookie operations only run for successful
+ * handler responses (errors skip them).
+ *
+ * @example
+ * return {
+ *   data: { token },
+ *   cookies: [
+ *     {
+ *       action: "set",
+ *       name: "session",
+ *       value: token,
+ *       options: { httpOnly: true, sameSite: "lax" },
+ *     },
+ *     { action: "clear", name: "legacy-session" },
+ *   ],
+ * };
+ */
+export type CookieOperation =
+    | {
+        action: "set";
+        name: string;
+        value: string | number | boolean | Record<string, unknown>;
+        options?: CookieOptions;
+    }
+    | {
+        action: "clear";
+        name: string;
+        options?: CookieOptions;
+    };
+
+/**
  * Successful handler result shape required by createHandler.
  *
  * For paginated contracts, `pagination` is required. For non-paginated
  * contracts, `pagination` must be omitted.
+ *
+ * Optional `cookies` allow declarative response cookies to be set or cleared
+ * when the handler succeeds.
  */
 export type HandlerSuccessResult<
     TResponseSchema extends ZodTypeAny,
@@ -111,6 +148,7 @@ export type HandlerSuccessResult<
 > = {
     data: Input<TResponseSchema>;
     statusCode?: number;
+    cookies?: CookieOperation[];
 } & (TPaginated extends true
     ? { pagination: PaginationInput }
     : { pagination?: undefined });
