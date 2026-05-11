@@ -1,20 +1,16 @@
 /**
  * @file response-builder.core.ts
- * 
+ *
  * Handles HTTP response building and pagination computation. This module is responsible
  * for constructing response envelopes, managing pagination metadata, and ensuring
  * response consistency.
- * 
+ *
  * SECTIONS:
  * 1. DATA STRUCTURES - Shared pagination/response types (types.core.ts)
  * 2. RESPONSE BUILDERS - Functions to construct response envelopes
  */
 
-import type {
-    PaginationInput,
-    PaginationMeta,
-    SuccessResponsePayload,
-} from "./types.core.ts";
+import type { PaginationInput, PaginationMeta, SuccessResponsePayload } from './types.core.ts';
 
 // ============================================================================
 // SECTION 1: DATA STRUCTURES - Pagination & Response Types
@@ -28,28 +24,28 @@ import type {
 
 /**
  * Normalizes pagination input into standardized metadata.
- * 
+ *
  * Takes handler input and fills in missing fields (offset, hasNextPage)
  * using standard formulas to ensure consistency across the API.
- * 
+ *
  * ## Computation Rules
- * 
+ *
  * **Offset:**
  * ```
  * offset = provided_offset ?? (page - 1) * limit
  * ```
  * Converts 1-indexed page number to 0-indexed array offset.
- * 
+ *
  * **HasNextPage:**
  * ```
  * hasNextPage = provided_hasNextPage ?? page * limit < totalCount
  * ```
  * Determines if more items exist after current page by checking if
  * items on this page would exceed total count.
- * 
+ *
  * @param input - Pagination parameters from handler
  * @returns Normalized pagination metadata with all fields computed
- * 
+ *
  * @example
  * const meta = buildPaginationMeta({
  *   totalCount: 100,
@@ -76,12 +72,12 @@ export function buildPaginationMeta(input: PaginationInput): PaginationMeta {
 
 /**
  * Builds a success response payload with optional pagination.
- * 
+ *
  * Constructs the complete response envelope that will be validated and sanitized.
  * Automatically includes pagination metadata if provided, omits it otherwise.
- * 
+ *
  * ## Usage
- * 
+ *
  * ```typescript
  * const payload = buildSuccessResponsePayload({
  *   data: books,
@@ -90,7 +86,7 @@ export function buildPaginationMeta(input: PaginationInput): PaginationMeta {
  * });
  * // Payload sent to sanitizeResponse from core/index for validation/stripping
  * ```
- * 
+ *
  * @param options - Response data and optional pagination
  * @returns Success response payload ready for sanitization
  */

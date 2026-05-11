@@ -1,16 +1,6 @@
-import { z } from "zod";
-import {
-    createHandler,
-    createHandlerFactory,
-} from "../index.ts";
-import { createContract } from "../index.ts";
-import type {
-    Equal,
-    Expect,
-    ExpectFalse,
-    Extends,
-    IsAny,
-} from "./type-test.utils.ts";
+import { z } from 'zod';
+import { createContract, createHandler, createHandlerFactory } from '../index.ts';
+import type { Equal, Expect, ExpectFalse, Extends, IsAny } from './type-test.utils.ts';
 
 /**
  * Historical regression lane
@@ -31,7 +21,7 @@ import type {
 
 type AuthContext = {
     userId: string;
-    role: "staff" | "member";
+    role: 'staff' | 'member';
 };
 
 const UpdateBookContract = createContract({
@@ -69,14 +59,14 @@ const ListBooksContract = createContract({
 createHandler(
     UpdateBookContract,
     {
-        access: "protected",
+        access: 'protected',
         security: {
-            authenticate: async () => ({ userId: "r-1", role: "staff" as const }),
+            authenticate: async () => ({ userId: 'r-1', role: 'staff' as const }),
             validateBeforeAuthorization: true,
             authorize: async ({ req, auth }) => {
                 type _body = Expect<Equal<typeof req.body, { title: string }>>;
                 type _auth = Expect<Extends<typeof auth, AuthContext>>;
-                return auth.role === "staff" && req.body.title.length > 0;
+                return auth.role === 'staff' && req.body.title.length > 0;
             },
         },
     },
@@ -87,7 +77,7 @@ createHandler(
  * Regression-002: paginated contracts must always return pagination metadata.
  */
 // @ts-expect-error paginated contracts require pagination payload
-createHandler(ListBooksContract, async (_req) => ({ data: [{ isbn: "x" }] }));
+createHandler(ListBooksContract, async (_req) => ({ data: [{ isbn: 'x' }] }));
 
 /**
  * Regression-003: optional auth remains optional inside handlers.
@@ -95,9 +85,9 @@ createHandler(ListBooksContract, async (_req) => ({ data: [{ isbn: "x" }] }));
 createHandler(
     UpdateBookContract,
     {
-        access: "optional",
+        access: 'optional',
         security: {
-            authenticate: async () => ({ userId: "r-2", role: "member" as const }),
+            authenticate: async () => ({ userId: 'r-2', role: 'member' as const }),
         },
     },
     async (_req, auth) => {
@@ -120,7 +110,7 @@ createHandler(UpdateBookContract, async (req) => {
  */
 type UpdateBookContractResponse = z.infer<typeof UpdateBookContract.response>;
 type UpdateBookErrorResponse = Extract<UpdateBookContractResponse, { success: false }>;
-type _hasErrorEnvelope = Expect<Equal<UpdateBookErrorResponse["success"], false>>;
+type _hasErrorEnvelope = Expect<Equal<UpdateBookErrorResponse['success'], false>>;
 
 /**
  * Regression-006: handlers must not allow unknown top-level success result keys.
@@ -128,7 +118,7 @@ type _hasErrorEnvelope = Expect<Equal<UpdateBookErrorResponse["success"], false>
 // @ts-expect-error unknown top-level keys must be rejected
 createHandler(UpdateBookContract, async (_req) => ({
     data: { updated: true },
-    metax: { timestamp: "2026-01-01T00:00:00.000Z" },
+    metax: { timestamp: '2026-01-01T00:00:00.000Z' },
 }));
 
 /**
@@ -137,8 +127,8 @@ createHandler(UpdateBookContract, async (_req) => ({
 // @ts-expect-error unknown top-level keys must still be rejected with cookies
 createHandler(UpdateBookContract, async (_req) => ({
     data: { updated: true },
-    cookies: [{ action: "set", name: "session", value: "token" }],
-    metax: { traceId: "trace-8" },
+    cookies: [{ action: 'set', name: 'session', value: 'token' }],
+    metax: { traceId: 'trace-8' },
 }));
 
 /**
@@ -149,20 +139,20 @@ createHandler(
     {
         // @ts-expect-error public handlers must not accept security options
         security: {
-            authenticate: async () => ({ userId: "r-7", role: "staff" as const }),
+            authenticate: async () => ({ userId: 'r-7', role: 'staff' as const }),
         },
     },
     async (_req: unknown) => ({ data: { updated: true } }),
 );
 
-const publicFactory = createHandlerFactory<AuthContext>({ access: "public" });
+const publicFactory = createHandlerFactory<AuthContext>({ access: 'public' });
 
 publicFactory(
     UpdateBookContract,
     {
         // @ts-expect-error public factory handlers must not accept security options
         security: {
-            authorize: async ({ auth }) => auth.role === "staff",
+            authorize: async ({ auth }) => auth.role === 'staff',
         },
     },
     async (_req) => ({ data: { updated: true } }),

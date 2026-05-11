@@ -5,7 +5,7 @@
  * related types for contract and middleware usage.
  */
 
-import z from "zod";
+import z from 'zod';
 
 // ============================================================================
 // TYPES
@@ -29,14 +29,14 @@ export type RequestSchemaInput = {
  * - If a field is omitted, it becomes an empty ZodObject (matching Express's default {})
  */
 export type RequestSchemaOutput<T extends RequestSchemaInput> = {
-    body: T["body"] extends Record<string, z.ZodType>
-        ? z.ZodObject<T["body"]>
+    body: T['body'] extends Record<string, z.ZodType>
+        ? z.ZodObject<T['body']>
         : z.ZodObject<Record<string, never>>;
-    query: T["query"] extends Record<string, z.ZodType>
-        ? z.ZodObject<T["query"]>
+    query: T['query'] extends Record<string, z.ZodType>
+        ? z.ZodObject<T['query']>
         : z.ZodObject<Record<string, never>>;
-    params: T["params"] extends Record<string, z.ZodType>
-        ? z.ZodObject<T["params"]>
+    params: T['params'] extends Record<string, z.ZodType>
+        ? z.ZodObject<T['params']>
         : z.ZodObject<Record<string, never>>;
 };
 
@@ -58,10 +58,9 @@ export type RequestSchema = z.ZodObject<{
  * Accepts undefined or any object, transforms to empty object.
  * This handles cases like GET requests where req.body may be undefined.
  */
-const emptySchema = z.union([
-    z.undefined(),
-    z.record(z.string(), z.unknown()),
-]).transform(() => ({}));
+const emptySchema = z
+    .union([z.undefined(), z.record(z.string(), z.unknown())])
+    .transform(() => ({}));
 
 /**
  * Creates a unified request validation schema for Express routes.
@@ -94,7 +93,7 @@ export function createRequestSchema<
     // This constraint does two things:
     // 1. T extends RequestSchemaInput - must have body/query/params structure
     // 2. Record<Exclude<keyof T, keyof RequestSchemaInput>, never> - disallows extra keys
-    T extends RequestSchemaInput & Record<Exclude<keyof T, keyof RequestSchemaInput>, never>
+    T extends RequestSchemaInput & Record<Exclude<keyof T, keyof RequestSchemaInput>, never>,
 >(shape: T) {
     const schema = z.object({
         body: shape.body ? z.strictObject(shape.body) : emptySchema,

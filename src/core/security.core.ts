@@ -6,16 +6,9 @@
  * and default/override merging behavior.
  */
 
-import createHttpError from "http-errors";
-import type { Request } from "express";
-import type {
-    AccessMode,
-    Authenticator,
-    Authorizer,
-    HandlerErrorMappers,
-    MaybePromise,
-    SecurityOptions,
-} from "./types.core.ts";
+import type { Request } from 'express';
+import createHttpError from 'http-errors';
+import type { AccessMode, Authorizer, HandlerErrorMappers, SecurityOptions } from './types.core.ts';
 
 // =========================================================================
 // SECTION 1: EXECUTION TYPES
@@ -32,14 +25,11 @@ type AuthenticationExecutionParams<
     errors?: HandlerErrorMappers<TRequest>;
 };
 
-type SecurityExecutionResult<
-    TAuthContext,
-    TAccess extends AccessMode,
-> = TAccess extends "protected"
+type SecurityExecutionResult<TAuthContext, TAccess extends AccessMode> = TAccess extends 'protected'
     ? { auth: TAuthContext }
-    : TAccess extends "optional"
-    ? { auth?: TAuthContext }
-    : { auth?: undefined };
+    : TAccess extends 'optional'
+      ? { auth?: TAuthContext }
+      : { auth?: undefined };
 
 type AuthorizationExecutionParams<
     TAuthContext,
@@ -61,7 +51,7 @@ type NoInfer<T> = [T][T extends unknown ? 0 : never];
  * Normalizes authorize config into a flat array for iteration.
  */
 function normalizeAuthorizers<TAuthContext, TRequest extends Request>(
-    authorize: SecurityOptions<TAuthContext, TRequest>["authorize"],
+    authorize: SecurityOptions<TAuthContext, TRequest>['authorize'],
 ): Array<Authorizer<TAuthContext, TRequest>> {
     if (!authorize) {
         return [];
@@ -85,20 +75,15 @@ export async function executeAuthenticationStage<
 >(
     params: AuthenticationExecutionParams<TAuthContext, TAccess, TRequest>,
 ): Promise<SecurityExecutionResult<TAuthContext, TAccess>> {
-    const {
-        req,
-        access,
-        security,
-        errors,
-    } = params;
+    const { req, access, security, errors } = params;
 
     const authenticate = security?.authenticate;
 
     if (!authenticate) {
-        if (access === "protected") {
+        if (access === 'protected') {
             throw (
-                errors?.unauthenticated?.(req)
-                ?? new createHttpError.Unauthorized("Unauthenticated")
+                errors?.unauthenticated?.(req) ??
+                new createHttpError.Unauthorized('Unauthenticated')
             );
         }
 
@@ -109,10 +94,10 @@ export async function executeAuthenticationStage<
     const auth = maybeAuth ?? null;
 
     if (auth === null) {
-        if (access === "protected") {
+        if (access === 'protected') {
             throw (
-                errors?.unauthenticated?.(req)
-                ?? new createHttpError.Unauthorized("Unauthenticated")
+                errors?.unauthenticated?.(req) ??
+                new createHttpError.Unauthorized('Unauthenticated')
             );
         }
 
@@ -122,13 +107,11 @@ export async function executeAuthenticationStage<
     let parsedAuth: TAuthContext;
 
     try {
-        parsedAuth = security?.authSchema
-            ? await security.authSchema.parseAsync(auth)
-            : auth;
-    } catch (e) {
+        parsedAuth = security?.authSchema ? await security.authSchema.parseAsync(auth) : auth;
+    } catch (_e) {
         throw (
-            errors?.unauthenticated?.(req)
-            ?? new createHttpError.Unauthorized("Invalid authentication data")
+            errors?.unauthenticated?.(req) ??
+            new createHttpError.Unauthorized('Invalid authentication data')
         );
     }
 
@@ -148,23 +131,12 @@ export async function executeAuthorizationStage<
     TAuthContext,
     TAccess extends AccessMode,
     TRequest extends Request,
->(
-    params: AuthorizationExecutionParams<TAuthContext, TAccess, TRequest>,
-): Promise<void> {
-    const {
-        req,
-        access,
-        auth,
-        security,
-        errors,
-    } = params;
+>(params: AuthorizationExecutionParams<TAuthContext, TAccess, TRequest>): Promise<void> {
+    const { req, access, auth, security, errors } = params;
 
     if (auth == null) {
-        if (access === "protected") {
-            throw (
-                errors?.unauthorized?.(req)
-                ?? new createHttpError.Unauthorized("Unauthorized")
-            );
+        if (access === 'protected') {
+            throw errors?.unauthorized?.(req) ?? new createHttpError.Unauthorized('Unauthorized');
         }
 
         return;
@@ -174,10 +146,7 @@ export async function executeAuthorizationStage<
     for (const authorize of authorizers) {
         const isAllowed = await authorize({ req, auth });
         if (!isAllowed) {
-            throw (
-                errors?.unauthorized?.(req)
-                ?? new createHttpError.Forbidden("Forbidden")
-            );
+            throw errors?.unauthorized?.(req) ?? new createHttpError.Forbidden('Forbidden');
         }
     }
 }
@@ -197,21 +166,13 @@ export async function executeAuthorizationStage<
  *   async ({ req }) => req.body.title.length > 0,
  * ]);
  */
-export function allOf<
-    TContext,
-    TRequest extends Request,
->(
+export function allOf<TContext, TRequest extends Request>(
     policies: Array<Authorizer<TContext, NoInfer<TRequest>>>,
 ): Authorizer<TContext, TRequest>;
-export function allOf<
-    TContext,
-    TRequest extends Request = Request,
->(
+export function allOf<TContext, TRequest extends Request = Request>(
     policies: Array<Authorizer<TContext, TRequest>>,
 ): Authorizer<TContext, TRequest>;
-export function allOf(
-    policies: Array<Authorizer<any, Request>>,
-): Authorizer<any, Request> {
+export function allOf(policies: Array<Authorizer<any, Request>>): Authorizer<any, Request> {
     return async (params) => {
         for (const policy of policies) {
             const result = await policy(params);
@@ -235,21 +196,13 @@ export function allOf(
  *   async ({ auth }) => auth.scopes.includes("books:write"),
  * ]);
  */
-export function anyOf<
-    TContext,
-    TRequest extends Request,
->(
+export function anyOf<TContext, TRequest extends Request>(
     policies: Array<Authorizer<TContext, NoInfer<TRequest>>>,
 ): Authorizer<TContext, TRequest>;
-export function anyOf<
-    TContext,
-    TRequest extends Request = Request,
->(
+export function anyOf<TContext, TRequest extends Request = Request>(
     policies: Array<Authorizer<TContext, TRequest>>,
 ): Authorizer<TContext, TRequest>;
-export function anyOf(
-    policies: Array<Authorizer<any, Request>>,
-): Authorizer<any, Request> {
+export function anyOf(policies: Array<Authorizer<any, Request>>): Authorizer<any, Request> {
     return async (params) => {
         for (const policy of policies) {
             const result = await policy(params);
@@ -274,9 +227,7 @@ export function not<TContext, TRequest extends Request>(
 export function not<TContext, TRequest extends Request = Request>(
     policy: Authorizer<TContext, TRequest>,
 ): Authorizer<TContext, TRequest>;
-export function not(
-    policy: Authorizer<any, Request>,
-): Authorizer<any, Request> {
+export function not(policy: Authorizer<any, Request>): Authorizer<any, Request> {
     return async (params) => {
         const result = await policy(params);
         return !result;
@@ -293,20 +244,21 @@ export function not(
  * Security and error mapper objects are merged by key so that callers can
  * override or extend defaults without replacing the entire object.
  */
-export function mergeHandlerSecurityDefaults<
-    TAuthContext,
-    TRequest extends Request = Request,
->(
-    defaults: {
-        access?: AccessMode;
-        security?: SecurityOptions<TAuthContext, TRequest>;
-        errors?: HandlerErrorMappers<TRequest>;
-    } | undefined,
-    overrides: {
-        access?: AccessMode;
-        security?: SecurityOptions<TAuthContext, TRequest>;
-        errors?: HandlerErrorMappers<TRequest>;
-    } | undefined,
+export function mergeHandlerSecurityDefaults<TAuthContext, TRequest extends Request = Request>(
+    defaults:
+        | {
+              access?: AccessMode;
+              security?: SecurityOptions<TAuthContext, TRequest>;
+              errors?: HandlerErrorMappers<TRequest>;
+          }
+        | undefined,
+    overrides:
+        | {
+              access?: AccessMode;
+              security?: SecurityOptions<TAuthContext, TRequest>;
+              errors?: HandlerErrorMappers<TRequest>;
+          }
+        | undefined,
 ): {
     access?: AccessMode;
     security?: SecurityOptions<TAuthContext, TRequest>;
@@ -324,4 +276,3 @@ export function mergeHandlerSecurityDefaults<
         },
     };
 }
-

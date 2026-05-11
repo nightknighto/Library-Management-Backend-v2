@@ -1,8 +1,8 @@
 import express from 'express';
 import { CONFIG } from './config/config.ts';
+import type { ErrorResponse } from './core/index.ts';
 import rootRouter from './routes.ts';
 import { globalErrorHandler } from './shared/middlewares/error-handler.middleware.ts';
-import type { ErrorResponse } from './core/index.ts';
 
 // Create Express app
 const app = express();
@@ -19,8 +19,8 @@ app.use((req, res) => {
         success: false,
         error: {
             code: 'NOT_FOUND',
-            message: 'Route not found'
-        }
+            message: 'Route not found',
+        },
     } satisfies ErrorResponse);
 });
 
@@ -53,6 +53,5 @@ process.on('SIGINT', () => {
         process.exit(0);
     });
 });
-
 
 export default app;

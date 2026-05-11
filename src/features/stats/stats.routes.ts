@@ -1,16 +1,11 @@
-import { Router } from "express";
-import { StatsController } from "./stats.controller.ts";
+import { Router } from 'express';
+import { StatsController } from './stats.controller.ts';
 
 const statsRoutes = Router();
 
-
 // GET /stats/borrows - Get borrowing statistics
-statsRoutes.get('/borrows',
-    StatsController.getBorrowsStatistics
-);
+statsRoutes.get('/borrows', StatsController.getBorrowsStatistics);
 
 // GET /stats/overdue - Get overdue statistics
-statsRoutes.get('/overdue',
-    StatsController.getOverdueStatistics
-);
+statsRoutes.get('/overdue', StatsController.getOverdueStatistics);
 export default statsRoutes;

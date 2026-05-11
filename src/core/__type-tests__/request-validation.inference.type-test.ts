@@ -1,14 +1,8 @@
-import type { Request } from "express";
-import { z } from "zod";
-import { createContract } from "../index.ts";
-import { validateContractRequest } from "../validate-contract-request.core.ts";
-import { createRequestSchema } from "../index.ts";
-import type {
-    Equal,
-    Expect,
-    ExpectFalse,
-    IsAny,
-} from "./type-test.utils.ts";
+import type { Request } from 'express';
+import { z } from 'zod';
+import { createContract, createRequestSchema } from '../index.ts';
+import { validateContractRequest } from '../validate-contract-request.core.ts';
+import type { Equal, Expect, ExpectFalse, IsAny } from './type-test.utils.ts';
 
 /**
  * Compile-only inference tests for request schema construction
@@ -29,19 +23,12 @@ const UpdateBookRequestSchema = createRequestSchema({
 
 type UpdateBookParsed = z.infer<typeof UpdateBookRequestSchema>;
 
-type _schemaBodyNotAny = ExpectFalse<IsAny<UpdateBookParsed["body"]>>;
+type _schemaBodyNotAny = ExpectFalse<IsAny<UpdateBookParsed['body']>>;
 type _schemaBodyExact = Expect<
-    Equal<
-        UpdateBookParsed["body"],
-        { title: string; totalQuantity: number }
-    >
+    Equal<UpdateBookParsed['body'], { title: string; totalQuantity: number }>
 >;
-type _schemaParamsExact = Expect<
-    Equal<UpdateBookParsed["params"], { isbn: string }>
->;
-type _schemaQueryExact = Expect<
-    Equal<UpdateBookParsed["query"], { dryRun: boolean }>
->;
+type _schemaParamsExact = Expect<Equal<UpdateBookParsed['params'], { isbn: string }>>;
+type _schemaQueryExact = Expect<Equal<UpdateBookParsed['query'], { dryRun: boolean }>>;
 
 createRequestSchema({
     // @ts-expect-error createRequestSchema only accepts body/query/params keys
@@ -73,17 +60,10 @@ const validatedPromise = validateContractRequest(UpdateBookContract.request, exp
 type ValidatedRequest = Awaited<typeof validatedPromise>;
 
 type _validatedBodyExact = Expect<
-    Equal<
-        ValidatedRequest["body"],
-        { title: string; totalQuantity: number }
-    >
+    Equal<ValidatedRequest['body'], { title: string; totalQuantity: number }>
 >;
-type _validatedParamsExact = Expect<
-    Equal<ValidatedRequest["params"], { isbn: string }>
->;
-type _validatedQueryExact = Expect<
-    Equal<ValidatedRequest["query"], { dryRun: boolean }>
->;
+type _validatedParamsExact = Expect<Equal<ValidatedRequest['params'], { isbn: string }>>;
+type _validatedQueryExact = Expect<Equal<ValidatedRequest['query'], { dryRun: boolean }>>;
 
 const NotARequestEnvelopeSchema = z.object({
     title: z.string(),

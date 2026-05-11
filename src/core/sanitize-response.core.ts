@@ -4,7 +4,7 @@
  * Validates and sanitizes response payloads against Zod schemas.
  */
 
-import type z from "zod";
+import type z from 'zod';
 
 /**
  * Validates and sanitizes response data against a Zod schema.

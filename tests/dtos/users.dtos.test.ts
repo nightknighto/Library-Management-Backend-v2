@@ -67,7 +67,9 @@ describe('UserDTOs', () => {
             const result = UserDTOs.RegisterUserSchema.safeParse(invalidData);
             expect(result.success).toBe(false);
             if (!result.success) {
-                expect(result.error.issues[0]?.message).toBe('Email must be less than 255 characters');
+                expect(result.error.issues[0]?.message).toBe(
+                    'Email must be less than 255 characters',
+                );
             }
         });
 

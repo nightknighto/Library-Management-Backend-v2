@@ -1,26 +1,26 @@
 /**
  * @file create-contract.core.ts
- * 
+ *
  * Defines the contract system for API requests and responses. A contract is a bidirectional
  * specification that defines both what a handler expects (request schema) and what it returns
  * (response schema), including pagination metadata when applicable.
- * 
+ *
  * A contract ensures type-safe communication between clients and servers by validating both
  * incoming requests and outgoing responses against a shared schema.
- * 
+ *
  * SECTIONS:
  * 1. DATA STRUCTURES - Types and builders that define response/pagination formats (developer-facing)
  * 2. TYPE INFERENCE ENGINE - Advanced TypeScript types for automatic type inference (internal)
  * 3. CONTRACT BUILDERS - Main functions to create contracts (developer-facing API)
  */
 
-import z from "zod";
+import z from 'zod';
 import {
     createRequestSchema,
     type RequestSchemaInput,
     type RequestSchemaOutput,
-} from "./create-request-schema.core.ts";
-import type { ContractResponse } from "./types.core.ts";
+} from './create-request-schema.core.ts';
+import type { ContractResponse } from './types.core.ts';
 
 // ============================================================================
 // SECTION 1: DATA STRUCTURES - Response Formats & Pagination
@@ -30,7 +30,7 @@ import type { ContractResponse } from "./types.core.ts";
 
 /**
  * Helper function to create error response Zod schema.
- * 
+ *
  * Builds a schema that validates error responses conform to ErrorResponse structure.
  * Used internally when building complete response schemas.
  */
@@ -43,7 +43,7 @@ function createErrorResponseSchema() {
 
 /**
  * Helper function to create success response schema with pagination.
- * 
+ *
  * Builds a schema for paginated successful responses. Combines data validation with
  * pagination metadata validation.
  */
@@ -67,7 +67,7 @@ function createPaginatedSuccessResponseSchema<TResponseData extends z.ZodTypeAny
 
 /**
  * Helper function to create success response schema without pagination.
- * 
+ *
  * Builds a schema for non-paginated successful responses. Includes only the
  * data and timestamp, omitting pagination metadata.
  */
@@ -110,22 +110,23 @@ function createContractResponseSchema<TResponseData extends z.ZodTypeAny>(
 
 /**
  * Validates request schema input contains only valid request fields.
- * 
+ *
  * Ensures developers don't accidentally add undefined fields to request schemas
  * that aren't part of the standard request structure (body, query, params).
  */
-type StrictRequestInput<TRequest extends RequestSchemaInput> =
-    TRequest & Record<Exclude<keyof TRequest, keyof RequestSchemaInput>, never>;
+type StrictRequestInput<TRequest extends RequestSchemaInput> = TRequest &
+    Record<Exclude<keyof TRequest, keyof RequestSchemaInput>, never>;
 
 /**
  * The built Zod request schema type after processing by createRequestSchema.
  */
-type BuiltRequestSchema<TRequest extends RequestSchemaInput> =
-    z.ZodObject<RequestSchemaOutput<StrictRequestInput<TRequest>>>;
+type BuiltRequestSchema<TRequest extends RequestSchemaInput> = z.ZodObject<
+    RequestSchemaOutput<StrictRequestInput<TRequest>>
+>;
 
 /**
  * Complete response schema type exported from createContract.
- * 
+ *
  * This is a Zod schema that validates both success and error responses together
  * as a union type. When you call z.infer on this, you get the full response shape.
  */
@@ -139,15 +140,15 @@ export type ContractResponseSchema<
 
 /**
  * Validated contract that specifies request and response formats.
- * 
+ *
  * A contract is the central agreement between a handler and its callers:
  * - `request`: Zod schema for incoming requests (body, query, params)
  * - `response`: Zod schema for outgoing responses (success or error)
  * - `paginated`: Flag indicating if response includes pagination metadata
- * 
+ *
  * The `paginated` property is included as `true` only when the contract is
  * created with `paginated: true`. This enables type-safe pagination inference.
- * 
+ *
  * @example
  * const getUsersContract: Contract<..., ..., true> = createContract({
  *   request: { query: { page: z.number() } },
@@ -162,24 +163,24 @@ export type Contract<
 > = {
     /**
      * Zod schema that validates incoming HTTP requests.
-     * 
+     *
      * This schema is automatically built from the request definition you provide
      * to `createContract()`. It validates three optional request parts:
-     * 
+     *
      * - **body**: Request body validation (POST/PUT payload)
      * - **query**: URL query parameters validation
      * - **params**: URL path parameters validation
-     * 
+     *
      * Only fields present in the schema are validated. Omitted fields are not required.
      */
     request: TRequest;
 
     /**
      * Zod schema that validates outgoing HTTP responses.
-     * 
+     *
      * This is a union schema that validates both success (200/201) and error responses.
      * The schema automatically wraps your response data in a standardized envelope:
-     * 
+     *
      * **Success Response** (when handler returns successfully):
      * ```typescript
      * {
@@ -196,7 +197,7 @@ export type Contract<
      *   }
      * }
      * ```
-     * 
+     *
      * **Error Response** (when validation fails or exception is thrown):
      * ```typescript
      * {
@@ -217,17 +218,17 @@ type CreateContractBaseParams<
 > = {
     /**
      * Zod schemas that define what the request should contain.
-     * 
+     *
      * Pass an object with any combination of `body`, `query`, and `params` fields.
      * Each field should contain Zod schema definitions for that part of the request.
-     * 
+     *
      * - **body**: Validate the JSON request body (for POST/PUT/PATCH)
      * - **query**: Validate URL query string parameters
      * - **params**: Validate dynamic route path parameters (from Express router)
-     * 
+     *
      * ---
      * ### Examples
-     * 
+     *
      * **Example** - Validate body only
      * ```typescript
      * request: {
@@ -238,7 +239,7 @@ type CreateContractBaseParams<
      *   }
      * }
      * ```
-     * 
+     *
      * **Example** - Validate query parameters
      * ```typescript
      * request: {
@@ -248,9 +249,9 @@ type CreateContractBaseParams<
      *     search: z.string().optional()
      *   }
      * }
-     * 
+     *
      * ```
-     * 
+     *
      * **Example** - Validate path parameters
      * ```typescript
      * request: {
@@ -259,7 +260,7 @@ type CreateContractBaseParams<
      *   }
      * }
      * ```
-     * 
+     *
      * **Example** - Validate all three together
      * ```typescript
      * request: {
@@ -268,7 +269,7 @@ type CreateContractBaseParams<
      *   query: { includeDetails: z.boolean().optional() }
      * }
      * ```
-     * 
+     *
      * Omit any part you don't need validation for.
      * The request will only be validated against the fields you include.
      */
@@ -276,16 +277,16 @@ type CreateContractBaseParams<
 
     /**
      * Zod schema for the response data your handler returns.
-     * 
+     *
      * This is the data object that will be wrapped in the success response envelope
      * along with timestamp and optional pagination metadata (if paginated: true).
-     * 
+     *
      * This should be the schema for just your data, not the full response wrapper—
      * the wrapper is automatically added by createHandler.
-     * 
+     *
      * ---
      * ### Examples
-     * 
+     *
      * **Example** - Single object response
      * ```typescript
      * response: z.object({
@@ -295,13 +296,13 @@ type CreateContractBaseParams<
      * })
      * // Final response: { success: true, data: { id, name, email }, meta: {...} }
      * ```
-     * 
+     *
      * **Example** - Array response
      * ```typescript
      * response: z.array(UserSchema)
      * // Final response: { success: true, data: [...], meta: { timestamp, pagination: {...} } }
      * ```
-     * 
+     *
      * **Example** - Token response
      * ```typescript
      * response: z.object({
@@ -310,7 +311,7 @@ type CreateContractBaseParams<
      * })
      * // Final response: { success: true, data: { token, expiresIn }, meta: {...} }
      * ```
-     * 
+     *
      * Note: If your handler returns pagination, use `paginated: true` in `createContract`
      * to include pagination metadata (totalCount, limit, offset, hasNextPage).
      */
@@ -341,7 +342,7 @@ type CreateNonPaginatedContractParams<
     /**
      * When `true`, includes pagination metadata in the response.
      * The response will include `meta.pagination` with totalCount, limit, offset, and hasNextPage.
-     * 
+     *
      * When `false` or omitted, excludes pagination metadata from the response.
      * The response will only include the `meta.timestamp` field.
      */
@@ -356,13 +357,13 @@ type CreateNonPaginatedContractParams<
 
 /**
  * Creates an API contract (bidirectional schema).
- * 
+ *
  * A contract defines both the request shape a handler expects and the response shape
  * it produces. The contract is validated against both incoming requests and outgoing
  * responses to ensure type safety.
- * 
+ *
  * ## Usage - Paginated Response (includes pagination metadata)
- * 
+ *
  * ```typescript
  * const getUsersContract = createContract({
  *   request: { query: { page: z.number(), limit: z.number() } },
@@ -371,9 +372,9 @@ type CreateNonPaginatedContractParams<
  * });
  * // Response shape: { success: true, data: User[], meta: { timestamp, pagination: {...} } }
  * ```
- * 
+ *
  * ## Usage - Non-Paginated Response (no pagination metadata)
- * 
+ *
  * ```typescript
  * const createUserContract = createContract({
  *   request: { body: { name: z.string(), email: z.string().email() } },
@@ -382,15 +383,15 @@ type CreateNonPaginatedContractParams<
  * });
  * // Response shape: { success: true, data: User, meta: { timestamp } }
  * ```
- * 
+ *
  * @overload Paginated - Returns contract with pagination metadata
  * @param params Contract definition with paginated: true
  * @returns Paginated contract with pagination metadata in response schema
- * 
+ *
  * @overload Non-Paginated - Returns contract without pagination
  * @param params Contract definition with paginated: false or omitted
  * @returns Non-paginated contract without pagination metadata
- * 
+ *
  * @throws Type error if request schema contains invalid fields (only body, query, params allowed)
  */
 export function createContract<

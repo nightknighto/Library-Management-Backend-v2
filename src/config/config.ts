@@ -1,18 +1,21 @@
 import { z } from 'zod';
 
-const reqString = (message: string) => z.string({
-    error: (issue) => issue.input === undefined ? message : undefined
-}).min(1, { message });
+const reqString = (message: string) =>
+    z
+        .string({
+            error: (issue) => (issue.input === undefined ? message : undefined),
+        })
+        .min(1, { message });
 const reqUrl = (message: string) => z.url({ message });
 
 const defaultPort = 3001;
 
 /**
  * Configuration schema for the application using Zod validation.
- * 
+ *
  * @description Defines the structure and validation rules for application configuration
  * including JWT authentication, server port, and database connection settings.
- * 
+ *
  * @property {string} jwtSecret - Required JWT secret key for token signing and verification
  * @property {number} port - Server port number, defaults to defaultPort if not specified
  * @property {string} databaseURL - Required valid URL for database connection

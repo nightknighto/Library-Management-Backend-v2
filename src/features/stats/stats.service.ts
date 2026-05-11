@@ -1,5 +1,12 @@
-import { getReturnsMadeDaily, getBorrowsMadeDaily, getMostBorrowingUsers, getMostPopularBooks, getMostOverdueUsers, getOverdueDaily } from "@prisma/client/sql";
-import { prisma } from "../../lib/prisma.ts";
+import {
+    getBorrowsMadeDaily,
+    getMostBorrowingUsers,
+    getMostOverdueUsers,
+    getMostPopularBooks,
+    getOverdueDaily,
+    getReturnsMadeDaily,
+} from '@prisma/client/sql';
+import { prisma } from '../../lib/prisma.ts';
 
 export const StatsService = {
     async borrowsMadeDailySince(date: Date) {
@@ -29,5 +36,5 @@ export const StatsService = {
     async overdueDailySince(date: Date) {
         const result = await prisma.$queryRawTyped(getOverdueDaily(date));
         return result;
-    }
-}
+    },
+};

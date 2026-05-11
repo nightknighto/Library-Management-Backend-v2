@@ -1,10 +1,16 @@
-import { Prisma } from "@prisma/client";
-import { prisma } from "../../lib/prisma.ts";
-import { getBookAvailableQuantity } from "@prisma/client/sql";
+import type { Prisma } from '@prisma/client';
+import { getBookAvailableQuantity } from '@prisma/client/sql';
+import { prisma } from '../../lib/prisma.ts';
 
-async function createBook(author: string, {
-    isbn, title, shelf, total_quantity
-}: Omit<Prisma.BookCreateInput, "created_at" | "Borrow" | 'Author'>) {
+async function createBook(
+    author: string,
+    {
+        isbn,
+        title,
+        shelf,
+        total_quantity,
+    }: Omit<Prisma.BookCreateInput, 'created_at' | 'Borrow' | 'Author'>,
+) {
     try {
         const book = await prisma.book.create({
             data: {
@@ -13,19 +19,23 @@ async function createBook(author: string, {
                 author,
                 shelf,
                 total_quantity,
-            }
-        })
+            },
+        });
         return book;
     } catch (error: any) {
         if (error.code === 'P2002') {
-            return undefined
+            return undefined;
         }
         throw error;
     }
 }
 
 async function getAllBooks({
-    title, author, isbn, page, limit
+    title,
+    author,
+    isbn,
+    page,
+    limit,
 }: {
     page: number;
     limit: number;
@@ -34,9 +44,9 @@ async function getAllBooks({
     isbn?: string;
 }) {
     const where: Prisma.BookWhereInput = {
-        ...(title && { title: { contains: title, mode: "insensitive" } }),
-        ...(author && { author: { contains: author, mode: "insensitive" } }),
-        ...(isbn && { isbn: { contains: isbn, mode: "insensitive" } }),
+        ...(title && { title: { contains: title, mode: 'insensitive' } }),
+        ...(author && { author: { contains: author, mode: 'insensitive' } }),
+        ...(isbn && { isbn: { contains: isbn, mode: 'insensitive' } }),
     };
 
     const skip = page && limit ? (page - 1) * limit : undefined;
@@ -52,16 +62,18 @@ async function getAllBooks({
 }
 
 async function countBooks({
-    title, author, isbn,
+    title,
+    author,
+    isbn,
 }: {
     title?: string;
     author?: string;
     isbn?: string;
 }) {
     const where: Prisma.BookWhereInput = {
-        ...(title && { title: { contains: title, mode: "insensitive" } }),
-        ...(author && { author: { contains: author, mode: "insensitive" } }),
-        ...(isbn && { isbn: { contains: isbn, mode: "insensitive" } }),
+        ...(title && { title: { contains: title, mode: 'insensitive' } }),
+        ...(author && { author: { contains: author, mode: 'insensitive' } }),
+        ...(isbn && { isbn: { contains: isbn, mode: 'insensitive' } }),
     };
 
     const totalCount = await prisma.book.count({
@@ -71,14 +83,16 @@ async function countBooks({
     return totalCount;
 }
 
-
-
 async function getBookByIsbn(isbn: string) {
     const book = await prisma.$queryRawTyped(getBookAvailableQuantity(isbn));
     return book[0];
 }
 
-async function updateBook(isbn: string, author: string, data: Omit<Prisma.BookUpdateInput, "created_at" | "Borrow">) {
+async function updateBook(
+    isbn: string,
+    author: string,
+    data: Omit<Prisma.BookUpdateInput, 'created_at' | 'Borrow'>,
+) {
     try {
         const updatedBook = await prisma.book.update({
             where: { isbn, author },
@@ -91,7 +105,7 @@ async function updateBook(isbn: string, author: string, data: Omit<Prisma.BookUp
         return updatedBook;
     } catch (error: any) {
         if (error.code === 'P2025') {
-            return undefined
+            return undefined;
         }
         throw error;
     }
@@ -105,7 +119,7 @@ async function deleteBook(isbn: string, author: string) {
         return book;
     } catch (error: any) {
         if (error.code === 'P2025') {
-            return undefined
+            return undefined;
         }
         throw error;
     }
@@ -117,5 +131,5 @@ export const BookRepository = {
     getBookByIsbn,
     updateBook,
     deleteBook,
-    countBooks
+    countBooks,
 } as const;

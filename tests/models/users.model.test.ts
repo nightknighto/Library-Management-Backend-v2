@@ -1,5 +1,5 @@
 import { UserModel } from '../../src/models/users.model';
-import { mockPrisma, mockPrismaUser } from '../setup';
+import { mockPrismaUser } from '../setup';
 
 describe('UserModel', () => {
     beforeEach(() => {
@@ -85,9 +85,7 @@ describe('UserModel', () => {
         });
 
         it('should handle undefined pagination parameters', async () => {
-            const mockUsers = [
-                { email: 'user1@example.com', name: 'User 1' },
-            ];
+            const mockUsers = [{ email: 'user1@example.com', name: 'User 1' }];
 
             mockPrismaUser.findMany.mockResolvedValue(mockUsers);
 
@@ -174,15 +172,15 @@ describe('UserModel', () => {
                             book: {
                                 select: {
                                     title: true,
-                                }
+                                },
                             },
                             due_date: true,
                         },
                         where: {
-                            return_date: null
-                        }
-                    }
-                }
+                            return_date: null,
+                        },
+                    },
+                },
             });
             expect(result).toEqual(mockUserWithBorrows);
         });
@@ -214,7 +212,9 @@ describe('UserModel', () => {
 
             mockPrismaUser.findUnique.mockRejectedValue(error);
 
-            await expect(UserModel.getUserWithActiveBorrows(email)).rejects.toThrow('Database error');
+            await expect(UserModel.getUserWithActiveBorrows(email)).rejects.toThrow(
+                'Database error',
+            );
         });
     });
 

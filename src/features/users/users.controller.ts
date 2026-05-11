@@ -1,9 +1,9 @@
-import * as UserDTOs from './users.schemas.ts';
-import { UserRepository } from './users.repository.ts';
-import { JwtUtils } from '../../utils/jwt.util.ts';
-import { createHandler } from '../../core/index.ts';
 import createHttpError from 'http-errors';
+import { createHandler } from '../../core/index.ts';
 import { authenticateJwt } from '../../shared/auth-stuff.ts';
+import { JwtUtils } from '../../utils/jwt.util.ts';
+import { UserRepository } from './users.repository.ts';
+import * as UserDTOs from './users.schemas.ts';
 
 // const registerUser = createHandler(UserDTOs., handler)
 
@@ -11,7 +11,7 @@ const registerUser = createHandler(UserDTOs.RegisterUserContract, async (req) =>
     const { email, name } = req.body;
     const user = await UserRepository.createUser(email, name);
     if (!user) {
-        throw new createHttpError.BadRequest('User with this email already exists')
+        throw new createHttpError.BadRequest('User with this email already exists');
     }
 
     const token = JwtUtils.createToken({ email });
@@ -27,14 +27,14 @@ const registerUser = createHandler(UserDTOs.RegisterUserContract, async (req) =>
                 options: { httpOnly: true, sameSite: 'lax' },
             },
         ],
-    }
-})
+    };
+});
 
 const loginUser = createHandler(UserDTOs.LoginUserContract, async (req) => {
     const { email } = req.body;
     const user = await UserRepository.getUser(email);
     if (!user) {
-        throw new createHttpError.NotFound('User not found')
+        throw new createHttpError.NotFound('User not found');
     }
     const token = JwtUtils.createToken({ email });
     return {
@@ -49,13 +49,13 @@ const loginUser = createHandler(UserDTOs.LoginUserContract, async (req) => {
             {
                 action: 'set',
                 name: 'hi',
-                value: '2'
-            }
+                value: '2',
+            },
         ],
-    }
-})
+    };
+});
 
-const logout = createHandler(UserDTOs.LogoutUserContract, async (req) => {
+const logout = createHandler(UserDTOs.LogoutUserContract, async (_req) => {
     return {
         statusCode: 204,
         data: undefined,
@@ -64,17 +64,14 @@ const logout = createHandler(UserDTOs.LogoutUserContract, async (req) => {
                 action: 'clear',
                 name: 'session',
                 options: { httpOnly: true, sameSite: 'lax' },
-            }
-        ]
-    }
-})
+            },
+        ],
+    };
+});
 
 const getAllUsers = createHandler(UserDTOs.GetAllUsersContract, async (req) => {
     const { page, limit } = req.query;
-    const users = await UserRepository.getAllUsers(
-        page,
-        limit
-    );
+    const users = await UserRepository.getAllUsers(page, limit);
     const totalCount = await UserRepository.getUserCount();
 
     return {
@@ -83,11 +80,12 @@ const getAllUsers = createHandler(UserDTOs.GetAllUsersContract, async (req) => {
             totalCount,
             page,
             limit,
-        }
-    }
-})
+        },
+    };
+});
 
-const updateUser = createHandler(UserDTOs.UpdateUserContract,
+const updateUser = createHandler(
+    UserDTOs.UpdateUserContract,
     {
         access: 'protected',
         security: {
@@ -105,7 +103,7 @@ const updateUser = createHandler(UserDTOs.UpdateUserContract,
             data: updatedUser,
         };
     },
-)
+);
 
 const deleteUser = createHandler(UserDTOs.DeleteUserContract, async (req) => {
     const { email } = req.params;
@@ -123,16 +121,17 @@ const deleteUser = createHandler(UserDTOs.DeleteUserContract, async (req) => {
             },
         ],
     };
-})
+});
 
-const getUserBorrows = createHandler(UserDTOs.GetUserBorrowsContract,
+const getUserBorrows = createHandler(
+    UserDTOs.GetUserBorrowsContract,
     {
         access: 'protected',
         security: {
             authenticate: authenticateJwt,
         },
     },
-    async (req, auth) => {
+    async (_req, auth) => {
         const email = auth.email;
         const userWithBorrows = await UserRepository.getUserWithActiveBorrows(email);
         if (!userWithBorrows) {
@@ -143,18 +142,18 @@ const getUserBorrows = createHandler(UserDTOs.GetUserBorrowsContract,
         const response = {
             email: userWithBorrows.email,
             name: userWithBorrows.name,
-            activeBorrows: userWithBorrows.Borrow.map(borrow => ({
+            activeBorrows: userWithBorrows.Borrow.map((borrow) => ({
                 bookTitle: borrow.book.title,
                 due_date: borrow.due_date,
-                status: borrow.due_date > now ? 'On Time' as const : 'Overdue' as const
-            }))
-        }
+                status: borrow.due_date > now ? ('On Time' as const) : ('Overdue' as const),
+            })),
+        };
 
         return {
             data: response,
         };
     },
-)
+);
 
 export const UserController = {
     registerUser,
@@ -163,5 +162,5 @@ export const UserController = {
     getAllUsers,
     updateUser,
     deleteUser,
-    getUserBorrows
+    getUserBorrows,
 };

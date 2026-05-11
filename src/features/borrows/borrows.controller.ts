@@ -1,13 +1,14 @@
-import * as BorrowDTOs from './borrows.schemas.ts';
 import type { Request } from 'express';
-import { createHandler, createHandlerFactory } from '../../core/index.ts';
 import createHttpError from 'http-errors';
 import z from 'zod';
+import { createHandler, createHandlerFactory } from '../../core/index.ts';
 import { authenticateJwt } from '../../shared/auth-stuff.ts';
-import { BorrowsService } from './borrows.service.ts';
 import { BorrowRepository } from './borrows.repository.ts';
+import * as BorrowDTOs from './borrows.schemas.ts';
+import { BorrowsService } from './borrows.service.ts';
 
-const borrowBook = createHandler(BorrowDTOs.BorrowBookContract,
+const borrowBook = createHandler(
+    BorrowDTOs.BorrowBookContract,
     {
         access: 'protected', // This handler requires authentication
         security: {
@@ -15,7 +16,7 @@ const borrowBook = createHandler(BorrowDTOs.BorrowBookContract,
                 // This is a placeholder. In a real implementation, you'd verify a JWT or session.
                 const authHeader = req.headers.authorization;
                 console.log(authHeader);
-                if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                if (!authHeader?.startsWith('Bearer ')) {
                     return null;
                 }
                 const token = authHeader.split(' ')[1];
@@ -30,66 +31,71 @@ const borrowBook = createHandler(BorrowDTOs.BorrowBookContract,
             authSchema: z.object({
                 email: z.string().email(),
             }),
-        }
+        },
     },
     async (req, auth) => {
-        const { isbn } = req.params
+        const { isbn } = req.params;
         const user_email = auth.email;
 
         await BorrowsService.borrowBook(isbn, user_email);
 
         return {
             statusCode: 201,
-            data: 'Book borrowed successfully'
-        }
+            data: 'Book borrowed successfully',
+        };
     },
-)
+);
 
 const createProtectedHandler = createHandlerFactory({
     access: 'protected',
     security: {
         authenticate: authenticateJwt,
-        validateBeforeAuthorization: true
-    }
-})
+        validateBeforeAuthorization: true,
+    },
+});
 
-const returnBook = createProtectedHandler(BorrowDTOs.ReturnBookContract,
+const returnBook = createProtectedHandler(
+    BorrowDTOs.ReturnBookContract,
     {
         security: {
             authorize: async ({ req, auth }) => {
-                const existingBorrow = await BorrowRepository.getActiveBorrowByUserAndBook(auth.email, req.params.isbn);
+                const existingBorrow = await BorrowRepository.getActiveBorrowByUserAndBook(
+                    auth.email,
+                    req.params.isbn,
+                );
 
                 if (!existingBorrow) {
-                    throw new createHttpError.Forbidden('No active borrow record found for this user and book.');
+                    throw new createHttpError.Forbidden(
+                        'No active borrow record found for this user and book.',
+                    );
                 }
 
                 return true;
-            }
-        }
+            },
+        },
     },
     async (req, auth) => {
-        const { isbn } = req.params
+        const { isbn } = req.params;
         const user_email = auth.email;
 
         await BorrowsService.returnBook(isbn, user_email);
 
         return {
-            data: 'Book returned successfully'
-        }
+            data: 'Book returned successfully',
+        };
     },
-)
-
+);
 
 const getOverdueBooks = createProtectedHandler(BorrowDTOs.OverdueBooksContract, async (req) => {
     const { page, limit } = req.query;
 
     const overdueBorrows = await BorrowsService.getOverdueBooks(page, limit);
 
-    const response = overdueBorrows.map(borrow => ({
+    const response = overdueBorrows.map((borrow) => ({
         userEmail: borrow.user_email,
         bookTitle: borrow.book.title,
         dueDate: borrow.due_date,
-        bookIsbn: borrow.book_isbn
+        bookIsbn: borrow.book_isbn,
     }));
 
     return {
@@ -97,13 +103,13 @@ const getOverdueBooks = createProtectedHandler(BorrowDTOs.OverdueBooksContract, 
         pagination: {
             page,
             limit,
-            totalCount: 23, // This is a placeholder. 
-        }
-    }
-})
+            totalCount: 23, // This is a placeholder.
+        },
+    };
+});
 
 export const BorrowController = {
     borrowBook,
     returnBook,
-    getOverdueBooks
-} as const
+    getOverdueBooks,
+} as const;

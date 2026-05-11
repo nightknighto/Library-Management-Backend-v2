@@ -1,6 +1,5 @@
-import type { Request, Response, NextFunction } from "express";
-import createHttpError from "http-errors";
-import z, { ZodError } from "zod";
+import type { NextFunction, Request, Response } from 'express';
+import createHttpError from 'http-errors';
 
 type ErrorResponse = {
     success: false;
@@ -9,15 +8,20 @@ type ErrorResponse = {
         status: number;
         message: string;
         details?: any;
-    }
-}
+    };
+};
 
-export function globalErrorHandler(err: any, req: Request, res: Response<ErrorResponse>, next: NextFunction) {
+export function globalErrorHandler(
+    err: any,
+    req: Request,
+    res: Response<ErrorResponse>,
+    next: NextFunction,
+) {
     try {
         let statusCode = 500;
         let code = 'INTERNAL_SERVER_ERROR';
         let message = 'An unexpected error occurred';
-        let details: any = null;
+        const details: any = null;
 
         if (createHttpError.isHttpError(err)) {
             statusCode = err.statusCode;
@@ -32,8 +36,8 @@ export function globalErrorHandler(err: any, req: Request, res: Response<ErrorRe
             error: {
                 code,
                 message,
-                ...(details && { details })
-            }
+                ...(details && { details }),
+            },
         } satisfies ErrorResponse);
     } catch (handlerError) {
         console.error('Error in globalErrorHandler:', handlerError);
@@ -42,8 +46,8 @@ export function globalErrorHandler(err: any, req: Request, res: Response<ErrorRe
             error: {
                 code: 'INTERNAL_SERVER_ERROR',
                 status: 500,
-                message: 'An unexpected error occurred'
-            }
+                message: 'An unexpected error occurred',
+            },
         } satisfies ErrorResponse);
     }
 }

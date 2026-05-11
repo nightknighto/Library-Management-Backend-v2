@@ -1,11 +1,15 @@
-import type { Request, Response } from "express";
+import type { Request, Response } from 'express';
 import { json2csv } from 'json-2-csv';
-import { StatsService } from "./stats.service.ts";
+import { StatsService } from './stats.service.ts';
 
-async function getBorrowsStatistics(req: Request<{}, {}, {}, { from: string, format: 'json' | 'csv' }>, res: Response) {
+async function getBorrowsStatistics(
+    req: Request<{}, {}, {}, { from: string; format: 'json' | 'csv' }>,
+    res: Response,
+) {
     const query = req.query;
 
-    const from = query.from || new Date(new Date().setDate(new Date().getDate() - 30)).toISOString(); // default to last 30 days
+    const from =
+        query.from || new Date(new Date().setDate(new Date().getDate() - 30)).toISOString(); // default to last 30 days
     const format = query.format && query.format === 'csv' ? 'csv' : 'json';
 
     const borrows = await StatsService.borrowsMadeDailySince(new Date(from));
@@ -18,22 +22,25 @@ async function getBorrowsStatistics(req: Request<{}, {}, {}, { from: string, for
             borrows,
             returns,
             mostPopularBooks,
-            mostBorrowingUsers
+            mostBorrowingUsers,
         });
-        return
+        return;
     }
 
-    const csv = json2csv(borrows)
+    const csv = json2csv(borrows);
     res.header('Content-Type', 'text/csv');
     res.attachment('borrows.csv');
     res.send(csv);
 }
 
-async function getOverdueStatistics(req: Request<{}, {}, {}, { from: string, format: 'json' | 'csv' }>, res: Response) {
+async function getOverdueStatistics(
+    req: Request<{}, {}, {}, { from: string; format: 'json' | 'csv' }>,
+    res: Response,
+) {
     const query = req.query;
 
-
-    const from = query.from || new Date(new Date().setDate(new Date().getDate() - 30)).toISOString(); // default to last 30 days
+    const from =
+        query.from || new Date(new Date().setDate(new Date().getDate() - 30)).toISOString(); // default to last 30 days
     const format = query.format && query.format === 'csv' ? 'csv' : 'json';
 
     const overdue = await StatsService.overdueDailySince(new Date(from));
@@ -42,12 +49,12 @@ async function getOverdueStatistics(req: Request<{}, {}, {}, { from: string, for
     if (format === 'json') {
         res.json({
             overdue,
-            mostOverdueUsers
+            mostOverdueUsers,
         });
-        return
+        return;
     }
 
-    const csv = json2csv(overdue)
+    const csv = json2csv(overdue);
     res.header('Content-Type', 'text/csv');
     res.attachment('overdue.csv');
     res.send(csv);
@@ -55,5 +62,5 @@ async function getOverdueStatistics(req: Request<{}, {}, {}, { from: string, for
 
 export const StatsController = {
     getBorrowsStatistics,
-    getOverdueStatistics
+    getOverdueStatistics,
 } as const;

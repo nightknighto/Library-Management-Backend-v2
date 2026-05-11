@@ -1,45 +1,28 @@
-import { Router } from "express";
-import * as UserDTOs from "./users.schemas.ts";
-import { UserController } from "./users.controller.ts";
-import { rateLimiter } from "../../shared/middlewares/rate-limiter.middleware.ts";
-import { validateRequest } from "../../shared/middlewares/validators.middleware.ts";
+import { Router } from 'express';
+import { rateLimiter } from '../../shared/middlewares/rate-limiter.middleware.ts';
+import { UserController } from './users.controller.ts';
 
 const usersRoutes = Router();
 
 // POST /users/register - Register a new user
-usersRoutes.post('/register',
-    UserController.registerUser
-);
+usersRoutes.post('/register', UserController.registerUser);
 
 // POST /users/login - Login user
-usersRoutes.post('/login',
-    UserController.loginUser
-);
+usersRoutes.post('/login', UserController.loginUser);
 
 // POST /users/logout - Logout user
-usersRoutes.post('/logout',
-    UserController.logout
-);
+usersRoutes.post('/logout', UserController.logout);
 
 // GET /users - Get all users with pagination
-usersRoutes.get('/',
-    UserController.getAllUsers as any
-);
+usersRoutes.get('/', UserController.getAllUsers as any);
 
 // PUT /users - Update current user (requires authentication)
-usersRoutes.put('/',
-    rateLimiter(1000, 3),
-    UserController.updateUser
-);
+usersRoutes.put('/', rateLimiter(1000, 3), UserController.updateUser);
 
 // DELETE /users/:email - Delete a user by email
-usersRoutes.delete('/:email',
-    UserController.deleteUser
-);
+usersRoutes.delete('/:email', UserController.deleteUser);
 
 // GET /users/borrows - Get current user's borrows (requires authentication)
-usersRoutes.get('/borrows',
-    UserController.getUserBorrows
-);
+usersRoutes.get('/borrows', UserController.getUserBorrows);
 
 export default usersRoutes;

@@ -15,25 +15,25 @@
  * This file is compile-only and validated by `pnpm check`.
  */
 
-import createHttpError from "http-errors";
-import { z } from "zod";
+import createHttpError from 'http-errors';
+import { z } from 'zod';
 import {
+    type AfterAuthorizationRequest,
+    createContract,
     createHandler,
     createHandlerFactory,
-    type AfterAuthorizationRequest,
-} from "../index.ts";
-import { createContract } from "../index.ts";
-import type { Equal, Expect, Extends } from "./type-test.utils.ts";
+} from '../index.ts';
+import type { Equal, Expect, Extends } from './type-test.utils.ts';
 
 type ScopedAuthContext = {
     userId: string;
-    role: "staff" | "member";
+    role: 'staff' | 'member';
     scopes: string[];
 };
 
 const ScopedAuthSchema = z.object({
     userId: z.string(),
-    role: z.enum(["staff", "member"]),
+    role: z.enum(['staff', 'member']),
     scopes: z.array(z.string()),
 });
 
@@ -64,21 +64,18 @@ const UpdateBookContract = createContract({
 });
 
 type _afterAuthorizationRequestBody = Expect<
-    Equal<
-        AfterAuthorizationRequest<typeof UpdateBookContract>["body"],
-        { title: string }
-    >
+    Equal<AfterAuthorizationRequest<typeof UpdateBookContract>['body'], { title: string }>
 >;
 
 createHandler(
     SearchBooksContract,
     {
-        access: "protected",
+        access: 'protected',
         security: {
             authenticate: async () => ({
-                userId: "u-10",
-                role: "staff" as const,
-                scopes: ["books:read"],
+                userId: 'u-10',
+                role: 'staff' as const,
+                scopes: ['books:read'],
             }),
             authSchema: ScopedAuthSchema,
             validateBeforeAuthorization: true,
@@ -88,19 +85,19 @@ createHandler(
                         Extends<typeof req.query, { q: string; page: number; limit: number }>
                     >;
                     type _auth = Expect<Extends<typeof auth, ScopedAuthContext>>;
-                    return auth.scopes.includes("books:read") && req.query.limit <= 50;
+                    return auth.scopes.includes('books:read') && req.query.limit <= 50;
                 },
-                async ({ auth }) => auth.role === "staff",
+                async ({ auth }) => auth.role === 'staff',
             ],
         },
         errors: {
-            unauthorized: () => new createHttpError.Forbidden("Forbidden"),
+            unauthorized: () => new createHttpError.Forbidden('Forbidden'),
         },
     },
     async (_req, auth) => {
         type _auth = Expect<Extends<typeof auth, ScopedAuthContext>>;
         return {
-            data: ["book-1"],
+            data: ['book-1'],
             pagination: {
                 totalCount: 1,
                 page: 1,
@@ -112,7 +109,7 @@ createHandler(
 
 createHandler(SearchBooksContract, async (_req) => ({
     statusCode: 206,
-    data: ["book-1"],
+    data: ['book-1'],
     pagination: {
         totalCount: 1,
         page: 1,
@@ -120,9 +117,9 @@ createHandler(SearchBooksContract, async (_req) => ({
     },
     cookies: [
         {
-            action: "set",
-            name: "result-token",
-            value: "partial",
+            action: 'set',
+            name: 'result-token',
+            value: 'partial',
             options: { httpOnly: true },
         },
     ],
@@ -131,18 +128,18 @@ createHandler(SearchBooksContract, async (_req) => ({
 createHandler(
     UpdateBookContract,
     {
-        access: "optional",
+        access: 'optional',
         security: {
             authenticate: async () => ({
-                userId: "u-11",
-                role: "member" as const,
-                scopes: ["books:write"],
+                userId: 'u-11',
+                role: 'member' as const,
+                scopes: ['books:write'],
             }),
             authSchema: ScopedAuthSchema,
-            authorize: async ({ auth }) => auth.scopes.includes("books:write"),
+            authorize: async ({ auth }) => auth.scopes.includes('books:write'),
         },
         errors: {
-            unauthenticated: () => new createHttpError.Unauthorized("Unauthorized"),
+            unauthenticated: () => new createHttpError.Unauthorized('Unauthorized'),
         },
     },
     async (_req, auth) => {
@@ -155,12 +152,12 @@ createHandler(
 createHandler(
     UpdateBookContract,
     {
-        access: "protected",
+        access: 'protected',
         security: {
             authenticate: async () => ({
-                userId: "u-11b",
-                role: "staff" as ScopedAuthContext["role"],
-                scopes: ["books:write"],
+                userId: 'u-11b',
+                role: 'staff' as ScopedAuthContext['role'],
+                scopes: ['books:write'],
             }),
             authSchema: ScopedAuthSchema,
             validateBeforeAuthorization: true,
@@ -169,17 +166,17 @@ createHandler(
     // @ts-expect-error interaction: protected/authSchema handlers reject unknown top-level result keys
     async (_req, _auth) => ({
         data: { updated: true },
-        metax: { traceId: "trace-1" },
+        metax: { traceId: 'trace-1' },
     }),
 );
 
 const protectedFactory = createHandlerFactory<ScopedAuthContext>({
-    access: "protected",
+    access: 'protected',
     security: {
         authenticate: async () => ({
-            userId: "u-12",
-            role: "staff" as const,
-            scopes: ["books:write"],
+            userId: 'u-12',
+            role: 'staff' as const,
+            scopes: ['books:write'],
         }),
         authSchema: ScopedAuthSchema,
     },
@@ -188,13 +185,13 @@ const protectedFactory = createHandlerFactory<ScopedAuthContext>({
 protectedFactory(
     UpdateBookContract,
     {
-        access: "protected",
+        access: 'protected',
         security: {
             validateBeforeAuthorization: true,
             authorize: async ({ req, auth }) => {
                 type _body = Expect<Equal<typeof req.body, { title: string }>>;
                 type _auth = Expect<Extends<typeof auth, ScopedAuthContext>>;
-                return auth.role === "staff" && req.body.title.length > 0;
+                return auth.role === 'staff' && req.body.title.length > 0;
             },
         },
     },
@@ -208,9 +205,9 @@ protectedFactory(
     UpdateBookContract,
     // @ts-expect-error interaction: overriding protected factory call to public must reject security options
     {
-        access: "public",
+        access: 'public',
         security: {
-            authorize: async ({ auth }) => auth.role === "staff",
+            authorize: async ({ auth }) => auth.role === 'staff',
         },
     },
     async (_req) => ({ data: { updated: true } }),

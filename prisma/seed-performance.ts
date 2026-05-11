@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -8,71 +8,344 @@ const CONFIG = {
     USERS_COUNT: 75_000,
     BORROWS_COUNT: 750_000,
     BATCH_SIZE: 1000, // Records per batch for bulk inserts
-    PROGRESS_INTERVAL: 5000 // Show progress every N records
+    PROGRESS_INTERVAL: 5000, // Show progress every N records
 };
 
 // Data generators for realistic fake data
 class DataGenerator {
     private static bookTitles = [
-        "The Art of", "Understanding", "Mastering", "Introduction to", "Advanced", "Fundamentals of",
-        "Complete Guide to", "Modern", "Classical", "Contemporary", "Essential", "Comprehensive",
-        "Practical", "Theoretical", "Applied", "Digital", "Analog", "The Science of", "The History of",
-        "Handbook of", "Manual of", "Principles of", "Techniques in", "Methods for", "Strategies for"
+        'The Art of',
+        'Understanding',
+        'Mastering',
+        'Introduction to',
+        'Advanced',
+        'Fundamentals of',
+        'Complete Guide to',
+        'Modern',
+        'Classical',
+        'Contemporary',
+        'Essential',
+        'Comprehensive',
+        'Practical',
+        'Theoretical',
+        'Applied',
+        'Digital',
+        'Analog',
+        'The Science of',
+        'The History of',
+        'Handbook of',
+        'Manual of',
+        'Principles of',
+        'Techniques in',
+        'Methods for',
+        'Strategies for',
     ];
 
     private static bookSubjects = [
-        "Programming", "Mathematics", "Physics", "Chemistry", "Biology", "Literature", "History",
-        "Philosophy", "Psychology", "Sociology", "Anthropology", "Economics", "Political Science",
-        "Computer Science", "Engineering", "Medicine", "Law", "Business", "Art", "Music", "Theatre",
-        "Film Studies", "Architecture", "Geography", "Linguistics", "Education", "Journalism",
-        "Astronomy", "Geology", "Botany", "Zoology", "Statistics", "Data Science", "Machine Learning",
-        "Artificial Intelligence", "Cybersecurity", "Web Development", "Mobile Development", "Design",
-        "Marketing", "Finance", "Accounting", "Management", "Entrepreneurship", "Innovation"
+        'Programming',
+        'Mathematics',
+        'Physics',
+        'Chemistry',
+        'Biology',
+        'Literature',
+        'History',
+        'Philosophy',
+        'Psychology',
+        'Sociology',
+        'Anthropology',
+        'Economics',
+        'Political Science',
+        'Computer Science',
+        'Engineering',
+        'Medicine',
+        'Law',
+        'Business',
+        'Art',
+        'Music',
+        'Theatre',
+        'Film Studies',
+        'Architecture',
+        'Geography',
+        'Linguistics',
+        'Education',
+        'Journalism',
+        'Astronomy',
+        'Geology',
+        'Botany',
+        'Zoology',
+        'Statistics',
+        'Data Science',
+        'Machine Learning',
+        'Artificial Intelligence',
+        'Cybersecurity',
+        'Web Development',
+        'Mobile Development',
+        'Design',
+        'Marketing',
+        'Finance',
+        'Accounting',
+        'Management',
+        'Entrepreneurship',
+        'Innovation',
     ];
 
     private static authorFirstNames = [
-        "James", "Mary", "Robert", "Patricia", "John", "Jennifer", "Michael", "Linda", "William", "Elizabeth",
-        "David", "Barbara", "Richard", "Susan", "Joseph", "Jessica", "Thomas", "Sarah", "Christopher", "Karen",
-        "Charles", "Nancy", "Daniel", "Lisa", "Matthew", "Betty", "Anthony", "Helen", "Mark", "Sandra",
-        "Donald", "Donna", "Steven", "Carol", "Paul", "Ruth", "Andrew", "Sharon", "Joshua", "Michelle",
-        "Kenneth", "Laura", "Kevin", "Sarah", "Brian", "Kimberly", "George", "Deborah", "Timothy", "Dorothy",
-        "Ronald", "Lisa", "Jason", "Nancy", "Edward", "Karen", "Jeffrey", "Betty", "Ryan", "Helen",
-        "Jacob", "Sandra", "Gary", "Donna", "Nicholas", "Carol", "Eric", "Ruth", "Jonathan", "Sharon"
+        'James',
+        'Mary',
+        'Robert',
+        'Patricia',
+        'John',
+        'Jennifer',
+        'Michael',
+        'Linda',
+        'William',
+        'Elizabeth',
+        'David',
+        'Barbara',
+        'Richard',
+        'Susan',
+        'Joseph',
+        'Jessica',
+        'Thomas',
+        'Sarah',
+        'Christopher',
+        'Karen',
+        'Charles',
+        'Nancy',
+        'Daniel',
+        'Lisa',
+        'Matthew',
+        'Betty',
+        'Anthony',
+        'Helen',
+        'Mark',
+        'Sandra',
+        'Donald',
+        'Donna',
+        'Steven',
+        'Carol',
+        'Paul',
+        'Ruth',
+        'Andrew',
+        'Sharon',
+        'Joshua',
+        'Michelle',
+        'Kenneth',
+        'Laura',
+        'Kevin',
+        'Sarah',
+        'Brian',
+        'Kimberly',
+        'George',
+        'Deborah',
+        'Timothy',
+        'Dorothy',
+        'Ronald',
+        'Lisa',
+        'Jason',
+        'Nancy',
+        'Edward',
+        'Karen',
+        'Jeffrey',
+        'Betty',
+        'Ryan',
+        'Helen',
+        'Jacob',
+        'Sandra',
+        'Gary',
+        'Donna',
+        'Nicholas',
+        'Carol',
+        'Eric',
+        'Ruth',
+        'Jonathan',
+        'Sharon',
     ];
 
     private static authorLastNames = [
-        "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez",
-        "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin",
-        "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson",
-        "Walker", "Young", "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores",
-        "Green", "Adams", "Nelson", "Baker", "Hall", "Rivera", "Campbell", "Mitchell", "Carter", "Roberts",
-        "Gomez", "Phillips", "Evans", "Turner", "Diaz", "Parker", "Cruz", "Edwards", "Collins", "Reyes"
+        'Smith',
+        'Johnson',
+        'Williams',
+        'Brown',
+        'Jones',
+        'Garcia',
+        'Miller',
+        'Davis',
+        'Rodriguez',
+        'Martinez',
+        'Hernandez',
+        'Lopez',
+        'Gonzalez',
+        'Wilson',
+        'Anderson',
+        'Thomas',
+        'Taylor',
+        'Moore',
+        'Jackson',
+        'Martin',
+        'Lee',
+        'Perez',
+        'Thompson',
+        'White',
+        'Harris',
+        'Sanchez',
+        'Clark',
+        'Ramirez',
+        'Lewis',
+        'Robinson',
+        'Walker',
+        'Young',
+        'Allen',
+        'King',
+        'Wright',
+        'Scott',
+        'Torres',
+        'Nguyen',
+        'Hill',
+        'Flores',
+        'Green',
+        'Adams',
+        'Nelson',
+        'Baker',
+        'Hall',
+        'Rivera',
+        'Campbell',
+        'Mitchell',
+        'Carter',
+        'Roberts',
+        'Gomez',
+        'Phillips',
+        'Evans',
+        'Turner',
+        'Diaz',
+        'Parker',
+        'Cruz',
+        'Edwards',
+        'Collins',
+        'Reyes',
     ];
 
     private static userFirstNames = [
-        "Alex", "Jamie", "Taylor", "Jordan", "Casey", "Riley", "Morgan", "Avery", "Quinn", "Sage",
-        "River", "Phoenix", "Skylar", "Cameron", "Drew", "Blake", "Emery", "Finley", "Hayden", "Indigo",
-        "Kai", "Lane", "Max", "Nova", "Ocean", "Parker", "Raven", "Shay", "Tatum", "Urban",
-        "Valentina", "Winter", "Xenon", "Yale", "Zara", "Aaron", "Bella", "Caleb", "Diana", "Ethan",
-        "Fiona", "Gabriel", "Hannah", "Isaac", "Julia", "Kevin", "Luna", "Mason", "Nora", "Oliver"
+        'Alex',
+        'Jamie',
+        'Taylor',
+        'Jordan',
+        'Casey',
+        'Riley',
+        'Morgan',
+        'Avery',
+        'Quinn',
+        'Sage',
+        'River',
+        'Phoenix',
+        'Skylar',
+        'Cameron',
+        'Drew',
+        'Blake',
+        'Emery',
+        'Finley',
+        'Hayden',
+        'Indigo',
+        'Kai',
+        'Lane',
+        'Max',
+        'Nova',
+        'Ocean',
+        'Parker',
+        'Raven',
+        'Shay',
+        'Tatum',
+        'Urban',
+        'Valentina',
+        'Winter',
+        'Xenon',
+        'Yale',
+        'Zara',
+        'Aaron',
+        'Bella',
+        'Caleb',
+        'Diana',
+        'Ethan',
+        'Fiona',
+        'Gabriel',
+        'Hannah',
+        'Isaac',
+        'Julia',
+        'Kevin',
+        'Luna',
+        'Mason',
+        'Nora',
+        'Oliver',
     ];
 
     private static userLastNames = [
-        "Anderson", "Brown", "Chen", "Davis", "Edwards", "Foster", "Garcia", "Harris", "Ibrahim", "Jackson",
-        "Kumar", "Lopez", "Martinez", "Nielsen", "O'Connor", "Patel", "Quinn", "Rodriguez", "Singh", "Taylor",
-        "Upton", "Vasquez", "Wang", "Xavier", "Young", "Zhang", "Abbott", "Bell", "Cooper", "Dixon",
-        "Ellis", "Fletcher", "Grant", "Hughes", "Ivanov", "Jenkins", "Kelly", "Lawrence", "Murphy", "Nash"
+        'Anderson',
+        'Brown',
+        'Chen',
+        'Davis',
+        'Edwards',
+        'Foster',
+        'Garcia',
+        'Harris',
+        'Ibrahim',
+        'Jackson',
+        'Kumar',
+        'Lopez',
+        'Martinez',
+        'Nielsen',
+        "O'Connor",
+        'Patel',
+        'Quinn',
+        'Rodriguez',
+        'Singh',
+        'Taylor',
+        'Upton',
+        'Vasquez',
+        'Wang',
+        'Xavier',
+        'Young',
+        'Zhang',
+        'Abbott',
+        'Bell',
+        'Cooper',
+        'Dixon',
+        'Ellis',
+        'Fletcher',
+        'Grant',
+        'Hughes',
+        'Ivanov',
+        'Jenkins',
+        'Kelly',
+        'Lawrence',
+        'Murphy',
+        'Nash',
     ];
 
     private static domains = [
-        "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "email.com", "mail.com", "inbox.com",
-        "company.com", "business.org", "university.edu", "school.edu", "institute.org", "research.org",
-        "tech.com", "startup.io", "consulting.biz", "enterprise.net", "solutions.com", "services.org"
+        'gmail.com',
+        'yahoo.com',
+        'hotmail.com',
+        'outlook.com',
+        'email.com',
+        'mail.com',
+        'inbox.com',
+        'company.com',
+        'business.org',
+        'university.edu',
+        'school.edu',
+        'institute.org',
+        'research.org',
+        'tech.com',
+        'startup.io',
+        'consulting.biz',
+        'enterprise.net',
+        'solutions.com',
+        'services.org',
     ];
 
     static generateISBN(): string {
         // Generate a valid-looking ISBN-13
-        const prefix = "978";
+        const prefix = '978';
         const group = Math.floor(Math.random() * 10);
         const publisher = String(Math.floor(Math.random() * 99999)).padStart(5, '0');
         const title = String(Math.floor(Math.random() * 999)).padStart(3, '0');
@@ -82,13 +355,24 @@ class DataGenerator {
     }
 
     static generateBookTitle(): string {
-        const prefix = this.bookTitles[Math.floor(Math.random() * this.bookTitles.length)];
-        const subject = this.bookSubjects[Math.floor(Math.random() * this.bookSubjects.length)];
+        const prefix =
+            DataGenerator.bookTitles[Math.floor(Math.random() * DataGenerator.bookTitles.length)];
+        const subject =
+            DataGenerator.bookSubjects[
+                Math.floor(Math.random() * DataGenerator.bookSubjects.length)
+            ];
 
         // Sometimes add edition/volume info
         const addExtra = Math.random() < 0.3;
         if (addExtra) {
-            const extras = ["2nd Edition", "3rd Edition", "Volume I", "Volume II", "Revised Edition", "Updated Edition"];
+            const extras = [
+                '2nd Edition',
+                '3rd Edition',
+                'Volume I',
+                'Volume II',
+                'Revised Edition',
+                'Updated Edition',
+            ];
             const extra = extras[Math.floor(Math.random() * extras.length)];
             return `${prefix} ${subject} - ${extra}`;
         }
@@ -97,8 +381,14 @@ class DataGenerator {
     }
 
     static generateAuthorName(): string {
-        const firstName = this.authorFirstNames[Math.floor(Math.random() * this.authorFirstNames.length)];
-        const lastName = this.authorLastNames[Math.floor(Math.random() * this.authorLastNames.length)];
+        const firstName =
+            DataGenerator.authorFirstNames[
+                Math.floor(Math.random() * DataGenerator.authorFirstNames.length)
+            ];
+        const lastName =
+            DataGenerator.authorLastNames[
+                Math.floor(Math.random() * DataGenerator.authorLastNames.length)
+            ];
 
         // Sometimes add middle initial
         const addMiddle = Math.random() < 0.4;
@@ -114,20 +404,31 @@ class DataGenerator {
         // Generate shelf codes like A1, B2, C3, etc.
         const section = String.fromCharCode(65 + Math.floor(Math.random() * 26)); // A-Z
         const number = Math.floor(Math.random() * 50) + 1; // 1-50
-        const subsection = Math.random() < 0.5 ? String.fromCharCode(65 + Math.floor(Math.random() * 10)) : ''; // Sometimes add A-J
+        const subsection =
+            Math.random() < 0.5 ? String.fromCharCode(65 + Math.floor(Math.random() * 10)) : ''; // Sometimes add A-J
 
         return `${section}${number}${subsection}`;
     }
 
     static generateUserName(): string {
-        const firstName = this.userFirstNames[Math.floor(Math.random() * this.userFirstNames.length)];
-        const lastName = this.userLastNames[Math.floor(Math.random() * this.userLastNames.length)];
+        const firstName =
+            DataGenerator.userFirstNames[
+                Math.floor(Math.random() * DataGenerator.userFirstNames.length)
+            ];
+        const lastName =
+            DataGenerator.userLastNames[
+                Math.floor(Math.random() * DataGenerator.userLastNames.length)
+            ];
         return `${firstName} ${lastName}`;
     }
 
     static generateEmail(name: string, index: number): string {
-        const cleanName = name.toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, '.');
-        const domain = this.domains[Math.floor(Math.random() * this.domains.length)];
+        const cleanName = name
+            .toLowerCase()
+            .replace(/[^a-z\s]/g, '')
+            .replace(/\s+/g, '.');
+        const domain =
+            DataGenerator.domains[Math.floor(Math.random() * DataGenerator.domains.length)];
 
         // Add number suffix to ensure uniqueness
         const suffix = Math.floor(index / 1000) > 0 ? Math.floor(index / 1000) : '';
@@ -177,7 +478,7 @@ async function seedBooksInBatches(totalBooks: number) {
                 title: DataGenerator.generateBookTitle(),
                 author: DataGenerator.generateAuthorName(),
                 shelf: DataGenerator.generateShelf(),
-                total_quantity: DataGenerator.generateQuantity()
+                total_quantity: DataGenerator.generateQuantity(),
             });
         }
 
@@ -223,7 +524,7 @@ async function seedUsersInBatches(totalUsers: number) {
             usersData.push({
                 email,
                 name,
-                registered_at: DataGenerator.generateRandomDate(startDate, endDate)
+                registered_at: DataGenerator.generateRandomDate(startDate, endDate),
             });
         }
 
@@ -244,12 +545,12 @@ async function seedBorrowsInBatches(totalBorrows: number) {
     console.log(`\n📖 Generating ${totalBorrows} borrow records...`);
 
     // Get all user emails and book ISBNs for random selection
-    console.log("📋 Fetching users and books for borrow generation...");
+    console.log('📋 Fetching users and books for borrow generation...');
     const users = await prisma.user.findMany({ select: { email: true } });
     const books = await prisma.book.findMany({ select: { isbn: true } });
 
     if (users.length === 0 || books.length === 0) {
-        throw new Error("Cannot create borrows: No users or books found in database");
+        throw new Error('Cannot create borrows: No users or books found in database');
     }
 
     console.log(`Found ${users.length} users and ${books.length} books`);
@@ -274,8 +575,10 @@ async function seedBorrowsInBatches(totalBorrows: number) {
             const user = users[userIndex];
             const book = books[bookIndex];
 
-            if (!user || !book) {
-                console.warn(`Skipping borrow creation: user or book not found at indices ${userIndex}, ${bookIndex}`);
+            if (!(user && book)) {
+                console.warn(
+                    `Skipping borrow creation: user or book not found at indices ${userIndex}, ${bookIndex}`,
+                );
                 continue;
             }
 
@@ -290,7 +593,8 @@ async function seedBorrowsInBatches(totalBorrows: number) {
             const borrowScenario = Math.random();
             let returnDate: Date | null = null;
 
-            if (borrowScenario < 0.7) { // 70% of borrows are returned
+            if (borrowScenario < 0.7) {
+                // 70% of borrows are returned
                 if (borrowScenario < 0.5) {
                     // 50% returned on time (before due date)
                     const maxReturnDate = new Date(Math.min(dueDate.getTime(), now.getTime()));
@@ -298,7 +602,9 @@ async function seedBorrowsInBatches(totalBorrows: number) {
                 } else {
                     // 20% returned late (after due date but before now)
                     const minReturnDate = dueDate;
-                    const maxReturnDate = new Date(Math.min(dueDate.getTime() + (15 * 24 * 60 * 60 * 1000), now.getTime())); // Up to 15 days late
+                    const maxReturnDate = new Date(
+                        Math.min(dueDate.getTime() + 15 * 24 * 60 * 60 * 1000, now.getTime()),
+                    ); // Up to 15 days late
                     if (maxReturnDate > minReturnDate) {
                         returnDate = DataGenerator.generateRandomDate(minReturnDate, maxReturnDate);
                     } else {
@@ -313,7 +619,7 @@ async function seedBorrowsInBatches(totalBorrows: number) {
                 user_email: user.email,
                 book_isbn: book.isbn,
                 borrow_date: borrowDate,
-                due_date: dueDate
+                due_date: dueDate,
             };
 
             if (returnDate) {
@@ -340,15 +646,17 @@ async function main() {
     const startTime = Date.now();
 
     try {
-        console.log("🚀 Starting PERFORMANCE database seeding...");
-        console.log(`📊 Target: ${CONFIG.BOOKS_COUNT} books, ${CONFIG.USERS_COUNT} users, ${CONFIG.BORROWS_COUNT} borrows`);
+        console.log('🚀 Starting PERFORMANCE database seeding...');
+        console.log(
+            `📊 Target: ${CONFIG.BOOKS_COUNT} books, ${CONFIG.USERS_COUNT} users, ${CONFIG.BORROWS_COUNT} borrows`,
+        );
 
         // Clear existing data
-        console.log("\n🧹 Clearing existing data...");
+        console.log('\n🧹 Clearing existing data...');
         await prisma.borrow.deleteMany();
         await prisma.user.deleteMany();
         await prisma.book.deleteMany();
-        console.log("✅ Database cleared successfully!");
+        console.log('✅ Database cleared successfully!');
 
         // Seed in optimal order (Books → Users → Borrows)
         await seedBooksInBatches(CONFIG.BOOKS_COUNT);
@@ -359,22 +667,31 @@ async function main() {
         const endTime = Date.now();
         const duration = (endTime - startTime) / 1000; // seconds
 
-        console.log("\n🎉 PERFORMANCE seeding completed successfully!");
+        console.log('\n🎉 PERFORMANCE seeding completed successfully!');
         console.log(`⏱️  Total time: ${duration.toFixed(2)} seconds`);
-        console.log(`🚀 Records per second: ${((CONFIG.BOOKS_COUNT + CONFIG.USERS_COUNT + CONFIG.BORROWS_COUNT) / duration).toFixed(0)}`);
+        console.log(
+            `🚀 Records per second: ${((CONFIG.BOOKS_COUNT + CONFIG.USERS_COUNT + CONFIG.BORROWS_COUNT) / duration).toFixed(0)}`,
+        );
 
         // Final database statistics
-        console.log("\n📊 Final Database Statistics:");
+        console.log('\n📊 Final Database Statistics:');
         const finalStats = await Promise.all([
             prisma.book.count(),
             prisma.user.count(),
             prisma.borrow.count(),
             prisma.borrow.count({ where: { return_date: null } }),
             prisma.borrow.count({ where: { return_date: null, due_date: { lt: new Date() } } }),
-            prisma.borrow.count({ where: { return_date: { not: null } } })
+            prisma.borrow.count({ where: { return_date: { not: null } } }),
         ]);
 
-        const [totalBooks, totalUsers, totalBorrows, activeBorrows, overdueBorrows, returnedBorrows] = finalStats;
+        const [
+            totalBooks,
+            totalUsers,
+            totalBorrows,
+            activeBorrows,
+            overdueBorrows,
+            returnedBorrows,
+        ] = finalStats;
 
         console.log(`📚 Total Books: ${totalBooks}`);
         console.log(`👥 Total Users: ${totalUsers}`);
@@ -384,12 +701,13 @@ async function main() {
         console.log(`✅ Returned Borrows: ${returnedBorrows}`);
 
         // Database size estimation
-        const estimatedSizeMB = Math.round(((totalBooks * 0.2) + (totalUsers * 0.1) + (totalBorrows * 0.15)) * 1024) / 1024;
+        const estimatedSizeMB =
+            Math.round((totalBooks * 0.2 + totalUsers * 0.1 + totalBorrows * 0.15) * 1024) / 1024;
         console.log(`💾 Estimated DB size: ~${estimatedSizeMB.toFixed(1)} MB`);
 
-        console.log("\n🎯 Performance testing data ready!");
+        console.log('\n🎯 Performance testing data ready!');
     } catch (error) {
-        console.error("❌ Error during performance seeding:", error);
+        console.error('❌ Error during performance seeding:', error);
         throw error;
     } finally {
         await prisma.$disconnect();

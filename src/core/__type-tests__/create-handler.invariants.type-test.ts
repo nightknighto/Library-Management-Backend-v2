@@ -1,17 +1,11 @@
-import { z } from "zod";
+import { z } from 'zod';
 import {
-    createHandler,
     type AfterAuthorizationRequest,
+    createContract,
+    createHandler,
     type HandlerRequest,
-} from "../index.ts";
-import { createContract } from "../index.ts";
-import type {
-    Equal,
-    Expect,
-    ExpectFalse,
-    Extends,
-    IsAny,
-} from "./type-test.utils.ts";
+} from '../index.ts';
+import type { Equal, Expect, ExpectFalse, Extends, IsAny } from './type-test.utils.ts';
 
 /**
  * HUMAN GUIDE - Invariant lane
@@ -52,38 +46,31 @@ const UpdateBookContract = createContract({
 });
 
 type UpdateBookHandlerRequest = HandlerRequest<typeof UpdateBookContract>;
-type UpdateBookAfterAuthorizationRequest =
-    AfterAuthorizationRequest<typeof UpdateBookContract>;
+type UpdateBookAfterAuthorizationRequest = AfterAuthorizationRequest<typeof UpdateBookContract>;
 
-type _handlerReqBodyNotAny = ExpectFalse<IsAny<UpdateBookHandlerRequest["body"]>>;
-type _handlerReqBodyExact = Expect<
-    Equal<UpdateBookHandlerRequest["body"], { title: string }>
->;
-type _handlerReqParamsExact = Expect<
-    Equal<UpdateBookHandlerRequest["params"], { isbn: string }>
->;
-type _handlerReqQueryExact = Expect<
-    Equal<UpdateBookHandlerRequest["query"], { dryRun: boolean }>
->;
+type _handlerReqBodyNotAny = ExpectFalse<IsAny<UpdateBookHandlerRequest['body']>>;
+type _handlerReqBodyExact = Expect<Equal<UpdateBookHandlerRequest['body'], { title: string }>>;
+type _handlerReqParamsExact = Expect<Equal<UpdateBookHandlerRequest['params'], { isbn: string }>>;
+type _handlerReqQueryExact = Expect<Equal<UpdateBookHandlerRequest['query'], { dryRun: boolean }>>;
 
 type _afterAuthReqBodyExact = Expect<
-    Equal<UpdateBookAfterAuthorizationRequest["body"], { title: string }>
+    Equal<UpdateBookAfterAuthorizationRequest['body'], { title: string }>
 >;
 
 type _afterAuthReqParamsExact = Expect<
-    Extends<UpdateBookAfterAuthorizationRequest["params"], { isbn: string }>
+    Extends<UpdateBookAfterAuthorizationRequest['params'], { isbn: string }>
 >;
 
 type _afterAuthReqQueryExact = Expect<
-    Extends<UpdateBookAfterAuthorizationRequest["query"], { dryRun: boolean }>
+    Extends<UpdateBookAfterAuthorizationRequest['query'], { dryRun: boolean }>
 >;
 
 createHandler(
     UpdateBookContract,
     {
-        access: "optional",
+        access: 'optional',
         security: {
-            authenticate: async () => ({ userId: "user-optional" }),
+            authenticate: async () => ({ userId: 'user-optional' }),
         },
     },
     async (_req, auth) => {
@@ -96,9 +83,9 @@ createHandler(
 createHandler(
     UpdateBookContract,
     {
-        access: "protected",
+        access: 'protected',
         security: {
-            authenticate: async () => ({ userId: "user-protected" }),
+            authenticate: async () => ({ userId: 'user-protected' }),
         },
     },
     async (_req, auth) => {

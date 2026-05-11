@@ -1,18 +1,22 @@
-import * as BookDTOs from './books.schemas.ts';
 import createHttpError from 'http-errors';
+import { type AfterAuthorizationRequest, allOf, anyOf, createHandler } from '../../core/index.ts';
 import {
-    type AfterAuthorizationRequest,
-    allOf,
-    anyOf,
-    createHandler,
-    not,
-} from '../../core/index.ts';
+    authenticateJwt,
+    createJwtAuthHandler,
+    deleteBookPolicy,
+    editsOwnAuthorName,
+    hasRegisteredUser,
+    hasWriteAccessHeader,
+    isLibraryStaff,
+    type JwtAuthContext,
+    JwtAuthSchema,
+} from '../../shared/auth-stuff.ts';
 import { UserRepository } from '../users/users.repository.ts';
-import { type JwtAuthContext, authenticateJwt, JwtAuthSchema, hasRegisteredUser, isLibraryStaff, hasWriteAccessHeader, editsOwnAuthorName, isSystemReservedBook, createJwtAuthHandler, deleteBookPolicy } from '../../shared/auth-stuff.ts';
-import z from 'zod';
+import * as BookDTOs from './books.schemas.ts';
 import { BookService } from './books.service.ts';
 
-const createBook = createJwtAuthHandler(BookDTOs.CreateBookContract,
+const createBook = createJwtAuthHandler(
+    BookDTOs.CreateBookContract,
     {
         security: {
             // Example 1: allOf + anyOf
@@ -30,7 +34,7 @@ const createBook = createJwtAuthHandler(BookDTOs.CreateBookContract,
                     isLibraryStaff,
                     hasWriteAccessHeader,
                     async ({ auth, req }) => {
-                        return true
+                        return true;
                     },
                 ]),
             ]),
@@ -90,7 +94,8 @@ const getAllBooks = createHandler(
     },
 );
 
-const getBookByIsbn = createJwtAuthHandler(BookDTOs.GetBookContract,
+const getBookByIsbn = createJwtAuthHandler(
+    BookDTOs.GetBookContract,
     {
         access: 'optional',
     },
@@ -101,7 +106,7 @@ const getBookByIsbn = createJwtAuthHandler(BookDTOs.GetBookContract,
 
         return { data: book };
     },
-)
+);
 
 const updateBook = createJwtAuthHandler(
     BookDTOs.UpdateBookContract,
@@ -111,10 +116,7 @@ const updateBook = createJwtAuthHandler(
         // Example 2: anyOf
         // Either staff users can edit, or users can edit when payload "author" matches their email handle.
         security: {
-            authorize: anyOf<JwtAuthContext>([
-                isLibraryStaff,
-                editsOwnAuthorName,
-            ])
+            authorize: anyOf<JwtAuthContext>([isLibraryStaff, editsOwnAuthorName]),
         },
     },
     async (req, auth) => {
@@ -153,7 +155,7 @@ export const BookController = {
     getAllBooks,
     getBookByIsbn,
     updateBook,
-    deleteBook
+    deleteBook,
 };
 
 // const dummy = createHandler(BookDTOs.UpdateBookContract,

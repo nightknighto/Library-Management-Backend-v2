@@ -1,7 +1,8 @@
-import { Router } from "express";
-import booksRoutes from "./features/books/books.routes.ts";
-import usersRoutes from "./features/users/users.routes.ts";
-import borrowsRoutes from "./features/borrows/borrows.routes.ts";
+import { Router } from 'express';
+import booksRoutes from './features/books/books.routes.ts';
+import borrowsRoutes from './features/borrows/borrows.routes.ts';
+import usersRoutes from './features/users/users.routes.ts';
+
 // import statsRoutes from "./features/stats/stats.routes.ts";
 
 const rootRouter = Router();

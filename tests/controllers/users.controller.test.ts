@@ -1,7 +1,7 @@
 import { UserController } from '../../src/controllers/users.controller';
 import { UserModel } from '../../src/models/users.model';
 import { JwtService } from '../../src/services';
-import { createMockRequest, createMockResponse, mockUserData, mockErrorMessages } from '../utils';
+import { createMockRequest, createMockResponse, mockErrorMessages, mockUserData } from '../utils';
 
 // Mock the dependencies
 jest.mock('../../src/models/users.model');
@@ -168,7 +168,10 @@ describe('UserController', () => {
 
             await UserController.updateUser(req as any, res as any);
 
-            expect(mockUserModel.updateUser).toHaveBeenCalledWith('test@example.com', 'Updated Name');
+            expect(mockUserModel.updateUser).toHaveBeenCalledWith(
+                'test@example.com',
+                'Updated Name',
+            );
             expect(res.status).toHaveBeenCalledWith(200);
             expect(res.json).toHaveBeenCalledWith(mockUserData.updatedUser);
         });

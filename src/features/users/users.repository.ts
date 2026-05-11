@@ -1,5 +1,4 @@
-import { prisma } from "../../lib/prisma.ts";
-
+import { prisma } from '../../lib/prisma.ts';
 
 async function createUser(email: string, name: string) {
     try {
@@ -7,12 +6,12 @@ async function createUser(email: string, name: string) {
             data: {
                 email,
                 name,
-            }
-        })
+            },
+        });
         return user;
     } catch (error: any) {
         if (error.code === 'P2002') {
-            return undefined
+            return undefined;
         }
         throw error;
     }
@@ -28,9 +27,9 @@ async function getAllUsers(page: number, limit: number) {
         take,
         include: {
             _count: {
-                select: {}
-            }
-        }
+                select: {},
+            },
+        },
     });
 
     return users;
@@ -50,14 +49,14 @@ async function getUser(email: string) {
 
 /**
  * Retrieves a user by email along with their active book borrows.
- * 
+ *
  * @param email - The email address of the user to retrieve
  * @returns A promise that resolves to the user object with active borrows, or undefined if user not found
- * 
+ *
  * @remarks
  * This function fetches a user and includes only their active borrows (where return_date is null).
  * For each active borrow, it includes the book title and due date.
- * 
+ *
  * @throws Will throw an error if the database operation fails, except for P2025 (record not found) which returns undefined
  */
 async function getUserWithActiveBorrows(email: string) {
@@ -70,20 +69,20 @@ async function getUserWithActiveBorrows(email: string) {
                         book: {
                             select: {
                                 title: true,
-                            }
+                            },
                         },
                         due_date: true,
                     },
                     where: {
-                        return_date: null
-                    }
-                }
-            }
+                        return_date: null,
+                    },
+                },
+            },
         });
         return user;
     } catch (error: any) {
         if (error.code === 'P2025') {
-            return undefined
+            return undefined;
         }
         throw error;
     }
@@ -100,7 +99,7 @@ async function updateUser(email: string, name: string) {
         return updatedUser;
     } catch (error: any) {
         if (error.code === 'P2025') {
-            return undefined
+            return undefined;
         }
         throw error;
     }
@@ -114,7 +113,7 @@ async function deleteUser(email: string) {
         return user;
     } catch (error: any) {
         if (error.code === 'P2025') {
-            return undefined
+            return undefined;
         }
         throw error;
     }
@@ -127,5 +126,5 @@ export const UserRepository = {
     getUserWithActiveBorrows,
     updateUser,
     deleteUser,
-    getUserCount
+    getUserCount,
 } as const;

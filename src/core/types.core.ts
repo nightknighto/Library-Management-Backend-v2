@@ -10,9 +10,9 @@
  * 3. HANDLER SECURITY TYPES - Access/auth/authz options and contracts
  */
 
-import type { CookieOptions, Request } from "express";
-import type createHttpError from "http-errors";
-import type { input as Input, ZodType, ZodTypeAny } from "zod";
+import type { CookieOptions, Request } from 'express';
+import type createHttpError from 'http-errors';
+import type { input as Input, ZodType, ZodTypeAny } from 'zod';
 
 // ============================================================================
 // SECTION 1: RESPONSE FORMAT TYPES
@@ -45,28 +45,25 @@ export type PaginationMeta = {
 /**
  * Helper that makes `data` optional when the response data itself is optional.
  */
-export type DataField<TData> = undefined extends TData
-    ? { data?: TData }
-    : { data: TData };
+export type DataField<TData> = undefined extends TData ? { data?: TData } : { data: TData };
 
 /**
  * Successful response envelope for contract responses.
  */
-export type SuccessResponse<TData, TPaginated extends boolean> =
-    TPaginated extends true
+export type SuccessResponse<TData, TPaginated extends boolean> = TPaginated extends true
     ? DataField<TData> & {
-        success: true;
-        meta: {
-            timestamp: string;
-            pagination: PaginationMeta;
-        };
-    }
+          success: true;
+          meta: {
+              timestamp: string;
+              pagination: PaginationMeta;
+          };
+      }
     : DataField<TData> & {
-        success: true;
-        meta: {
-            timestamp: string;
-        };
-    };
+          success: true;
+          meta: {
+              timestamp: string;
+          };
+      };
 
 /**
  * Error response envelope for contract responses.
@@ -122,16 +119,16 @@ export type SuccessResponsePayload<TData> = {
  */
 export type CookieOperation =
     | {
-        action: "set";
-        name: string;
-        value: string | number | boolean | Record<string, unknown>;
-        options?: CookieOptions;
-    }
+          action: 'set';
+          name: string;
+          value: string | number | boolean | Record<string, unknown>;
+          options?: CookieOptions;
+      }
     | {
-        action: "clear";
-        name: string;
-        options?: CookieOptions;
-    };
+          action: 'clear';
+          name: string;
+          options?: CookieOptions;
+      };
 
 /**
  * Successful handler result shape required by createHandler.
@@ -142,16 +139,11 @@ export type CookieOperation =
  * Optional `cookies` allow declarative response cookies to be set or cleared
  * when the handler succeeds.
  */
-export type HandlerSuccessResult<
-    TResponseSchema extends ZodTypeAny,
-    TPaginated extends boolean,
-> = {
+export type HandlerSuccessResult<TResponseSchema extends ZodTypeAny, TPaginated extends boolean> = {
     data: Input<TResponseSchema>;
     statusCode?: number;
     cookies?: CookieOperation[];
-} & (TPaginated extends true
-    ? { pagination: PaginationInput }
-    : { pagination?: undefined });
+} & (TPaginated extends true ? { pagination: PaginationInput } : { pagination?: undefined });
 
 /**
  * Type for a validated Express request with strong typing.
@@ -180,7 +172,7 @@ export type MaybePromise<T> = T | Promise<T>;
 /**
  * Access modes supported by createHandler.
  */
-export type AccessMode = "public" | "protected" | "optional";
+export type AccessMode = 'public' | 'protected' | 'optional';
 
 /**
  * Authentication callback contract used by framework handlers.
@@ -216,10 +208,7 @@ export type AccessMode = "public" | "protected" | "optional";
  *
  * @see docs/rules/create-handler-auth-inference-limitations.md
  */
-export type Authenticator<
-    TAuthContext,
-    TRequest extends Request<any, any, any, any> = Request,
-> = (
+export type Authenticator<TAuthContext, TRequest extends Request<any, any, any, any> = Request> = (
     req: TRequest,
 ) => MaybePromise<TAuthContext | null | undefined>;
 
@@ -231,12 +220,7 @@ export type Authenticator<
 export type Authorizer<
     TAuthContext,
     TRequest extends Request<any, any, any, any> = Request,
-> = (
-    params: {
-        req: TRequest;
-        auth: TAuthContext;
-    },
-) => MaybePromise<boolean>;
+> = (params: { req: TRequest; auth: TAuthContext }) => MaybePromise<boolean>;
 
 /**
  * Error mapper for authentication/authorization failures.
@@ -276,9 +260,7 @@ export type SecurityOptions<
     /**
      * Authorization policy or policies evaluated for the request.
      */
-    authorize?:
-    | Authorizer<TAuthContext, TRequest>
-    | Array<Authorizer<TAuthContext, TRequest>>;
+    authorize?: Authorizer<TAuthContext, TRequest> | Array<Authorizer<TAuthContext, TRequest>>;
     /**
      * Optional schema to validate the authentication result.
      */
