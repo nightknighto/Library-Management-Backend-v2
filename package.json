@@ -14,7 +14,12 @@
         "prisma:push": "prisma db push",
         "prisma:studio": "prisma studio",
         "prisma:seed": "prisma db seed",
-        "prisma:seed:perf": "npx ts-node prisma/seed-performance.ts"
+        "prisma:seed:perf": "npx ts-node prisma/seed-performance.ts",
+        "format": "pnpx @biomejs/biome format --write",
+        "lint": "pnpx @biomejs/biome lint",
+        "lint:fix": "pnpx @biomejs/biome lint --fix",
+        "biome:check": "pnpx @biomejs/biome check",
+        "biome:check:fix": "pnpx @biomejs/biome check --fix"
     },
     "dependencies": {
         "@prisma/client": "^5.3.1",
@@ -27,6 +32,7 @@
         "zod-validation-error": "^5.0.0"
     },
     "devDependencies": {
+        "@biomejs/biome": "2.4.15",
         "@types/express": "^5.0.3",
         "@types/express-serve-static-core": "^5.0.7",
         "@types/http-errors": "^2.0.5",
