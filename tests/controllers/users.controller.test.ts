@@ -4,15 +4,15 @@ import { JwtService } from '../../src/services';
 import { createMockRequest, createMockResponse, mockErrorMessages, mockUserData } from '../utils';
 
 // Mock the dependencies
-jest.mock('../../src/models/users.model');
-jest.mock('../../src/services');
+vi.mock('../../src/models/users.model');
+vi.mock('../../src/services');
 
-const mockUserModel = UserModel as jest.Mocked<typeof UserModel>;
-const mockJwtService = JwtService as jest.Mocked<typeof JwtService>;
+const mockUserModel = UserModel as vi.Mocked<typeof UserModel>;
+const mockJwtService = JwtService as vi.Mocked<typeof JwtService>;
 
 describe('UserController', () => {
     beforeEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
     });
 
     describe('registerUser', () => {

@@ -10,6 +10,7 @@ This directory is the canonical location for project rules and AI instruction do
 ## Key documents
 - [create-handler-inference-policy.md](create-handler-inference-policy.md): lane structure and contribution rules for inference tests.
 - [create-handler-auth-inference-limitations.md](create-handler-auth-inference-limitations.md): detailed analysis of TypeScript inference limitations around `security.authenticate`, with mitigation policy.
+- [runtime-test-requirements.md](runtime-test-requirements.md): mandatory runtime test coverage rules for core framework changes.
 
 ## What does not belong here
 - General implementation guides

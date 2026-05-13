@@ -1,46 +1,46 @@
 // Mock Prisma client
 export const mockPrismaUser = {
-    create: jest.fn(),
-    findMany: jest.fn(),
-    findUnique: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
+    create: vi.fn(),
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
 };
 
 export const mockPrisma = {
     user: mockPrismaUser,
     book: {
-        findMany: jest.fn(),
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
     },
     borrow: {
-        findMany: jest.fn(),
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
     },
 };
 
 // Mock the prisma module
-jest.mock('../src/prisma', () => ({
+vi.mock('../src/prisma', () => ({
     prisma: mockPrisma,
 }));
 
 // Mock JWT Service
 export const mockJwtService = {
-    createToken: jest.fn(),
-    verifyToken: jest.fn(),
+    createToken: vi.fn(),
+    verifyToken: vi.fn(),
 };
 
-jest.mock('../src/services', () => ({
+vi.mock('../src/services', () => ({
     JwtService: mockJwtService,
 }));
 
 // Reset all mocks before each test
 beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 });

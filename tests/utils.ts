@@ -25,9 +25,9 @@ export const createMockRequest = (overrides: MockRequest = {}): MockRequest => {
 
 export const createMockResponse = (): MockResponse => {
     const res: MockResponse = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn().mockReturnThis(),
-        send: jest.fn().mockReturnThis(),
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn().mockReturnThis(),
+        send: vi.fn().mockReturnThis(),
     };
     return res;
 };

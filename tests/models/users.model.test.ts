@@ -3,7 +3,7 @@ import { mockPrismaUser } from '../setup';
 
 describe('UserModel', () => {
     beforeEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
     });
 
     describe('createUser', () => {

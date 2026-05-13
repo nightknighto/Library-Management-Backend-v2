@@ -95,6 +95,11 @@ Default checks:
 - Use narrowly scoped `// @ts-expect-error` lines for negative compile assertions.
 - Follow the detailed policy document at [docs/rules/create-handler-inference-policy.md](docs/rules/create-handler-inference-policy.md) when adding or updating type-inference tests.
 
+## Runtime Test Requirements (Mandatory)
+- Every new runtime feature or behavior in core must include runtime tests.
+- Core behavior belongs in tests/core.
+- If runtime tests cannot be added, get approval first and document the gap.
+
 ## Ask-First Triggers
 Ask for confirmation before:
 - Expanding edits to unrelated feature modules.
@@ -106,6 +111,7 @@ Ask for confirmation before:
 - Framework-level abstraction is improved or extended for reuse.
 - Type inference remains strong end-to-end across contract and handler usage.
 - Reusable API IntelliSense is comprehensive: symbols and all user-facing inputs/properties/types include JSDoc with usage notes and examples.
+- Runtime tests cover new behavior and edge cases for any framework or feature changes.
 - Books proving-ground behavior is validated for the change.
 - Unrelated features are left untouched except minimal breakage fixes.
 - Final report clearly states what was validated and what was intentionally not validated.
