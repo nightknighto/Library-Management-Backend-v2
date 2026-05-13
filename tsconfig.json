@@ -8,7 +8,9 @@
         // See also https://aka.ms/tsconfig/module
         "module": "nodenext",
         "target": "esnext",
-        "types": ["jest"],
+        "types": [
+            "vitest/globals"
+        ],
         // Other Outputs
         // "sourceMap": true,
         // "declaration": true,
@@ -29,12 +31,17 @@
         "noUncheckedSideEffectImports": true,
         "moduleDetection": "force",
         "skipLibCheck": true,
-        "typeRoots": ["./node_modules/@types"],
+        "typeRoots": [
+            "./node_modules/@types",
+            "./node_modules"
+        ],
         // NEW stuff
         "allowImportingTsExtensions": true, // Allow importing files with .ts extensions
         "noEmit": true, // Do not emit outputs
         "erasableSyntaxOnly": true, // Enable erasable syntax only (prevents "namespace", "enum", etc.)
         "verbatimModuleSyntax": true // enforces "import type" for type-only imports
     },
-    "include": ["src"]
+    "include": [
+        "src"
+    ]
 }
