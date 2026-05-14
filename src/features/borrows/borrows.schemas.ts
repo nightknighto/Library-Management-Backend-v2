@@ -44,5 +44,5 @@ export const OverdueBooksContract = createContract({
             bookIsbn: z.string(),
         })
         .array(),
-    paginated: true,
+    pagination: { response: true },
 });

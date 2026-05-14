@@ -63,7 +63,7 @@ const ListBooksContract = createContract({
         },
     },
     response: z.array(z.string()),
-    paginated: true,
+    pagination: { response: true },
 });
 
 createHandler(UpdateBookContract, async (req) => {
@@ -87,10 +87,10 @@ createHandler(ListBooksContract, async (_req) => ({
     },
 }));
 
-// @ts-expect-error paginated contracts require pagination in handler result
+// @ts-expect-error response-paginated contracts require pagination in handler result
 createHandler(ListBooksContract, async (_req) => ({ data: ['book-1'] }));
 
-// @ts-expect-error non-paginated contracts do not accept pagination payload
+// @ts-expect-error contracts without response pagination do not accept pagination payload
 createHandler(UpdateBookContract, async (_req) => ({
     data: { updated: true },
     pagination: {
@@ -106,7 +106,7 @@ createHandler(UpdateBookContract, async (_req) => ({
     metax: { timestamp: '2026-01-01T00:00:00.000Z' },
 }));
 
-// @ts-expect-error paginated handlers do not accept unknown top-level result keys
+// @ts-expect-error response-paginated handlers do not accept unknown top-level result keys
 createHandler(ListBooksContract, async (_req) => ({
     data: ['book-1'],
     pagination: {

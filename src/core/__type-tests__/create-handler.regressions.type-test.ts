@@ -50,7 +50,7 @@ const ListBooksContract = createContract({
             isbn: z.string(),
         }),
     ),
-    paginated: true,
+    pagination: { response: true },
 });
 
 /**
@@ -74,9 +74,9 @@ createHandler(
 );
 
 /**
- * Regression-002: paginated contracts must always return pagination metadata.
+ * Regression-002: response-paginated contracts must always return pagination metadata.
  */
-// @ts-expect-error paginated contracts require pagination payload
+// @ts-expect-error response-paginated contracts require pagination payload
 createHandler(ListBooksContract, async (_req) => ({ data: [{ isbn: 'x' }] }));
 
 /**

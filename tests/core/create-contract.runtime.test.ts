@@ -29,14 +29,14 @@ describe('createContract (runtime)', () => {
         });
         expect(errorWithoutPayload).toEqual({ success: false, error: undefined });
 
-        expect((contract as { paginated?: boolean }).paginated).toBeUndefined();
+        expect((contract as { pagination?: unknown }).pagination).toBeUndefined();
     });
 
-    it('requires pagination metadata when paginated is true', () => {
+    it('requires pagination metadata when pagination.response is true', () => {
         const contract = createContract({
             request: {},
             response: z.object({ id: z.string() }),
-            paginated: true,
+            pagination: { response: true },
         });
 
         expect(() =>
@@ -62,7 +62,7 @@ describe('createContract (runtime)', () => {
         });
 
         expect(success.success).toBe(true);
-        expect((contract as { paginated?: boolean }).paginated).toBe(true);
+        expect(contract.pagination?.response).toBe(true);
     });
 
     it('strips pagination metadata for non-paginated contracts', () => {
@@ -87,5 +87,75 @@ describe('createContract (runtime)', () => {
         });
 
         expect(result.meta).toEqual({ timestamp });
+    });
+
+    it('injects pagination request defaults when pagination.request is enabled', () => {
+        const contract = createContract({
+            request: {
+                query: {
+                    q: z.string().optional(),
+                },
+            },
+            response: z.array(z.string()),
+            pagination: {
+                request: {
+                    defaults: { page: 2, limit: 5 },
+                    maxLimit: 10,
+                },
+            },
+        });
+
+        const parsed = contract.request.parse({
+            body: undefined,
+            query: { q: 'test' },
+            params: undefined,
+        });
+
+        expect(parsed.query.page).toBe(2);
+        expect(parsed.query.limit).toBe(5);
+
+        const coerced = contract.request.parse({
+            body: undefined,
+            query: { page: '3', limit: '7' },
+            params: undefined,
+        });
+
+        expect(coerced.query.page).toBe(3);
+        expect(coerced.query.limit).toBe(7);
+
+        expect(() =>
+            contract.request.parse({
+                body: undefined,
+                query: { limit: 50 },
+                params: undefined,
+            }),
+        ).toThrow();
+    });
+
+    it('keeps user-defined page/limit when pagination.request is enabled', () => {
+        const contract = createContract({
+            request: {
+                query: {
+                    page: z.coerce.number().default(9),
+                    limit: z.coerce.number().default(77),
+                },
+            },
+            response: z.array(z.string()),
+            pagination: {
+                request: {
+                    defaults: { page: 1, limit: 10 },
+                    maxLimit: 100,
+                },
+            },
+        });
+
+        const parsed = contract.request.parse({
+            body: undefined,
+            query: {},
+            params: undefined,
+        });
+
+        expect(parsed.query.page).toBe(9);
+        expect(parsed.query.limit).toBe(77);
     });
 });

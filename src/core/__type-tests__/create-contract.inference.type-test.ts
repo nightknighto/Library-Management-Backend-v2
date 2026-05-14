@@ -56,15 +56,39 @@ const ListBooksContract = createContract({
             isbn: z.string(),
         }),
     ),
-    paginated: true,
+    pagination: { response: true },
 });
 
 type ListBooksResponse = z.infer<typeof ListBooksContract.response>;
 type ListBooksSuccess = Extract<ListBooksResponse, { success: true }>;
 
-const _paginatedFlag: true = ListBooksContract.paginated;
+const _paginationResponseFlag: true = ListBooksContract.pagination.response;
 type _paginatedDataExact = Expect<Equal<ListBooksSuccess['data'], Array<{ isbn: string }>>>;
 type _paginatedMetaPresent = Expect<Equal<ListBooksSuccess['meta']['pagination']['limit'], number>>;
+
+const SearchBooksContract = createContract({
+    request: {
+        query: {
+            q: z.string().optional(),
+        },
+    },
+    response: z.array(z.string()),
+    pagination: {
+        request: true,
+    },
+});
+
+type SearchBooksRequest = z.infer<typeof SearchBooksContract.request>;
+type _searchQueryHasPage = Expect<
+    Equal<
+        SearchBooksRequest['query'],
+        {
+            q?: string | undefined;
+            page: number;
+            limit: number;
+        }
+    >
+>;
 
 createContract({
     request: {

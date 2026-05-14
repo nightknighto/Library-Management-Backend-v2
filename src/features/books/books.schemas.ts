@@ -59,18 +59,16 @@ export const ListBooksContract = createContract({
             title: titleSchema.optional(),
             author: authorSchema.optional(),
             isbn: isbnSchema.optional(),
-            page: z.coerce
-                .number()
-                .refine((val) => val > 0, 'Page must be a positive number')
-                .prefault(1),
-            limit: z.coerce
-                .number()
-                .refine((val) => val > 0 && val <= 100, 'Limit must be between 1 and 100')
-                .prefault(10),
         },
     },
     response: z.array(bookOutputSchema),
-    paginated: true,
+    pagination: {
+        request: {
+            defaults: { page: 1, limit: 10 },
+            maxLimit: 100,
+        },
+        response: true,
+    },
 });
 
 export const GetBookContract = createContract({

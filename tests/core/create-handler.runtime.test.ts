@@ -255,7 +255,7 @@ describe('createHandler (runtime)', () => {
         const contract = createContract({
             request: {},
             response: z.array(z.number()),
-            paginated: true,
+            pagination: { response: true },
         });
 
         const handler = createHandler(contract, async () => ({
@@ -273,7 +273,7 @@ describe('createHandler (runtime)', () => {
         const contract = createContract({
             request: {},
             response: z.array(z.number()),
-            paginated: true,
+            pagination: { response: true },
         });
 
         const handler = createHandler(contract, async () => ({

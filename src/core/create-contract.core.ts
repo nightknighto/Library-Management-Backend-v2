@@ -124,6 +124,66 @@ type BuiltRequestSchema<TRequest extends RequestSchemaInput> = z.ZodObject<
     RequestSchemaOutput<StrictRequestInput<TRequest>>
 >;
 
+type PaginationRequestDefaults = {
+    page?: number;
+    limit?: number;
+};
+
+type PaginationRequestConfig = {
+    defaults?: PaginationRequestDefaults;
+    maxLimit?: number;
+};
+
+type PaginationRequestInput = true | PaginationRequestConfig;
+
+type PaginationRequestOption = PaginationRequestInput | false;
+
+type PaginationConfigInput =
+    | {
+        request: PaginationRequestInput;
+        response?: boolean;
+    }
+    | {
+        request?: false | undefined;
+        response?: boolean;
+    };
+
+type PaginationRequestQueryInput = {
+    page: z.ZodType<number>;
+    limit: z.ZodType<number>;
+};
+
+type MergePaginationQuery<TQuery extends Record<string, z.ZodType> | undefined> =
+    TQuery extends Record<string, z.ZodType>
+    ? TQuery &
+    ('page' extends keyof TQuery ? {} : { page: PaginationRequestQueryInput['page'] }) &
+    ('limit' extends keyof TQuery
+        ? {}
+        : { limit: PaginationRequestQueryInput['limit'] })
+    : PaginationRequestQueryInput;
+
+type ApplyPaginationRequest<TRequest extends RequestSchemaInput> = Omit<TRequest, 'query'> & {
+    query: MergePaginationQuery<TRequest['query']>;
+};
+
+type PaginationRequestEnabled<TPagination extends PaginationConfigInput | undefined> =
+    TPagination extends { request: PaginationRequestInput } ? true : false;
+
+type WithPaginationRequest<
+    TRequest extends RequestSchemaInput,
+    TPagination extends PaginationConfigInput | undefined,
+> = PaginationRequestEnabled<TPagination> extends true ? ApplyPaginationRequest<TRequest> : TRequest;
+
+type PaginationContractConfig<TPaginated extends boolean> = TPaginated extends true
+    ? {
+        response: true;
+        request?: PaginationRequestOption;
+    }
+    : {
+        response?: false | undefined;
+        request?: PaginationRequestOption;
+    };
+
 /**
  * Complete response schema type exported from createContract.
  *
@@ -144,16 +204,16 @@ export type ContractResponseSchema<
  * A contract is the central agreement between a handler and its callers:
  * - `request`: Zod schema for incoming requests (body, query, params)
  * - `response`: Zod schema for outgoing responses (success or error)
- * - `paginated`: Flag indicating if response includes pagination metadata
+ * - `pagination`: Config that enables request/response pagination behavior
  *
- * The `paginated` property is included as `true` only when the contract is
- * created with `paginated: true`. This enables type-safe pagination inference.
+ * The `pagination` property is included when pagination is configured. When
+ * `pagination.response` is true, response pagination metadata is required.
  *
  * @example
  * const getUsersContract: Contract<..., ..., true> = createContract({
  *   request: { query: { page: z.number() } },
  *   response: z.array(z.object({ id: z.string() })),
- *   paginated: true,
+ *   pagination: { response: true },
  * });
  */
 export type Contract<
@@ -181,22 +241,22 @@ export type Contract<
      * This is a union schema that validates both success (200/201) and error responses.
      * The schema automatically wraps your response data in a standardized envelope:
      *
-     * **Success Response** (when handler returns successfully):
-     * ```typescript
-     * {
-     *   success: true,
-     *   data: <your response data>,
-     *   meta: {
-     *     timestamp: string,  // ISO datetime
-     *     pagination?: {      // Only if contract.paginated === true
-     *       totalCount: number,
-     *       limit: number,
-     *       offset: number,
-     *       hasNextPage: boolean
-     *     }
-     *   }
-     * }
-     * ```
+        * **Success Response** (when handler returns successfully):
+        * ```typescript
+        * {
+        *   success: true,
+        *   data: <your response data>,
+        *   meta: {
+        *     timestamp: string,  // ISO datetime
+        *     pagination?: {      // Only if contract.pagination.response === true
+        *       totalCount: number,
+        *       limit: number,
+        *       offset: number,
+        *       hasNextPage: boolean
+        *     }
+        *   }
+        * }
+        * ```
      *
      * **Error Response** (when validation fails or exception is thrown):
      * ```typescript
@@ -207,7 +267,17 @@ export type Contract<
      * ```
      */
     response: ContractResponseSchema<TResponseData, TPaginated>;
-} & (TPaginated extends true ? { paginated: true } : { paginated?: false });
+
+    /**
+     * Pagination configuration for this contract.
+     *
+        * When `pagination.request` is true (or configured), page/limit are injected into
+        * the request query schema unless the request already defines them.
+     *
+     * When `pagination.response` is true, response pagination metadata is required.
+     */
+    pagination?: PaginationContractConfig<TPaginated>;
+} & (TPaginated extends true ? { pagination: PaginationContractConfig<true> } : {});
 
 /**
  * Base parameters for creating a contract.
@@ -278,8 +348,8 @@ type CreateContractBaseParams<
     /**
      * Zod schema for the response data your handler returns.
      *
-     * This is the data object that will be wrapped in the success response envelope
-     * along with timestamp and optional pagination metadata (if paginated: true).
+    * This is the data object that will be wrapped in the success response envelope
+    * along with timestamp and optional pagination metadata (if pagination.response is true).
      *
      * This should be the schema for just your data, not the full response wrapper—
      * the wrapper is automatically added by createHandler.
@@ -312,24 +382,26 @@ type CreateContractBaseParams<
      * // Final response: { success: true, data: { token, expiresIn }, meta: {...} }
      * ```
      *
-     * Note: If your handler returns pagination, use `paginated: true` in `createContract`
-     * to include pagination metadata (totalCount, limit, offset, hasNextPage).
+        * Note: If your handler returns pagination, use `pagination.response: true` in
+        * `createContract` to include pagination metadata (totalCount, limit, offset, hasNextPage).
      */
     response: TResponseData;
 };
 
 /**
- * Parameters for creating a paginated contract.
+ * Parameters for creating a response-paginated contract.
  */
-type CreatePaginatedContractParams<
+type CreatePaginatedResponseContractParams<
     TRequest extends RequestSchemaInput,
     TResponseData extends z.ZodTypeAny,
+    TPagination extends PaginationConfigInput & { response: true },
 > = CreateContractBaseParams<TRequest, TResponseData> & {
     /**
-     * When `true`, includes pagination metadata in the response.
-     * The response will include `meta.pagination` with totalCount, limit, offset, and hasNextPage.
+     * Pagination configuration for this contract.
+     * Use `response: true` to include pagination metadata in the response.
+     * Optionally enable request pagination with `request`.
      */
-    paginated: true;
+    pagination: TPagination;
 };
 
 /**
@@ -338,15 +410,17 @@ type CreatePaginatedContractParams<
 type CreateNonPaginatedContractParams<
     TRequest extends RequestSchemaInput,
     TResponseData extends z.ZodTypeAny,
+    TPagination extends (PaginationConfigInput & { response?: false | undefined }) | undefined,
 > = CreateContractBaseParams<TRequest, TResponseData> & {
     /**
-     * When `true`, includes pagination metadata in the response.
-     * The response will include `meta.pagination` with totalCount, limit, offset, and hasNextPage.
+     * Optional pagination configuration.
+     * When `response` is true, the response will include pagination metadata.
+     * When `response` is false or omitted, the response includes only meta.timestamp.
      *
-     * When `false` or omitted, excludes pagination metadata from the response.
-     * The response will only include the `meta.timestamp` field.
+     * When `request` is enabled, page/limit are injected into the request query
+     * unless the request already defines them.
      */
-    paginated?: false | undefined;
+    pagination?: TPagination;
 };
 
 // ============================================================================
@@ -368,7 +442,7 @@ type CreateNonPaginatedContractParams<
  * const getUsersContract = createContract({
  *   request: { query: { page: z.number(), limit: z.number() } },
  *   response: z.array(UserSchema),
- *   paginated: true,  // ← includes pagination in response
+ *   pagination: { response: true },  // ← includes pagination in response
  * });
  * // Response shape: { success: true, data: User[], meta: { timestamp, pagination: {...} } }
  * ```
@@ -379,58 +453,122 @@ type CreateNonPaginatedContractParams<
  * const createUserContract = createContract({
  *   request: { body: { name: z.string(), email: z.string().email() } },
  *   response: UserSchema,
- *   // paginated omitted or false
+ *   // pagination.response omitted or false
  * });
  * // Response shape: { success: true, data: User, meta: { timestamp } }
  * ```
  *
- * @overload Paginated - Returns contract with pagination metadata
- * @param params Contract definition with paginated: true
- * @returns Paginated contract with pagination metadata in response schema
+ * ## Usage - Request Pagination (page/limit injected)
  *
- * @overload Non-Paginated - Returns contract without pagination
- * @param params Contract definition with paginated: false or omitted
- * @returns Non-paginated contract without pagination metadata
+ * ```typescript
+ * const searchUsersContract = createContract({
+ *   request: { query: { q: z.string().optional() } },
+ *   response: z.array(UserSchema),
+ *   pagination: {
+ *     request: { defaults: { page: 1, limit: 10 }, maxLimit: 100 },
+ *     response: true,
+ *   },
+ * });
+ * // Request query includes page/limit defaults and maxLimit enforcement.
+ * ```
+ *
+ * @overload Response Pagination - Returns contract with pagination metadata
+ * @param params Contract definition with pagination.response: true
+ * @returns Contract with pagination metadata in response schema
+ *
+ * @overload No Response Pagination - Returns contract without pagination metadata
+ * @param params Contract definition with pagination.response omitted or false
+ * @returns Contract without pagination metadata in response schema
  *
  * @throws Type error if request schema contains invalid fields (only body, query, params allowed)
  */
 export function createContract<
     TRequest extends RequestSchemaInput,
     TResponseData extends z.ZodTypeAny,
+    TPagination extends PaginationConfigInput & { response: true },
 >(
-    params: CreatePaginatedContractParams<TRequest, TResponseData>,
-): Contract<BuiltRequestSchema<TRequest>, TResponseData, true>;
+    params: CreatePaginatedResponseContractParams<TRequest, TResponseData, TPagination>,
+): Contract<BuiltRequestSchema<WithPaginationRequest<TRequest, TPagination>>, TResponseData, true>;
 
 export function createContract<
     TRequest extends RequestSchemaInput,
     TResponseData extends z.ZodTypeAny,
+    TPagination extends
+    | (PaginationConfigInput & { response?: false | undefined })
+    | undefined,
 >(
-    params: CreateNonPaginatedContractParams<TRequest, TResponseData>,
-): Contract<BuiltRequestSchema<TRequest>, TResponseData, false>;
+    params: CreateNonPaginatedContractParams<TRequest, TResponseData, TPagination>,
+): Contract<BuiltRequestSchema<WithPaginationRequest<TRequest, TPagination>>, TResponseData, false>;
 
 export function createContract({
     request,
     response,
-    paginated,
+    pagination,
 }: {
     request: RequestSchemaInput;
     response: z.ZodTypeAny;
-    paginated?: boolean;
+    pagination?: PaginationConfigInput;
 }): unknown {
-    // Build the validated request schema (body, query, params)
-    const requestSchema = createRequestSchema(request);
-    const responseSchema = createContractResponseSchema(response, paginated === true);
+    const responsePaginated = pagination?.response === true;
+    const requestShape = buildPaginationRequestShape(request, pagination?.request);
+    const requestSchema = createRequestSchema(requestShape);
+    const responseSchema = createContractResponseSchema(response, responsePaginated);
 
-    if (paginated === true) {
+    if (pagination) {
         return {
             request: requestSchema,
             response: responseSchema,
-            paginated: true,
+            pagination,
         };
     }
 
     return {
         request: requestSchema,
         response: responseSchema,
+    };
+}
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 10;
+const DEFAULT_MAX_LIMIT = 100;
+
+function buildPaginationRequestShape(
+    request: RequestSchemaInput,
+    paginationRequest: PaginationRequestOption | undefined,
+): RequestSchemaInput {
+    if (!paginationRequest) {
+        return request;
+    }
+
+    const config = paginationRequest === true ? {} : paginationRequest;
+    const defaultPage = config.defaults?.page ?? DEFAULT_PAGE;
+    const defaultLimit = config.defaults?.limit ?? DEFAULT_LIMIT;
+    const maxLimit = config.maxLimit ?? DEFAULT_MAX_LIMIT;
+
+    const pageSchema = z.coerce
+        .number()
+        .min(1, 'Page must be a positive number')
+        .default(defaultPage);
+
+    const limitSchema = z.coerce
+        .number()
+        .min(1, 'Limit must be a positive number')
+        .max(maxLimit, `Limit must be between 1 and ${maxLimit}`)
+        .default(defaultLimit);
+
+    const existingQuery = request.query ?? {};
+    const mergedQuery: Record<string, z.ZodType> = { ...existingQuery };
+
+    if (!Object.prototype.hasOwnProperty.call(existingQuery, 'page')) {
+        mergedQuery.page = pageSchema;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(existingQuery, 'limit')) {
+        mergedQuery.limit = limitSchema;
+    }
+
+    return {
+        ...request,
+        query: mergedQuery,
     };
 }

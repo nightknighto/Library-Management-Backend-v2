@@ -80,7 +80,7 @@ export const GetAllUsersContract = createContract({
             registered_at: z.date(),
         })
         .array(),
-    paginated: true,
+    pagination: { response: true },
 });
 
 export const DeleteUserContract = createContract({

@@ -32,7 +32,7 @@ Covers each feature axis in isolation.
 
 Required axes:
 - Request typing and response typing from createHandler callbacks
-- Pagination result requirements for paginated and non-paginated contracts
+- Pagination result requirements for response-paginated and non-response-paginated contracts
 - Authentication typing across public, optional, and protected access modes
 - Authorization callback typing, including validateBeforeAuthorization: true
 - Error mapper typing (unauthenticated, unauthorized)
@@ -65,7 +65,7 @@ Preserves past bug fixes and fragile scenarios.
 
 Examples:
 - Typed authorize request when validateBeforeAuthorization: true
-- Pagination metadata requirement for paginated contracts
+- Pagination metadata requirement for response-paginated contracts
 - Contract response still includes the error envelope variant
 
 ## Workstream Contribution Rules

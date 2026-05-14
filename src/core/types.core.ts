@@ -52,18 +52,18 @@ export type DataField<TData> = undefined extends TData ? { data?: TData } : { da
  */
 export type SuccessResponse<TData, TPaginated extends boolean> = TPaginated extends true
     ? DataField<TData> & {
-          success: true;
-          meta: {
-              timestamp: string;
-              pagination: PaginationMeta;
-          };
-      }
+        success: true;
+        meta: {
+            timestamp: string;
+            pagination: PaginationMeta;
+        };
+    }
     : DataField<TData> & {
-          success: true;
-          meta: {
-              timestamp: string;
-          };
-      };
+        success: true;
+        meta: {
+            timestamp: string;
+        };
+    };
 
 /**
  * Error response envelope for contract responses.
@@ -119,22 +119,22 @@ export type SuccessResponsePayload<TData> = {
  */
 export type CookieOperation =
     | {
-          action: 'set';
-          name: string;
-          value: string | number | boolean | Record<string, unknown>;
-          options?: CookieOptions;
-      }
+        action: 'set';
+        name: string;
+        value: string | number | boolean | Record<string, unknown>;
+        options?: CookieOptions;
+    }
     | {
-          action: 'clear';
-          name: string;
-          options?: CookieOptions;
-      };
+        action: 'clear';
+        name: string;
+        options?: CookieOptions;
+    };
 
 /**
  * Successful handler result shape required by createHandler.
  *
- * For paginated contracts, `pagination` is required. For non-paginated
- * contracts, `pagination` must be omitted.
+ * For response-paginated contracts, `pagination` is required. For contracts without
+ * response pagination, `pagination` must be omitted.
  *
  * Optional `cookies` allow declarative response cookies to be set or cleared
  * when the handler succeeds.

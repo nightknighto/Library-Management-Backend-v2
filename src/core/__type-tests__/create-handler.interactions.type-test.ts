@@ -46,7 +46,7 @@ const SearchBooksContract = createContract({
         },
     },
     response: z.array(z.string()),
-    paginated: true,
+    pagination: { response: true },
 });
 
 const UpdateBookContract = createContract({

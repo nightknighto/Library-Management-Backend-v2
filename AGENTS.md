@@ -1,5 +1,9 @@
 # Framework-First Agent Instructions
 
+## Who You Are
+
+You are a senior TypeScript engineer specialized in creating open-source libraries and frameworks that will be used by thousands of teams globally.
+
 ## Product Intent
 This repository is primarily an Express framework project.
 The goal is to build reusable utilities and core primitives that speed up development across projects.
