@@ -15,11 +15,37 @@ import z from 'zod';
  * The shape of fields that can be passed to createRequestSchema.
  * Each field (body, query, params) is a record of Zod schemas.
  *
- * Example: { body: { name: z.string(), age: z.number() } }
+ * @example
+ * const schemaInput: RequestSchemaInput = {
+ *   body: { name: z.string(), age: z.number() },
+ *   query: { page: z.coerce.number().optional() },
+ * };
  */
 export type RequestSchemaInput = {
+    /**
+     * Request body schema for JSON payloads.
+     *
+     * When createRequestSchema builds the runtime schema, body validation is strict
+     * (unknown keys cause validation errors).
+     */
     body?: Record<string, z.ZodType>;
+    /**
+     * Query string schema for URL parameters.
+     *
+     * Query validation is lenient (unknown keys are stripped).
+     * When used via createContract with pagination.request enabled, the framework
+        * injects `page` and `limit` if they are missing; your own `page`/`limit`
+        * definitions take precedence.
+        *
+        * Injected `page`/`limit` fields are numeric (via z.coerce.number()) with
+        * defaults (page=1, limit=10) and maxLimit=100 unless overridden.
+     */
     query?: Record<string, z.ZodType>;
+    /**
+     * Route params schema for dynamic path segments.
+     *
+     * Params validation is lenient (unknown keys are stripped).
+     */
     params?: Record<string, z.ZodType>;
 };
 
@@ -27,21 +53,38 @@ export type RequestSchemaInput = {
  * Converts the input shape to the actual Zod schema types.
  * - If a field is provided, it becomes a ZodObject with those fields
  * - If a field is omitted, it becomes an empty ZodObject (matching Express's default {})
+ *
+ * @example
+ * type Output = RequestSchemaOutput<{ body: { name: z.ZodString } }>;
  */
 export type RequestSchemaOutput<T extends RequestSchemaInput> = {
+    /**
+     * Zod object schema for body (strict mode).
+     */
     body: T['body'] extends Record<string, z.ZodType>
-        ? z.ZodObject<T['body']>
-        : z.ZodObject<Record<string, never>>;
+    ? z.ZodObject<T['body']>
+    : z.ZodObject<Record<string, never>>;
+    /**
+     * Zod object schema for query (unknown keys stripped).
+     */
     query: T['query'] extends Record<string, z.ZodType>
-        ? z.ZodObject<T['query']>
-        : z.ZodObject<Record<string, never>>;
+    ? z.ZodObject<T['query']>
+    : z.ZodObject<Record<string, never>>;
+    /**
+     * Zod object schema for params (unknown keys stripped).
+     */
     params: T['params'] extends Record<string, z.ZodType>
-        ? z.ZodObject<T['params']>
-        : z.ZodObject<Record<string, never>>;
+    ? z.ZodObject<T['params']>
+    : z.ZodObject<Record<string, never>>;
 };
 
 /**
  * Type used by the validation middleware to accept any request schema.
+ *
+ * @example
+ * function validate(schema: RequestSchema) {
+ *   return schema.parse({ body: {}, query: {}, params: {} });
+ * }
  */
 export type RequestSchema = z.ZodObject<{
     body: z.ZodType<any>;

@@ -124,27 +124,76 @@ type BuiltRequestSchema<TRequest extends RequestSchemaInput> = z.ZodObject<
     RequestSchemaOutput<StrictRequestInput<TRequest>>
 >;
 
+/**
+ * Defaults applied when pagination.request injects page/limit.
+ */
 type PaginationRequestDefaults = {
+    /**
+     * Default page number when `page` is missing (1-based).
+     */
     page?: number;
+    /**
+     * Default page size when `limit` is missing.
+     */
     limit?: number;
 };
 
+/**
+ * Configuration for request pagination injection.
+ *
+ * The injected `page` and `limit` fields are coerced to numbers and validated:
+ * - `page` must be >= 1
+ * - `limit` must be >= 1 and <= maxLimit
+ */
 type PaginationRequestConfig = {
+    /**
+     * Defaults applied to injected page/limit fields.
+     *
+     * Defaults are used only when the query param is missing.
+     */
     defaults?: PaginationRequestDefaults;
+    /**
+     * Maximum allowed limit. Values above this will fail validation.
+     * Defaults to 100 when omitted.
+     */
     maxLimit?: number;
 };
 
+/**
+ * Enables request pagination.
+ *
+ * Use `true` for default behavior (page=1, limit=10, maxLimit=100) or provide a
+ * config object to override defaults.
+ */
 type PaginationRequestInput = true | PaginationRequestConfig;
 
+/**
+ * Request pagination option, including explicit false to disable injection.
+ */
 type PaginationRequestOption = PaginationRequestInput | false;
 
 type PaginationConfigInput =
     | {
+        /**
+         * Enable request pagination by injecting `page` and `limit` into request.query
+         * when they are not already defined in your request schema.
+         *
+         * If you define `page` or `limit` yourself, those schemas take precedence.
+         */
         request: PaginationRequestInput;
+        /**
+         * Enable response pagination metadata in the success response envelope.
+         */
         response?: boolean;
     }
     | {
+        /**
+         * Disable request pagination (default). No page/limit injection occurs.
+         */
         request?: false | undefined;
+        /**
+         * Enable response pagination metadata in the success response envelope.
+         */
         response?: boolean;
     };
 
@@ -189,6 +238,9 @@ type PaginationContractConfig<TPaginated extends boolean> = TPaginated extends t
  *
  * This is a Zod schema that validates both success and error responses together
  * as a union type. When you call z.infer on this, you get the full response shape.
+ *
+ * @example
+ * type ResponseSchema = ContractResponseSchema<typeof BookSchema, false>;
  */
 export type ContractResponseSchema<
     TResponseData extends z.ZodTypeAny,
@@ -232,6 +284,9 @@ export type Contract<
      * - **params**: URL path parameters validation
      *
      * Only fields present in the schema are validated. Omitted fields are not required.
+        *
+        * When `pagination.request` is enabled, the query schema includes `page` and
+        * `limit` unless you explicitly define them yourself.
      */
     request: TRequest;
 
@@ -240,23 +295,23 @@ export type Contract<
      *
      * This is a union schema that validates both success (200/201) and error responses.
      * The schema automatically wraps your response data in a standardized envelope:
-     *
-        * **Success Response** (when handler returns successfully):
-        * ```typescript
-        * {
-        *   success: true,
-        *   data: <your response data>,
-        *   meta: {
-        *     timestamp: string,  // ISO datetime
-        *     pagination?: {      // Only if contract.pagination.response === true
-        *       totalCount: number,
-        *       limit: number,
-        *       offset: number,
-        *       hasNextPage: boolean
-        *     }
-        *   }
-        * }
-        * ```
+      *
+      * **Success Response** (when handler returns successfully):
+      * ```typescript
+      * {
+      *   success: true,
+      *   data: <your response data>,
+      *   meta: {
+      *     timestamp: string,  // ISO datetime
+      *     pagination?: {      // Only if contract.pagination.response === true
+      *       totalCount: number,
+      *       limit: number,
+      *       offset: number,
+      *       hasNextPage: boolean
+      *     }
+      *   }
+      * }
+      * ```
      *
      * **Error Response** (when validation fails or exception is thrown):
      * ```typescript
@@ -271,8 +326,8 @@ export type Contract<
     /**
      * Pagination configuration for this contract.
      *
-        * When `pagination.request` is true (or configured), page/limit are injected into
-        * the request query schema unless the request already defines them.
+      * When `pagination.request` is true (or configured), page/limit are injected into
+      * the request query schema unless the request already defines them.
      *
      * When `pagination.response` is true, response pagination metadata is required.
      */
@@ -342,14 +397,17 @@ type CreateContractBaseParams<
      *
      * Omit any part you don't need validation for.
      * The request will only be validated against the fields you include.
+    *
+    * When `pagination.request` is enabled, `page` and `limit` are injected into the
+    * query schema if you did not define them yourself.
      */
     request: StrictRequestInput<TRequest>;
 
     /**
      * Zod schema for the response data your handler returns.
      *
-    * This is the data object that will be wrapped in the success response envelope
-    * along with timestamp and optional pagination metadata (if pagination.response is true).
+        * This is the data object that will be wrapped in the success response envelope
+        * along with timestamp and optional pagination metadata (if pagination.response is true).
      *
      * This should be the schema for just your data, not the full response wrapper—
      * the wrapper is automatically added by createHandler.
@@ -382,8 +440,8 @@ type CreateContractBaseParams<
      * // Final response: { success: true, data: { token, expiresIn }, meta: {...} }
      * ```
      *
-        * Note: If your handler returns pagination, use `pagination.response: true` in
-        * `createContract` to include pagination metadata (totalCount, limit, offset, hasNextPage).
+      * Note: If your handler returns pagination, use `pagination.response: true` in
+      * `createContract` to include pagination metadata (totalCount, limit, offset, hasNextPage).
      */
     response: TResponseData;
 };
@@ -400,6 +458,9 @@ type CreatePaginatedResponseContractParams<
      * Pagination configuration for this contract.
      * Use `response: true` to include pagination metadata in the response.
      * Optionally enable request pagination with `request`.
+     *
+     * When request pagination is enabled, `page` and `limit` are injected into
+     * request.query unless you already defined them.
      */
     pagination: TPagination;
 };
@@ -435,6 +496,11 @@ type CreateNonPaginatedContractParams<
  * A contract defines both the request shape a handler expects and the response shape
  * it produces. The contract is validated against both incoming requests and outgoing
  * responses to ensure type safety.
+ *
+ * Pagination request behavior:
+ * - When `pagination.request` is enabled, `page` and `limit` are injected into request.query.
+ * - Injected fields are `z.coerce.number()` with min/max validation and defaults.
+ * - If you define `query.page` or `query.limit`, your schemas are used and no injection occurs.
  *
  * ## Usage - Paginated Response (includes pagination metadata)
  *

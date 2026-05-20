@@ -22,6 +22,21 @@ import type { PaginationInput, PaginationMeta, SuccessResponsePayload } from './
 // ============================================================================
 // Helper functions for building and computing response data.
 
+type BuildSuccessResponseOptions<TData> = {
+    /**
+     * Response data payload.
+     */
+    data: TData;
+    /**
+     * ISO timestamp string for when the response was generated.
+     */
+    timestamp: string;
+    /**
+     * Optional pagination metadata.
+     */
+    pagination?: PaginationMeta;
+};
+
 /**
  * Normalizes pagination input into standardized metadata.
  *
@@ -90,11 +105,9 @@ export function buildPaginationMeta(input: PaginationInput): PaginationMeta {
  * @param options - Response data and optional pagination
  * @returns Success response payload ready for sanitization
  */
-export function buildSuccessResponsePayload<TData>(options: {
-    data: TData;
-    timestamp: string;
-    pagination?: PaginationMeta;
-}): SuccessResponsePayload<TData> {
+export function buildSuccessResponsePayload<TData>(
+    options: BuildSuccessResponseOptions<TData>,
+): SuccessResponsePayload<TData> {
     return {
         success: true,
         data: options.data,

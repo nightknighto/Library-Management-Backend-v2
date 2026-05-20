@@ -28,8 +28,8 @@ type AuthenticationExecutionParams<
 type SecurityExecutionResult<TAuthContext, TAccess extends AccessMode> = TAccess extends 'protected'
     ? { auth: TAuthContext }
     : TAccess extends 'optional'
-      ? { auth?: TAuthContext }
-      : { auth?: undefined };
+    ? { auth?: TAuthContext }
+    : { auth?: undefined };
 
 type AuthorizationExecutionParams<
     TAuthContext,
@@ -67,6 +67,8 @@ function normalizeAuthorizers<TAuthContext, TRequest extends Request>(
  * - If no authenticator is provided and access is `protected`, throws 401.
  * - If authenticator returns null/undefined and access is `protected`, throws 401.
  * - If authSchema is provided, its parse result becomes the auth context.
+ * - If authSchema parsing fails, throws unauthenticated error.
+ * - Error mappers in `errors.unauthenticated` override default failures.
  */
 export async function executeAuthenticationStage<
     TAuthContext,
@@ -125,7 +127,7 @@ export async function executeAuthenticationStage<
  * unauthorized error. For `optional` access, missing auth bypasses authorization.
  *
  * When authorizers are configured, each must return true; otherwise a forbidden
- * error is thrown.
+ * error is thrown. Error mappers in `errors.unauthorized` override defaults.
  */
 export async function executeAuthorizationStage<
     TAuthContext,
@@ -159,6 +161,7 @@ export async function executeAuthorizationStage<
  * Combines multiple authorizers so that all must succeed.
  *
  * Use an explicit request type if authorizers expect a narrowed request.
+ * Policies are evaluated in order and stop at the first failure.
  *
  * @example
  * const policy = allOf<AuthContext, AfterAuthorizationRequest<typeof contract>>([
@@ -189,6 +192,7 @@ export function allOf(policies: Array<Authorizer<any, Request>>): Authorizer<any
  * Combines multiple authorizers so that any may succeed.
  *
  * Use an explicit request type if authorizers expect a narrowed request.
+ * Policies are evaluated in order and stop at the first success.
  *
  * @example
  * const policy = anyOf<AuthContext>([
@@ -218,6 +222,8 @@ export function anyOf(policies: Array<Authorizer<any, Request>>): Authorizer<any
 /**
  * Negates an authorizer result.
  *
+ * Useful for denial rules or composing policies with allOf/anyOf.
+ *
  * @example
  * const policy = not<AuthContext>(async ({ auth }) => auth.role === "member");
  */
@@ -243,21 +249,23 @@ export function not(policy: Authorizer<any, Request>): Authorizer<any, Request> 
  *
  * Security and error mapper objects are merged by key so that callers can
  * override or extend defaults without replacing the entire object.
+ *
+ * Call-site values win over defaults when the same key is provided.
  */
 export function mergeHandlerSecurityDefaults<TAuthContext, TRequest extends Request = Request>(
     defaults:
         | {
-              access?: AccessMode;
-              security?: SecurityOptions<TAuthContext, TRequest>;
-              errors?: HandlerErrorMappers<TRequest>;
-          }
+            access?: AccessMode;
+            security?: SecurityOptions<TAuthContext, TRequest>;
+            errors?: HandlerErrorMappers<TRequest>;
+        }
         | undefined,
     overrides:
         | {
-              access?: AccessMode;
-              security?: SecurityOptions<TAuthContext, TRequest>;
-              errors?: HandlerErrorMappers<TRequest>;
-          }
+            access?: AccessMode;
+            security?: SecurityOptions<TAuthContext, TRequest>;
+            errors?: HandlerErrorMappers<TRequest>;
+        }
         | undefined,
 ): {
     access?: AccessMode;

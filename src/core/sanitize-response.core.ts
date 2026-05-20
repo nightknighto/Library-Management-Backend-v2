@@ -9,6 +9,9 @@ import type z from 'zod';
 /**
  * Validates and sanitizes response data against a Zod schema.
  *
+ * Uses `schema.parse` to validate and strip unknown keys based on the schema.
+ * Throws a ZodError when validation fails.
+ *
  * @param schema - The Zod schema to validate against
  * @param data - The data to sanitize
  * @returns Validated and parsed data

@@ -90,6 +90,7 @@ Default checks:
 ## AI Rules Location
 - Store AI instruction and rules documents under [docs/rules](docs/rules/).
 - Treat [docs/create-handler-security-guide.md](docs/create-handler-security-guide.md) as a usage guide, not a rules file.
+- See [docs/rules/jsdoc-coverage.md](docs/rules/jsdoc-coverage.md) for strict JSDoc coverage requirements.
 
 ## Inference Test Governance (Mandatory)
 - Compile-only inference tests live in `src/core/__type-tests__` and are enforced through `pnpm check`.
