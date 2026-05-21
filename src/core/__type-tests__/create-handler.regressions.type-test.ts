@@ -70,14 +70,14 @@ createHandler(
             },
         },
     },
-    async (_req, _auth) => ({ data: { updated: true } }),
+    async ({ req, auth: _auth }) => ({ data: { updated: true } }),
 );
 
 /**
  * Regression-002: response-paginated contracts must always return pagination metadata.
  */
 // @ts-expect-error response-paginated contracts require pagination payload
-createHandler(ListBooksContract, async (_req) => ({ data: [{ isbn: 'x' }] }));
+createHandler(ListBooksContract, async ({ req }) => ({ data: [{ isbn: 'x' }] }));
 
 /**
  * Regression-003: optional auth remains optional inside handlers.
@@ -90,7 +90,7 @@ createHandler(
             authenticate: async () => ({ userId: 'r-2', role: 'member' as const }),
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         type _optionalHasUndefined = Expect<Extends<undefined, typeof auth>>;
         type _optionalAuthShape = Expect<Extends<Exclude<typeof auth, undefined>, AuthContext>>;
         return { data: { updated: true } };
@@ -100,7 +100,7 @@ createHandler(
 /**
  * Regression-004: request payload inference must not degrade to any.
  */
-createHandler(UpdateBookContract, async (req) => {
+createHandler(UpdateBookContract, async ({ req }) => {
     type _bodyNotAny = ExpectFalse<IsAny<typeof req.body>>;
     return { data: { updated: true } };
 });
@@ -116,7 +116,7 @@ type _hasErrorEnvelope = Expect<Equal<UpdateBookErrorResponse['success'], false>
  * Regression-006: handlers must not allow unknown top-level success result keys.
  */
 // @ts-expect-error unknown top-level keys must be rejected
-createHandler(UpdateBookContract, async (_req) => ({
+createHandler(UpdateBookContract, async ({ req }) => ({
     data: { updated: true },
     metax: { timestamp: '2026-01-01T00:00:00.000Z' },
 }));
@@ -125,7 +125,7 @@ createHandler(UpdateBookContract, async (_req) => ({
  * Regression-008: cookies must not weaken top-level key validation.
  */
 // @ts-expect-error unknown top-level keys must still be rejected with cookies
-createHandler(UpdateBookContract, async (_req) => ({
+createHandler(UpdateBookContract, async ({ req }) => ({
     data: { updated: true },
     cookies: [{ action: 'set', name: 'session', value: 'token' }],
     metax: { traceId: 'trace-8' },
@@ -142,7 +142,7 @@ createHandler(
             authenticate: async () => ({ userId: 'r-7', role: 'staff' as const }),
         },
     },
-    async (_req: unknown) => ({ data: { updated: true } }),
+    async ({ req }) => ({ data: { updated: true } }),
 );
 
 const publicFactory = createHandlerFactory<AuthContext>({ access: 'public' });
@@ -152,8 +152,9 @@ publicFactory(
     {
         // @ts-expect-error public factory handlers must not accept security options
         security: {
+            // @ts-expect-error auth is unknown because security is rejected
             authorize: async ({ auth }) => auth.role === 'staff',
         },
     },
-    async (_req) => ({ data: { updated: true } }),
+    async ({ req }) => ({ data: { updated: true } }),
 );

@@ -39,6 +39,71 @@ describe('createHandlerFactory (runtime)', () => {
         expect(response.body).toEqual({ success: false, error: 'Unauthenticated' });
     });
 
+    it('throws when protected factory handler has no authenticate', () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const factory = createHandlerFactory({ access: 'protected' });
+
+        expect(() =>
+            factory(contract, async ({ req }) => ({ data: { ok: true } })),
+        ).toThrow('require an authenticate function');
+    });
+
+    it('throws when optional factory handler has no authenticate', () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const factory = createHandlerFactory({ access: 'optional' });
+
+        expect(() =>
+            factory(contract, async ({ req }) => ({ data: { ok: true } })),
+        ).toThrow('require an authenticate function');
+    });
+
+    it('throws when factory has authSchema but no authenticate and handler omits it', () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const factory = createHandlerFactory({
+            access: 'protected',
+            security: { authSchema: z.object({ userId: z.string() }) },
+        });
+
+        expect(() =>
+            factory(contract, async ({ req }) => ({ data: { ok: true } })),
+        ).toThrow('require an authenticate function');
+    });
+
+    it('succeeds when factory omits authenticate but handler provides it', async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const factory = createHandlerFactory({ access: 'protected' });
+
+        const handler = factory(
+            contract,
+            {
+                security: { authenticate: async () => ({ userId: 'u-1' }) },
+            },
+            async ({ req, auth }) => ({ data: { ok: true } }),
+        );
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        expect(response.status).toBe(200);
+        expect(response.body.data).toEqual({ ok: true });
+    });
+
     it('allows overriding access to optional per handler', async () => {
         const contract = createContract({
             request: {},

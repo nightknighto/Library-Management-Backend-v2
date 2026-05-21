@@ -42,23 +42,19 @@ describe('createHandler (runtime)', () => {
         expect(response.status).toBe(201);
     });
 
-    it('returns 401 when protected and no authenticator is provided', async () => {
+    it('throws at creation time when protected and no authenticator is provided', () => {
         const contract = createContract({
             request: {},
             response: z.object({ ok: z.boolean() }),
         });
 
-        const handler = createHandler(
-            contract,
-            { access: 'protected' },
-            async () => ({ data: { ok: true } }),
-        );
-
-        const { app, route } = createTestApp(handler);
-        const response = await request(app).get(route);
-
-        expect(response.status).toBe(401);
-        expect(response.body).toEqual({ success: false, error: 'Unauthenticated' });
+        expect(() =>
+            createHandler(
+                contract,
+                { access: 'protected' },
+                async () => ({ data: { ok: true } }),
+            ),
+        ).toThrow('require an authenticate function');
     });
 
     it('allows optional access when authentication returns null', async () => {
@@ -77,7 +73,7 @@ describe('createHandler (runtime)', () => {
                     authenticate: async () => null,
                 },
             },
-            async (_req, auth) => {
+            async ({ req, auth }) => {
                 seenAuth = auth;
                 return { data: { ok: true } };
             },

@@ -94,7 +94,7 @@ createHandler(
             unauthorized: () => new createHttpError.Forbidden('Forbidden'),
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         type _auth = Expect<Extends<typeof auth, ScopedAuthContext>>;
         return {
             data: ['book-1'],
@@ -107,7 +107,7 @@ createHandler(
     },
 );
 
-createHandler(SearchBooksContract, async (_req) => ({
+createHandler(SearchBooksContract, async ({ req }) => ({
     statusCode: 206,
     data: ['book-1'],
     pagination: {
@@ -142,33 +142,15 @@ createHandler(
             unauthenticated: () => new createHttpError.Unauthorized('Unauthorized'),
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         type _authHasUndefined = Expect<Extends<undefined, typeof auth>>;
         type _authShape = Expect<Extends<Exclude<typeof auth, undefined>, ScopedAuthContext>>;
         return { data: { updated: true } };
     },
 );
 
-createHandler(
-    UpdateBookContract,
-    {
-        access: 'protected',
-        security: {
-            authenticate: async () => ({
-                userId: 'u-11b',
-                role: 'staff' as ScopedAuthContext['role'],
-                scopes: ['books:write'],
-            }),
-            authSchema: ScopedAuthSchema,
-            validateBeforeAuthorization: true,
-        },
-    },
-    // @ts-expect-error interaction: protected/authSchema handlers reject unknown top-level result keys
-    async (_req, _auth) => ({
-        data: { updated: true },
-        metax: { traceId: 'trace-1' },
-    }),
-);
+// @ts-expect-error interaction: protected/authSchema handlers reject unknown top-level result keys (metax)
+createHandler(UpdateBookContract, { access: 'protected', security: { authenticate: async () => ({ userId: 'u-11b', role: 'staff' as ScopedAuthContext['role'], scopes: ['books:write'] }), authSchema: ScopedAuthSchema, validateBeforeAuthorization: true } }, async ({ req, auth: _auth }) => ({ data: { updated: true }, metax: { traceId: 'trace-1' } }));
 
 const protectedFactory = createHandlerFactory<ScopedAuthContext>({
     access: 'protected',
@@ -195,7 +177,7 @@ protectedFactory(
             },
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         type _auth = Expect<Extends<typeof auth, ScopedAuthContext>>;
         return { data: { updated: true } };
     },
@@ -203,12 +185,13 @@ protectedFactory(
 
 protectedFactory(
     UpdateBookContract,
-    // @ts-expect-error interaction: overriding protected factory call to public must reject security options
     {
         access: 'public',
+        // @ts-expect-error interaction: overriding protected factory call to public must reject security options
         security: {
+            // @ts-expect-error interaction: auth is untyped because security is rejected
             authorize: async ({ auth }) => auth.role === 'staff',
         },
     },
-    async (_req) => ({ data: { updated: true } }),
+    async ({ req }) => ({ data: { updated: true } }),
 );

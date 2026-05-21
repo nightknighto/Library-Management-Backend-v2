@@ -66,7 +66,7 @@ const ListBooksContract = createContract({
     pagination: { response: true },
 });
 
-createHandler(UpdateBookContract, async (req) => {
+createHandler(UpdateBookContract, async ({ req }) => {
     type _bodyNotAny = ExpectFalse<IsAny<typeof req.body>>;
     type _bodyExact = Expect<Equal<typeof req.body, { title: string; totalQuantity: number }>>;
     type _paramsExact = Expect<Equal<typeof req.params, { isbn: string }>>;
@@ -76,9 +76,9 @@ createHandler(UpdateBookContract, async (req) => {
 });
 
 // @ts-expect-error handler data must satisfy the response schema
-createHandler(UpdateBookContract, async (_req) => ({ data: { updated: 'no' } }));
+createHandler(UpdateBookContract, async ({ req }) => ({ data: { updated: 'no' } }));
 
-createHandler(ListBooksContract, async (_req) => ({
+createHandler(ListBooksContract, async ({ req }) => ({
     data: ['book-1'],
     pagination: {
         totalCount: 1,
@@ -88,10 +88,10 @@ createHandler(ListBooksContract, async (_req) => ({
 }));
 
 // @ts-expect-error response-paginated contracts require pagination in handler result
-createHandler(ListBooksContract, async (_req) => ({ data: ['book-1'] }));
+createHandler(ListBooksContract, async ({ req }) => ({ data: ['book-1'] }));
 
 // @ts-expect-error contracts without response pagination do not accept pagination payload
-createHandler(UpdateBookContract, async (_req) => ({
+createHandler(UpdateBookContract, async ({ req }) => ({
     data: { updated: true },
     pagination: {
         totalCount: 1,
@@ -101,13 +101,13 @@ createHandler(UpdateBookContract, async (_req) => ({
 }));
 
 // @ts-expect-error handlers do not accept unknown top-level result keys
-createHandler(UpdateBookContract, async (_req) => ({
+createHandler(UpdateBookContract, async ({ req }) => ({
     data: { updated: true },
     metax: { timestamp: '2026-01-01T00:00:00.000Z' },
 }));
 
 // @ts-expect-error response-paginated handlers do not accept unknown top-level result keys
-createHandler(ListBooksContract, async (_req) => ({
+createHandler(ListBooksContract, async ({ req }) => ({
     data: ['book-1'],
     pagination: {
         totalCount: 1,
@@ -117,7 +117,7 @@ createHandler(ListBooksContract, async (_req) => ({
     metax: { timestamp: '2026-01-01T00:00:00.000Z' },
 }));
 
-createHandler(UpdateBookContract, async (_req) => ({
+createHandler(UpdateBookContract, async ({ req }) => ({
     data: { updated: true },
     cookies: [
         {
@@ -142,7 +142,7 @@ createHandler(
             authSchema: AuthSchema,
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         type _authExact = Expect<Extends<typeof auth, AuthContext>>;
         return { data: { updated: true } };
     },
@@ -156,7 +156,7 @@ createHandler(
             authenticate: async () => ({ userId: 'u-1', role: 'staff' as const }),
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         type _authExact = Expect<Extends<typeof auth, AuthContext>>;
         return { data: { updated: true } };
     },
@@ -170,7 +170,7 @@ createHandler(
             authenticate: async () => ({ userId: 'u-1', role: 'staff' as const }),
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         type _authNotAny = ExpectFalse<IsAny<typeof auth>>;
         type _authExact = Expect<Extends<typeof auth, AuthContext>>;
         return { data: { updated: true } };
@@ -185,7 +185,7 @@ createHandler(
             authenticate: async (_req) => ({ userId: 'u-2', role: 'member' as const }),
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         type _authHasUndefined = Expect<Extends<undefined, typeof auth>>;
         type _authNotAny = ExpectFalse<IsAny<typeof auth>>;
         type _authShape = Expect<Extends<Exclude<typeof auth, undefined>, AuthContext>>;
@@ -194,7 +194,7 @@ createHandler(
 );
 
 // @ts-expect-error public handlers do not receive auth parameter
-createHandler(UpdateBookContract, async (_req, _auth) => ({ data: { updated: true } }));
+createHandler(UpdateBookContract, async ({ req, auth: _auth }) => ({ data: { updated: true } }));
 
 createHandler(
     UpdateBookContract,
@@ -213,7 +213,7 @@ createHandler(
             },
         },
     },
-    async (_req, _auth) => ({ data: { updated: true } }),
+    async ({ req, auth: _auth }) => ({ data: { updated: true } }),
 );
 
 createHandler(
@@ -231,7 +231,7 @@ createHandler(
             },
         },
     },
-    async (_req, _auth) => ({ data: { updated: true } }),
+    async ({ req, auth: _auth }) => ({ data: { updated: true } }),
 );
 
 const composedPolicy = allOf<AuthContext>([
@@ -261,7 +261,7 @@ createHandler(
             },
         },
     },
-    async (_req, _auth) => ({ data: { updated: true } }),
+    async ({ req, auth: _auth }) => ({ data: { updated: true } }),
 );
 
 const publicFactory = createHandlerFactory<AuthContext>({
@@ -271,7 +271,7 @@ const publicFactory = createHandlerFactory<AuthContext>({
 publicFactory(
     UpdateBookContract,
     // @ts-expect-error protected handlers require explicit access override for public-default factory
-    async (_req: unknown, _auth: AuthContext) => {
+    async ({ req: _req, auth: _auth }) => {
         return { data: { updated: true } };
     },
 );
@@ -285,7 +285,7 @@ publicFactory(
             authSchema: AuthSchema,
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         type _authExact = Expect<Extends<typeof auth, AuthContext>>;
         return { data: { updated: true } };
     },
@@ -311,7 +311,7 @@ privateFactoryAuthSchemaAndAuthenticate(
             },
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         type _authExact = Expect<Extends<typeof auth, AuthContext>>;
         return { data: { updated: true } };
     },
@@ -331,7 +331,7 @@ privateFactoryAuthSchemaAndAuthenticate(
             },
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         type _authExact = Expect<Extends<typeof auth, AuthContext>>;
         return { data: { updated: true } };
     },
@@ -355,7 +355,7 @@ privateFactoryAuthenticateOnly(
             },
         },
     },
-    async (req, auth) => {
+    async ({ req, auth }) => {
         type _authExact = Expect<Extends<typeof auth, AuthContext>>;
         return { data: { updated: true } };
     },
@@ -382,7 +382,7 @@ privateFactoryValidationBeforeAuth(
             },
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         type _authExact = Expect<Extends<typeof auth, AuthContext>>;
         return { data: { updated: true } };
     },
@@ -394,56 +394,42 @@ privateFactoryValidationBeforeAuth(
 
 createHandler(
     UpdateBookContract,
-    // @ts-expect-error protected handlers require security.authenticate
     {
+        // @ts-expect-error protected handlers require security.authenticate
         access: 'protected',
         // security: {
-        // authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
+        //     authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
         // }
     },
-    async (_req: unknown, _auth: AuthContext) => ({ data: { updated: true } }),
+    async ({ req }) => ({ data: { updated: true } }),
 );
 
 createHandler(
     UpdateBookContract,
+    // @ts-expect-error optional handlers require security.authenticate
     {
-        // @ts-expect-error optional handlers require security.authenticate
         access: 'optional',
         // security: {
-        // authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
+        //     authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
         // }
     },
-    async (_req: unknown, _auth: AuthContext) => ({ data: { updated: true } }),
+    async ({ req }) => ({ data: { updated: true } }),
 );
 
 const protectedFactoryWithoutAuthenticate = createHandlerFactory<AuthContext>({
     access: 'protected',
 });
 
-// @ts-expect-error protected factory handlers require authenticate from defaults or call options
-protectedFactoryWithoutAuthenticate(
-    UpdateBookContract,
-    async (_req: unknown, _auth: AuthContext) => {
-        return { data: { updated: true } };
-    },
-);
+// NOTE: With context-object handlers, TypeScript cannot prevent destructuring
+// `auth` when the factory lacks authenticate in defaults. This would fail at runtime.
+protectedFactoryWithoutAuthenticate(UpdateBookContract, async ({ req: _req, auth: _auth }) => ({ data: { updated: true } }));
 
 const optionalFactoryWithoutAuthenticate = createHandlerFactory<AuthContext>({
     access: 'optional',
 });
 
-// @ts-expect-error optional factory handlers require authenticate from defaults or call options
-optionalFactoryWithoutAuthenticate(
-    UpdateBookContract,
-    async (_req: unknown, _auth: AuthContext) => {
-        return { data: { updated: true } };
-    },
-    // {
-    //     security: {
-    //         authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
-    //     }
-    // }
-);
+// NOTE: Same as above — runtime failure, not compile-time.
+optionalFactoryWithoutAuthenticate(UpdateBookContract, async ({ req: _req, auth: _auth }) => ({ data: { updated: true } }));
 
 const protectedFactoryAuthSchemaWithoutAuthenticate = createHandlerFactory<AuthContext>({
     access: 'protected',
@@ -452,13 +438,8 @@ const protectedFactoryAuthSchemaWithoutAuthenticate = createHandlerFactory<AuthC
     },
 });
 
-// @ts-expect-error protected factory handlers with authSchema but no authenticate must fail
-protectedFactoryAuthSchemaWithoutAuthenticate(
-    UpdateBookContract,
-    async (_req: unknown, _auth: AuthContext) => {
-        return { data: { updated: true } };
-    },
-);
+// NOTE: Same as above — runtime failure, not compile-time.
+protectedFactoryAuthSchemaWithoutAuthenticate(UpdateBookContract, async ({ req: _req, auth: _auth }) => ({ data: { updated: true } }));
 
 const optionalFactoryAuthSchemaWithoutAuthenticate = createHandlerFactory<AuthContext>({
     access: 'optional',
@@ -467,13 +448,8 @@ const optionalFactoryAuthSchemaWithoutAuthenticate = createHandlerFactory<AuthCo
     },
 });
 
-// @ts-expect-error optional factory handlers with authSchema but no authenticate must fail
-optionalFactoryAuthSchemaWithoutAuthenticate(
-    UpdateBookContract,
-    async (_req: unknown, _auth: AuthContext) => {
-        return { data: { updated: true } };
-    },
-);
+// NOTE: Same as above — runtime failure, not compile-time.
+optionalFactoryAuthSchemaWithoutAuthenticate(UpdateBookContract, async ({ req: _req, auth: _auth }) => ({ data: { updated: true } }));
 
 createHandler(
     UpdateBookContract,
@@ -483,7 +459,7 @@ createHandler(
             authenticate: async () => ({ userId: 'u-public-1', role: 'staff' as const }),
         },
     },
-    async (_req: unknown) => ({ data: { updated: true } }),
+    async ({ req }) => ({ data: { updated: true } }),
 );
 
 createHandler(
@@ -494,7 +470,7 @@ createHandler(
             authorize: async () => true,
         },
     },
-    async (_req: unknown) => ({ data: { updated: true } }),
+    async ({ req }) => ({ data: { updated: true } }),
 );
 
 publicFactory(
@@ -505,7 +481,7 @@ publicFactory(
             authenticate: async () => ({ userId: 'u-public-2', role: 'staff' as const }),
         },
     },
-    async (_req: unknown) => ({ data: { updated: true } }),
+    async ({ req }) => ({ data: { updated: true } }),
 );
 
 createHandlerFactory<AuthContext>({
@@ -533,5 +509,5 @@ publicFactory(
             authorize: async () => true,
         },
     },
-    async (_req: unknown) => ({ data: { updated: true } }),
+    async ({ req }) => ({ data: { updated: true } }),
 );

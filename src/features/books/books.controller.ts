@@ -41,7 +41,7 @@ const createBook = createJwtAuthHandler(
             validateBeforeAuthorization: true,
         },
     },
-    async (req, auth) => {
+    async ({ req, auth }) => {
         await BookService.createBook(auth.email, req.body);
         return {
             statusCode: 201,
@@ -71,7 +71,7 @@ const getAllBooks = createHandler(
             unauthorized: () => new createHttpError.Forbidden('Invalid authenticated user'),
         },
     },
-    async (req, auth) => {
+    async ({ req, auth }) => {
         const { title, author, isbn, page, limit } = req.query;
         const effectiveLimit = auth ? limit : Math.min(limit, 5);
 
@@ -99,7 +99,7 @@ const getBookByIsbn = createJwtAuthHandler(
     {
         access: 'optional',
     },
-    async (req, auth) => {
+    async ({ req, auth }) => {
         const { isbn } = req.params;
         const { fields } = req.query;
         const book = await BookService.getBookByISBN(isbn, fields);
@@ -119,7 +119,7 @@ const updateBook = createJwtAuthHandler(
             authorize: anyOf<JwtAuthContext>([isLibraryStaff, editsOwnAuthorName]),
         },
     },
-    async (req, auth) => {
+    async ({ req, auth }) => {
         const { isbn } = req.params;
         const updatedBook = await BookService.updateBook(isbn, auth.email, req.body);
 
@@ -142,7 +142,7 @@ const deleteBook = createJwtAuthHandler(
             authorize: deleteBookPolicy,
         },
     },
-    async (req, auth) => {
+    async ({ req, auth }) => {
         const { isbn } = req.params;
         await BookService.deleteBook(isbn, auth.email);
 
@@ -158,12 +158,24 @@ export const BookController = {
     deleteBook,
 };
 
-// const dummy = createHandler(BookDTOs.UpdateBookContract,
-//     {
-//         access: 'protected',
-//         security: {
+createHandler(BookDTOs.UpdateBookContract,
+    {
+        access: 'optional',
+        security: {
+            authenticate: authenticateJwt
+        }
+    },
+    async ({ req, auth }) => ({ data: { isbn: 'x', title: 'x', author: 'x', shelf: 'x', total_quantity: 1 } })
+)
 
-//         }
+// createHandler(BookDTOs.UpdateBookContract,
+//     {
+//         access: 'public',
 //     },
-//     () => {}
+//     ({ req }) => {
+//         return {
+//             data: 1 as any
+//         }
+//     }
+
 // )

@@ -73,7 +73,7 @@ createHandler(
             authenticate: async () => ({ userId: 'user-optional' }),
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         type _optionalHasUndefined = Expect<Extends<undefined, typeof auth>>;
         type _optionalAuthShape = Expect<Extends<Exclude<typeof auth, undefined>, AuthContext>>;
         return { data: { updated: true } };
@@ -88,7 +88,7 @@ createHandler(
             authenticate: async () => ({ userId: 'user-protected' }),
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         type _protectedAuth = Expect<Extends<typeof auth, AuthContext>>;
         // @ts-expect-error protected auth is never undefined
         const mustBeUndefined: undefined = auth;

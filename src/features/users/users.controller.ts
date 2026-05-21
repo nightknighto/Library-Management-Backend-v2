@@ -7,7 +7,7 @@ import * as UserDTOs from './users.schemas.ts';
 
 // const registerUser = createHandler(UserDTOs., handler)
 
-const registerUser = createHandler(UserDTOs.RegisterUserContract, async (req) => {
+const registerUser = createHandler(UserDTOs.RegisterUserContract, async ({ req }) => {
     const { email, name } = req.body;
     const user = await UserRepository.createUser(email, name);
     if (!user) {
@@ -30,7 +30,7 @@ const registerUser = createHandler(UserDTOs.RegisterUserContract, async (req) =>
     };
 });
 
-const loginUser = createHandler(UserDTOs.LoginUserContract, async (req) => {
+const loginUser = createHandler(UserDTOs.LoginUserContract, async ({ req }) => {
     const { email } = req.body;
     const user = await UserRepository.getUser(email);
     if (!user) {
@@ -55,7 +55,7 @@ const loginUser = createHandler(UserDTOs.LoginUserContract, async (req) => {
     };
 });
 
-const logout = createHandler(UserDTOs.LogoutUserContract, async (_req) => {
+const logout = createHandler(UserDTOs.LogoutUserContract, async ({ req }) => {
     return {
         statusCode: 204,
         data: undefined,
@@ -69,7 +69,7 @@ const logout = createHandler(UserDTOs.LogoutUserContract, async (_req) => {
     };
 });
 
-const getAllUsers = createHandler(UserDTOs.GetAllUsersContract, async (req) => {
+const getAllUsers = createHandler(UserDTOs.GetAllUsersContract, async ({ req }) => {
     const { page, limit } = req.query;
     const users = await UserRepository.getAllUsers(page, limit);
     const totalCount = await UserRepository.getUserCount();
@@ -92,7 +92,7 @@ const updateUser = createHandler(
             authenticate: authenticateJwt,
         },
     },
-    async (req, auth) => {
+    async ({ req, auth }) => {
         const email = auth.email;
         const { name } = req.body;
         const updatedUser = await UserRepository.updateUser(email, name);
@@ -105,7 +105,7 @@ const updateUser = createHandler(
     },
 );
 
-const deleteUser = createHandler(UserDTOs.DeleteUserContract, async (req) => {
+const deleteUser = createHandler(UserDTOs.DeleteUserContract, async ({ req }) => {
     const { email } = req.params;
     const user = await UserRepository.deleteUser(email);
     if (!user) {
@@ -131,7 +131,7 @@ const getUserBorrows = createHandler(
             authenticate: authenticateJwt,
         },
     },
-    async (_req, auth) => {
+    async ({ req, auth }) => {
         const email = auth.email;
         const userWithBorrows = await UserRepository.getUserWithActiveBorrows(email);
         if (!userWithBorrows) {

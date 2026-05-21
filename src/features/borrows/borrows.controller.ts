@@ -33,7 +33,7 @@ const borrowBook = createHandler(
             }),
         },
     },
-    async (req, auth) => {
+    async ({ req, auth }) => {
         const { isbn } = req.params;
         const user_email = auth.email;
 
@@ -74,7 +74,7 @@ const returnBook = createProtectedHandler(
             },
         },
     },
-    async (req, auth) => {
+    async ({ req, auth }) => {
         const { isbn } = req.params;
         const user_email = auth.email;
 
@@ -86,7 +86,7 @@ const returnBook = createProtectedHandler(
     },
 );
 
-const getOverdueBooks = createProtectedHandler(BorrowDTOs.OverdueBooksContract, async (req) => {
+const getOverdueBooks = createProtectedHandler(BorrowDTOs.OverdueBooksContract, async ({ req }) => {
     const { page, limit } = req.query;
 
     const overdueBorrows = await BorrowsService.getOverdueBooks(page, limit);
