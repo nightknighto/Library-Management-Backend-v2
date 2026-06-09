@@ -90,12 +90,171 @@ type _searchQueryHasPage = Expect<
     >
 >;
 
+const ZodObjectBodyContract = createContract({
+    request: {
+        body: z.object({
+            title: z.string(),
+            copies: z.coerce.number().int().min(1),
+        }),
+    },
+    response: z.object({
+        id: z.string(),
+        title: z.string(),
+    }),
+});
+
+type ZodObjectBodyRequest = z.infer<typeof ZodObjectBodyContract.request>;
+type ZodObjectBodyResponse = z.infer<typeof ZodObjectBodyContract.response>;
+type ZodObjectBodySuccess = Extract<ZodObjectBodyResponse, { success: true }>;
+
+type _zodObjBodyNotAny = ExpectFalse<IsAny<ZodObjectBodyRequest['body']>>;
+type _zodObjBodyExact = Expect<
+    Equal<ZodObjectBodyRequest['body'], { title: string; copies: number }>
+>;
+type _zodObjBodySuccessData = Expect<
+    Equal<ZodObjectBodySuccess['data'], { id: string; title: string }>
+>;
+
+const ZodObjectParamsContract = createContract({
+    request: {
+        params: z.object({
+            id: z.string().uuid(),
+            slug: z.string(),
+        }),
+    },
+    response: z.string(),
+});
+
+type ZodObjParamsRequest = z.infer<typeof ZodObjectParamsContract.request>;
+type _zodObjParamsNotAny = ExpectFalse<IsAny<ZodObjParamsRequest['params']>>;
+type _zodObjParamsExact = Expect<
+    Equal<ZodObjParamsRequest['params'], { id: string; slug: string }>
+>;
+
+const DiscriminatedUnionBodyContract = createContract({
+    request: {
+        body: z.discriminatedUnion('type', [
+            z.object({
+                type: z.literal('book'),
+                title: z.string(),
+                isbn: z.string(),
+            }),
+            z.object({
+                type: z.literal('magazine'),
+                title: z.string(),
+                issue: z.number().int(),
+            }),
+        ]),
+    },
+    response: z.object({ id: z.string() }),
+});
+
+type DURequest = z.infer<typeof DiscriminatedUnionBodyContract.request>;
+type _duBodyNotAny = ExpectFalse<IsAny<DURequest['body']>>;
+type _duBodyExact = Expect<
+    Equal<
+        DURequest['body'],
+        | { type: 'book'; title: string; isbn: string }
+        | { type: 'magazine'; title: string; issue: number }
+    >
+>;
+
+const UnionBodyContract = createContract({
+    request: {
+        body: z.union([
+            z.object({ name: z.string() }),
+            z.object({ id: z.number() }),
+        ]),
+    },
+    response: z.string(),
+});
+
+type UnionBodyRequest = z.infer<typeof UnionBodyContract.request>;
+type _unionBodyNotAny = ExpectFalse<IsAny<UnionBodyRequest['body']>>;
+type _unionBodyExact = Expect<
+    Equal<UnionBodyRequest['body'], { name: string } | { id: number }>
+>;
+
+const TransformBodyContract = createContract({
+    request: {
+        body: z
+            .object({ ids: z.string() })
+            .transform((data) => ({ ids: data.ids.split(',') })),
+    },
+    response: z.number(),
+});
+
+type TransformBodyRequest = z.infer<typeof TransformBodyContract.request>;
+type _transformBodyNotAny = ExpectFalse<IsAny<TransformBodyRequest['body']>>;
+type _transformBodyExact = Expect<
+    Equal<TransformBodyRequest['body'], { ids: string[] }>
+>;
+
+const RefineBodyContract = createContract({
+    request: {
+        body: z
+            .object({
+                password: z.string(),
+                confirm: z.string(),
+            })
+            .refine((data) => data.password === data.confirm),
+    },
+    response: z.string(),
+});
+
+type RefineBodyRequest = z.infer<typeof RefineBodyContract.request>;
+type _refineBodyNotAny = ExpectFalse<IsAny<RefineBodyRequest['body']>>;
+type _refineBodyExact = Expect<
+    Equal<RefineBodyRequest['body'], { password: string; confirm: string }>
+>;
+
+const MixedFieldsContract = createContract({
+    request: {
+        body: z.object({
+            name: z.string(),
+            email: z.string().email(),
+        }),
+        params: z.object({
+            userId: z.string().uuid(),
+        }),
+        query: {
+            verbose: z.coerce.boolean().default(false),
+        },
+    },
+    response: z.boolean(),
+});
+
+type MixedRequest = z.infer<typeof MixedFieldsContract.request>;
+type _mixedBody = Expect<
+    Equal<MixedRequest['body'], { name: string; email: string }>
+>;
+type _mixedParams = Expect<
+    Equal<MixedRequest['params'], { userId: string }>
+>;
+type _mixedQuery = Expect<Equal<MixedRequest['query'], { verbose: boolean }>>;
+
 createContract({
     request: {
         // @ts-expect-error request supports only body/query/params keys
         headers: {
             authorization: z.string(),
         },
+    },
+    response: z.string(),
+});
+
+createContract({
+    request: {
+        // @ts-expect-error z.string() is not a valid body schema (must produce object)
+        body: z.string(),
+    },
+    response: z.string(),
+});
+
+createContract({
+    request: {
+        // @ts-expect-error z.number() is not a valid params schema (must produce object)
+        params: z.number(),
     },
     response: z.string(),
 });

@@ -158,4 +158,256 @@ describe('createContract (runtime)', () => {
         expect(parsed.query.page).toBe(9);
         expect(parsed.query.limit).toBe(77);
     });
+
+    it('accepts z.object for body and validates correctly', () => {
+        const contract = createContract({
+            request: {
+                body: z.object({
+                    name: z.string().min(1),
+                    age: z.number().int().positive(),
+                }),
+            },
+            response: z.object({ id: z.string() }),
+        });
+
+        const valid = contract.request.parse({
+            body: { name: 'Alice', age: 30 },
+            query: undefined,
+            params: undefined,
+        });
+        expect(valid.body).toEqual({ name: 'Alice', age: 30 });
+
+        expect(() =>
+            contract.request.parse({
+                body: { name: '', age: -1 },
+                query: undefined,
+                params: undefined,
+            }),
+        ).toThrow();
+    });
+
+    it('respects z.strictObject mode when provided as body', () => {
+        const contract = createContract({
+            request: {
+                body: z.strictObject({
+                    name: z.string(),
+                }),
+            },
+            response: z.string(),
+        });
+
+        expect(() =>
+            contract.request.parse({
+                body: { name: 'Alice', extra: 'not allowed' },
+                query: undefined,
+                params: undefined,
+            }),
+        ).toThrow();
+    });
+
+    it('respects z.object passthrough mode when provided as body', () => {
+        const contract = createContract({
+            request: {
+                body: z.object({ name: z.string() }).passthrough(),
+            },
+            response: z.string(),
+        });
+
+        const result = contract.request.parse({
+            body: { name: 'Alice', extra: 'allowed' },
+            query: undefined,
+            params: undefined,
+        });
+        expect(result.body).toEqual({ name: 'Alice', extra: 'allowed' });
+    });
+
+    it('accepts z.object for params and validates correctly', () => {
+        const contract = createContract({
+            request: {
+                params: z.object({
+                    id: z.string().uuid(),
+                    slug: z.string(),
+                }),
+            },
+            response: z.string(),
+        });
+
+        const valid = contract.request.parse({
+            body: undefined,
+            query: undefined,
+            params: { id: '123e4567-e89b-12d3-a456-426614174000', slug: 'my-post' },
+        });
+        expect(valid.params).toEqual({
+            id: '123e4567-e89b-12d3-a456-426614174000',
+            slug: 'my-post',
+        });
+
+        expect(() =>
+            contract.request.parse({
+                body: undefined,
+                query: undefined,
+                params: { id: 'not-a-uuid', slug: 'my-post' },
+            }),
+        ).toThrow();
+    });
+
+    it('accepts discriminated union for body and validates both variants', () => {
+        const contract = createContract({
+            request: {
+                body: z.discriminatedUnion('type', [
+                    z.object({
+                        type: z.literal('book'),
+                        title: z.string().min(1),
+                        isbn: z.string(),
+                    }),
+                    z.object({
+                        type: z.literal('magazine'),
+                        title: z.string().min(1),
+                        issue: z.number().int().positive(),
+                    }),
+                ]),
+            },
+            response: z.object({ id: z.string() }),
+        });
+
+        const book = contract.request.parse({
+            body: { type: 'book', title: 'TS Guide', isbn: '978-0' },
+            query: undefined,
+            params: undefined,
+        });
+        expect(book.body).toEqual({ type: 'book', title: 'TS Guide', isbn: '978-0' });
+
+        const magazine = contract.request.parse({
+            body: { type: 'magazine', title: 'Code Monthly', issue: 42 },
+            query: undefined,
+            params: undefined,
+        });
+        expect(magazine.body).toEqual({
+            type: 'magazine',
+            title: 'Code Monthly',
+            issue: 42,
+        });
+
+        expect(() =>
+            contract.request.parse({
+                body: { type: 'book', title: '', isbn: '978-0' },
+                query: undefined,
+                params: undefined,
+            }),
+        ).toThrow();
+
+        expect(() =>
+            contract.request.parse({
+                body: { type: 'unknown', title: 'Test' },
+                query: undefined,
+                params: undefined,
+            }),
+        ).toThrow();
+    });
+
+    it('accepts z.union for body', () => {
+        const contract = createContract({
+            request: {
+                body: z.union([
+                    z.object({ name: z.string() }),
+                    z.object({ id: z.number() }),
+                ]),
+            },
+            response: z.string(),
+        });
+
+        const byName = contract.request.parse({
+            body: { name: 'Alice' },
+            query: undefined,
+            params: undefined,
+        });
+        expect(byName.body).toEqual({ name: 'Alice' });
+
+        const byId = contract.request.parse({
+            body: { id: 42 },
+            query: undefined,
+            params: undefined,
+        });
+        expect(byId.body).toEqual({ id: 42 });
+
+        expect(() =>
+            contract.request.parse({
+                body: { foo: 'bar' },
+                query: undefined,
+                params: undefined,
+            }),
+        ).toThrow();
+    });
+
+    it('accepts z.object with .refine() for body', () => {
+        const contract = createContract({
+            request: {
+                body: z
+                    .object({
+                        password: z.string(),
+                        confirm: z.string(),
+                    })
+                    .refine((data) => data.password === data.confirm, {
+                        message: 'Passwords must match',
+                        path: ['confirm'],
+                    }),
+            },
+            response: z.string(),
+        });
+
+        const valid = contract.request.parse({
+            body: { password: 'secret', confirm: 'secret' },
+            query: undefined,
+            params: undefined,
+        });
+        expect(valid.body).toEqual({ password: 'secret', confirm: 'secret' });
+
+        expect(() =>
+            contract.request.parse({
+                body: { password: 'secret', confirm: 'different' },
+                query: undefined,
+                params: undefined,
+            }),
+        ).toThrow();
+    });
+
+    it('accepts z.object with .transform() for body', () => {
+        const contract = createContract({
+            request: {
+                body: z
+                    .object({ ids: z.string() })
+                    .transform((data) => ({ ids: data.ids.split(',') })),
+            },
+            response: z.number(),
+        });
+
+        const result = contract.request.parse({
+            body: { ids: 'a,b,c' },
+            query: undefined,
+            params: undefined,
+        });
+        expect(result.body).toEqual({ ids: ['a', 'b', 'c'] });
+    });
+
+    it('accepts mixed z.object body/params with plain query', () => {
+        const contract = createContract({
+            request: {
+                body: z.object({ name: z.string(), email: z.string().email() }),
+                params: z.object({ userId: z.string().uuid() }),
+                query: { verbose: z.coerce.boolean().default(false) },
+            },
+            response: z.boolean(),
+        });
+
+        const valid = contract.request.parse({
+            body: { name: 'Alice', email: 'alice@test.com' },
+            params: { userId: '123e4567-e89b-12d3-a456-426614174000' },
+            query: {},
+        });
+        expect(valid.body).toEqual({ name: 'Alice', email: 'alice@test.com' });
+        expect(valid.params).toEqual({
+            userId: '123e4567-e89b-12d3-a456-426614174000',
+        });
+        expect(valid.query).toEqual({ verbose: false });
+    });
 });

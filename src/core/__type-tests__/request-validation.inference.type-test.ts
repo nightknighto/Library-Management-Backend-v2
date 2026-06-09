@@ -71,3 +71,60 @@ const NotARequestEnvelopeSchema = z.object({
 
 // @ts-expect-error validateContractRequest requires body/query/params envelope schema
 void validateContractRequest(NotARequestEnvelopeSchema, expressReq);
+
+const ZodObjectBodySchema = createRequestSchema({
+    body: z.object({
+        email: z.string().email(),
+        password: z.string().min(8),
+    }),
+    params: z.object({
+        userId: z.string().uuid(),
+    }),
+    query: {
+        verbose: z.coerce.boolean().default(false),
+    },
+});
+
+type ZodObjBodyParsed = z.infer<typeof ZodObjectBodySchema>;
+
+type _zodObjBodyNotAny = ExpectFalse<IsAny<ZodObjBodyParsed['body']>>;
+type _zodObjBodyExact = Expect<
+    Equal<ZodObjBodyParsed['body'], { email: string; password: string }>
+>;
+type _zodObjParamsNotAny = ExpectFalse<IsAny<ZodObjBodyParsed['params']>>;
+type _zodObjParamsExact = Expect<
+    Equal<ZodObjBodyParsed['params'], { userId: string }>
+>;
+type _zodObjQueryExact = Expect<Equal<ZodObjBodyParsed['query'], { verbose: boolean }>>;
+
+const ZodObjectBodyContract = createContract({
+    request: {
+        body: z.object({
+            email: z.string().email(),
+            password: z.string().min(8),
+        }),
+        params: z.object({
+            userId: z.string().uuid(),
+        }),
+        query: {
+            verbose: z.coerce.boolean().default(false),
+        },
+    },
+    response: z.boolean(),
+});
+
+const zodObjBodyValidated = validateContractRequest(
+    ZodObjectBodyContract.request,
+    expressReq,
+);
+type ZodObjBodyValidatedReq = Awaited<typeof zodObjBodyValidated>;
+
+type _zodObjBodyValidatedBody = Expect<
+    Equal<ZodObjBodyValidatedReq['body'], { email: string; password: string }>
+>;
+type _zodObjBodyValidatedParams = Expect<
+    Equal<ZodObjBodyValidatedReq['params'], { userId: string }>
+>;
+type _zodObjBodyValidatedQuery = Expect<
+    Equal<ZodObjBodyValidatedReq['query'], { verbose: boolean }>
+>;

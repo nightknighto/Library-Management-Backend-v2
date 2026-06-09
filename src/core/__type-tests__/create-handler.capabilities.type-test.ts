@@ -511,3 +511,48 @@ publicFactory(
     },
     async ({ req }) => ({ data: { updated: true } }),
 );
+
+const ZodObjectBodyContract = createContract({
+    request: {
+        body: z.object({
+            email: z.string().email(),
+            password: z.string().min(8),
+        }),
+        params: z.object({
+            userId: z.string().uuid(),
+        }),
+        query: {
+            verbose: z.coerce.boolean().default(false),
+        },
+    },
+    response: z.boolean(),
+});
+
+createHandler(
+    ZodObjectBodyContract,
+    async ({ req }) => {
+        type ZodObjBodyHandlerBody = typeof req.body;
+        type _handlerBodyNotAny = ExpectFalse<IsAny<ZodObjBodyHandlerBody>>;
+        type _handlerBodyExact = Expect<
+            Equal<ZodObjBodyHandlerBody, { email: string; password: string }>
+        >;
+
+        type ZodObjBodyHandlerParams = typeof req.params;
+        type _handlerParamsNotAny = ExpectFalse<IsAny<ZodObjBodyHandlerParams>>;
+        type _handlerParamsExact = Expect<
+            Equal<ZodObjBodyHandlerParams, { userId: string }>
+        >;
+
+        type ZodObjBodyHandlerQuery = typeof req.query;
+        type _handlerQueryExact = Expect<
+            Equal<ZodObjBodyHandlerQuery, { verbose: boolean }>
+        >;
+
+        void req.body.email;
+        void req.body.password;
+        void req.params.userId;
+        void req.query.verbose;
+
+        return { data: true };
+    },
+);

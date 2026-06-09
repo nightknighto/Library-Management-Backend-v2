@@ -347,14 +347,22 @@ type CreateContractBaseParams<
      * Pass an object with any combination of `body`, `query`, and `params` fields.
      * Each field should contain Zod schema definitions for that part of the request.
      *
-     * - **body**: Validate the JSON request body (for POST/PUT/PATCH)
-     * - **query**: Validate URL query string parameters
-     * - **params**: Validate dynamic route path parameters (from Express router)
+     * - **body**: Validate the JSON request body (for POST/PUT/PATCH).
+     *   Accepts a plain object of Zod schemas (strict mode by default) or a full
+     *   `z.ZodType` whose output is a plain object (e.g. `z.object()`,
+     *   `z.discriminatedUnion()`, `.refine()`, `.transform()`). Primitives like
+     *   `z.string()` are rejected at compile time.
+     * - **query**: Validate URL query string parameters.
+     *   Only accepts a plain object of Zod schemas (pagination merging needs
+     *   the raw shape).
+     * - **params**: Validate dynamic route path parameters (from Express router).
+     *   Accepts a plain object of Zod schemas or a full `z.ZodType` whose output
+     *   is a plain object.
      *
      * ---
      * ### Examples
      *
-     * **Example** - Validate body only
+     * **Example** - Validate body only (plain object)
      * ```typescript
      * request: {
      *   body: {
@@ -362,6 +370,26 @@ type CreateContractBaseParams<
      *     email: z.string().email(),
      *     age: z.number().int().positive().optional()
      *   }
+     * }
+     * ```
+     *
+     * **Example** - Validate body with `z.object()`
+     * ```typescript
+     * request: {
+     *   body: z.object({
+     *     name: z.string().min(1),
+     *     email: z.string().email(),
+     *   })
+     * }
+     * ```
+     *
+     * **Example** - Validate body with discriminated union
+     * ```typescript
+     * request: {
+     *   body: z.discriminatedUnion('type', [
+     *     z.object({ type: z.literal('book'), title: z.string() }),
+     *     z.object({ type: z.literal('magazine'), issue: z.number() }),
+     *   ])
      * }
      * ```
      *
@@ -374,32 +402,29 @@ type CreateContractBaseParams<
      *     search: z.string().optional()
      *   }
      * }
-     *
      * ```
      *
-     * **Example** - Validate path parameters
+     * **Example** - Validate path parameters with `z.object()`
      * ```typescript
      * request: {
-     *   params: {
-     *     id: z.string().uuid()
-     *   }
+     *   params: z.object({ id: z.string().uuid() })
      * }
      * ```
      *
-     * **Example** - Validate all three together
+     * **Example** - Mixed: `z.object` body/params with plain query
      * ```typescript
      * request: {
-     *   params: { userId: z.string().uuid() },
-     *   body: { name: z.string() },
+     *   body: z.object({ name: z.string() }),
+     *   params: z.object({ userId: z.string().uuid() }),
      *   query: { includeDetails: z.boolean().optional() }
      * }
      * ```
      *
      * Omit any part you don't need validation for.
      * The request will only be validated against the fields you include.
-    *
-    * When `pagination.request` is enabled, `page` and `limit` are injected into the
-    * query schema if you did not define them yourself.
+     *
+     * When `pagination.request` is enabled, `page` and `limit` are injected into the
+     * query schema if you did not define them yourself.
      */
     request: StrictRequestInput<TRequest>;
 
