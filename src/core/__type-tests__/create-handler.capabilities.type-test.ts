@@ -2,12 +2,14 @@ import type { Request } from 'express';
 import createHttpError from 'http-errors';
 import { z } from 'zod';
 import {
+    type AfterAuthorizationRequest,
     allOf,
     anyOf,
     createContract,
     createHandler,
     createHandlerFactory,
     not,
+    type Authorizer,
 } from '../index.ts';
 import type { Equal, Expect, ExpectFalse, Extends, IsAny } from './type-test.utils.ts';
 
@@ -203,13 +205,16 @@ createHandler(
         security: {
             authenticate: async () => ({ userId: 'u-3', role: 'staff' as const }),
             authSchema: AuthSchema,
-            validateBeforeAuthorization: true,
-            authorize: async ({ req, auth }) => {
-                type _authorizedReqBody = Expect<
-                    Equal<typeof req.body, { title: string; totalQuantity: number }>
-                >;
-                type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                return auth.role === 'staff' && req.body.title.length > 0;
+            authorize: {
+                afterValidation: [
+                    async ({ req, auth }) => {
+                        type _authorizedReqBody = Expect<
+                            Equal<typeof req.body, { title: string; totalQuantity: number }>
+                        >;
+                        type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
+                        return auth.role === 'staff' && req.body.title.length > 0;
+                    },
+                ],
             },
         },
     },
@@ -223,11 +228,14 @@ createHandler(
         security: {
             authenticate: async () => ({ userId: 'u-3', role: 'staff' as const }),
             authSchema: AuthSchema,
-            validateBeforeAuthorization: false, // <============
-            authorize: async ({ req, auth }) => {
-                type _authorizedReqBody = Expect<Equal<typeof req, Request>>;
-                type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                return auth.role === 'staff' && req.body.title.length > 0;
+            authorize: {
+                beforeValidation: [
+                    async ({ req, auth }) => {
+                        type _authorizedReq = Expect<Equal<typeof req, Request>>;
+                        type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
+                        return auth.role === 'staff';
+                    },
+                ],
             },
         },
     },
@@ -248,7 +256,7 @@ createHandler(
         access: 'protected',
         security: {
             authenticate: async () => ({ userId: 'u-4', role: 'staff' as const }),
-            authorize: composedPolicy,
+            authorize: { beforeValidation: [composedPolicy] },
         },
         errors: {
             unauthenticated: (req) => {
@@ -303,11 +311,14 @@ privateFactoryAuthSchemaAndAuthenticate(
     UpdateBookContract,
     {
         security: {
-            validateBeforeAuthorization: false, // <===========
-            authorize: async ({ req, auth }) => {
-                type _authorizedReqBody = Expect<Equal<typeof req, Request>>;
-                type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                return auth.role === 'staff' && req.body.title.length > 0;
+            authorize: {
+                beforeValidation: [
+                    async ({ req, auth }) => {
+                        type _authorizedReq = Expect<Equal<typeof req, Request>>;
+                        type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
+                        return auth.role === 'staff';
+                    },
+                ],
             },
         },
     },
@@ -321,13 +332,16 @@ privateFactoryAuthSchemaAndAuthenticate(
     UpdateBookContract,
     {
         security: {
-            validateBeforeAuthorization: true, // <===========
-            authorize: async ({ req, auth }) => {
-                type _authorizedReqBody = Expect<
-                    Equal<typeof req.body, { title: string; totalQuantity: number }>
-                >;
-                type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                return auth.role === 'staff' && req.body.title.length > 0;
+            authorize: {
+                afterValidation: [
+                    async ({ req, auth }) => {
+                        type _authorizedReqBody = Expect<
+                            Equal<typeof req.body, { title: string; totalQuantity: number }>
+                        >;
+                        type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
+                        return auth.role === 'staff' && req.body.title.length > 0;
+                    },
+                ],
             },
         },
     },
@@ -348,10 +362,14 @@ privateFactoryAuthenticateOnly(
     UpdateBookContract,
     {
         security: {
-            authorize: async ({ req, auth }) => {
-                type _authorizedReqBody = Expect<Equal<typeof req, Request>>;
-                type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                return auth.role === 'staff' && req.body.title.length > 0;
+            authorize: {
+                beforeValidation: [
+                    async ({ req, auth }) => {
+                        type _authorizedReq = Expect<Equal<typeof req, Request>>;
+                        type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
+                        return auth.role === 'staff';
+                    },
+                ],
             },
         },
     },
@@ -361,24 +379,27 @@ privateFactoryAuthenticateOnly(
     },
 );
 
-const privateFactoryValidationBeforeAuth = createHandlerFactory({
+const privateFactoryInheritedAfterAuthorize = createHandlerFactory({
     access: 'protected',
     security: {
-        validateBeforeAuthorization: true, // <===========
         authenticate: async () => ({ userId: 'u-5', role: 'staff' as const }),
     },
 });
 
-privateFactoryValidationBeforeAuth(
+privateFactoryInheritedAfterAuthorize(
     UpdateBookContract,
     {
         security: {
-            authorize: async ({ req, auth }) => {
-                type _authorizedReqBody = Expect<
-                    Equal<typeof req.body, { title: string; totalQuantity: number }>
-                >;
-                type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                return auth.role === 'staff' && req.body.title.length > 0;
+            authorize: {
+                afterValidation: [
+                    async ({ req, auth }) => {
+                        type _authorizedReqBody = Expect<
+                            Equal<typeof req.body, { title: string; totalQuantity: number }>
+                        >;
+                        type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
+                        return auth.role === 'staff' && req.body.title.length > 0;
+                    },
+                ],
             },
         },
     },
@@ -389,13 +410,86 @@ privateFactoryValidationBeforeAuth(
 );
 
 /**
- * Dedicated negative assertions for missing `security.authenticate`.
+ * Mixed-phase authorization: both buckets in a single handler call.
  */
+createHandler(
+    UpdateBookContract,
+    {
+        access: 'protected',
+        security: {
+            authenticate: async () => ({ userId: 'u-mix', role: 'staff' as const }),
+            authSchema: AuthSchema,
+            authorize: {
+                beforeValidation: [
+                    async ({ auth }) => {
+                        type _authBefore = Expect<Extends<typeof auth, AuthContext>>;
+                        return auth.role === 'staff';
+                    },
+                ],
+                afterValidation: [
+                    async ({ req, auth }) => {
+                        type _bodyAfter = Expect<
+                            Equal<typeof req.body, { title: string; totalQuantity: number }>
+                        >;
+                        type _authAfter = Expect<Extends<typeof auth, AuthContext>>;
+                        return req.body.title.length > 0;
+                    },
+                ],
+            },
+        },
+    },
+    async ({ req, auth: _auth }) => ({ data: { updated: true } }),
+);
+
+/**
+ * Buckets are arrays only - a bare authorizer is rejected.
+ */
+createHandler(
+    UpdateBookContract,
+    {
+        access: 'protected',
+        security: {
+            authenticate: async () => ({ userId: 'u-arr', role: 'staff' as const }),
+            authorize: {
+                // @ts-expect-error beforeValidation must be an array of authorizers
+                beforeValidation: async () => true,
+            },
+        },
+    },
+    async () => ({ data: { updated: true } }),
+);
+
+/**
+ * Contravariance: an after-typed authorizer cannot be placed in beforeValidation.
+ */
+const afterTypedPolicy: Authorizer<
+    AuthContext,
+    AfterAuthorizationRequest<typeof UpdateBookContract>
+> = async ({ req }) => req.body.title.length > 0;
 
 createHandler(
     UpdateBookContract,
     {
-        // @ts-expect-error protected handlers require security.authenticate
+        access: 'protected',
+        security: {
+            authenticate: async () => ({ userId: 'u-contra', role: 'staff' as const }),
+            authorize: {
+                // @ts-expect-error after-typed authorizer rejected in beforeValidation (contravariance)
+                beforeValidation: [afterTypedPolicy],
+            },
+        },
+    },
+    async () => ({ data: { updated: true } }),
+);
+
+/**
+ * Dedicated negative assertions for missing `security.authenticate`.
+ */
+
+// @ts-expect-error protected handlers require security.authenticate
+createHandler(
+    UpdateBookContract,
+    {
         access: 'protected',
         // security: {
         //     authenticate: async () => ({ userId: "u-5", role: "staff" as const }),
@@ -404,9 +498,9 @@ createHandler(
     async ({ req }) => ({ data: { updated: true } }),
 );
 
+// @ts-expect-error optional handlers require security.authenticate
 createHandler(
     UpdateBookContract,
-    // @ts-expect-error optional handlers require security.authenticate
     {
         access: 'optional',
         // security: {
@@ -451,10 +545,10 @@ const optionalFactoryAuthSchemaWithoutAuthenticate = createHandlerFactory<AuthCo
 // NOTE: Same as above — runtime failure, not compile-time.
 optionalFactoryAuthSchemaWithoutAuthenticate(UpdateBookContract, async ({ req: _req, auth: _auth }) => ({ data: { updated: true } }));
 
+// @ts-expect-error public handlers must not accept security options
 createHandler(
     UpdateBookContract,
     {
-        // @ts-expect-error public handlers must not accept security options
         security: {
             authenticate: async () => ({ userId: 'u-public-1', role: 'staff' as const }),
         },
@@ -467,16 +561,16 @@ createHandler(
     {
         // @ts-expect-error public handlers must not accept security options
         security: {
-            authorize: async () => true,
+            authorize: { beforeValidation: [async () => true] },
         },
     },
     async ({ req }) => ({ data: { updated: true } }),
 );
 
+// @ts-expect-error public factory handlers must not accept security options
 publicFactory(
     UpdateBookContract,
     {
-        // @ts-expect-error public factory handlers must not accept security options
         security: {
             authenticate: async () => ({ userId: 'u-public-2', role: 'staff' as const }),
         },
@@ -484,16 +578,16 @@ publicFactory(
     async ({ req }) => ({ data: { updated: true } }),
 );
 
+// @ts-expect-error public factories must not accept security defaults
 createHandlerFactory<AuthContext>({
     access: 'public',
-    // @ts-expect-error public factories must not accept security defaults
     security: {
         authenticate: async () => ({ userId: 'u-public-default-1', role: 'staff' as const }),
     },
 });
 
+// @ts-expect-error public factories must not accept security defaults when access is omitted
 createHandlerFactory<AuthContext>({
-    // @ts-expect-error public factories must not accept security defaults when access is omitted
     security: {
         authenticate: async () => ({ userId: 'u-public-default-2', role: 'staff' as const }),
     },
@@ -502,11 +596,10 @@ createHandlerFactory<AuthContext>({
 publicFactory(
     UpdateBookContract,
     {
-        // @ts-expect-error public factory handlers must not accept security options even when access is explicit
         access: 'public',
         // @ts-expect-error public factory handlers must not accept security options even when access is explicit
         security: {
-            authorize: async () => true,
+            authorize: { beforeValidation: [async () => true] },
         },
     },
     async ({ req }) => ({ data: { updated: true } }),

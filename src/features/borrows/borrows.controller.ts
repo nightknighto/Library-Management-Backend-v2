@@ -23,10 +23,14 @@ const borrowBook = createHandler(
                 // For testing purposes, we'll just return a dummy user based on the token.
                 return { email: token! } as const;
             },
-            authorize: async ({ auth }) => {
-                // For this example, we'll allow any authenticated user to borrow books.
-                // In a real implementation, you might check user roles or permissions here.
-                return Boolean(auth?.email);
+            authorize: {
+                beforeValidation: [
+                    async ({ auth }) => {
+                        // For this example, we'll allow any authenticated user to borrow books.
+                        // In a real implementation, you might check user roles or permissions here.
+                        return Boolean(auth?.email);
+                    },
+                ],
             },
             authSchema: z.object({
                 email: z.string().email(),
@@ -50,7 +54,6 @@ const createProtectedHandler = createHandlerFactory({
     access: 'protected',
     security: {
         authenticate: authenticateJwt,
-        validateBeforeAuthorization: true,
     },
 });
 
@@ -58,19 +61,23 @@ const returnBook = createProtectedHandler(
     BorrowDTOs.ReturnBookContract,
     {
         security: {
-            authorize: async ({ req, auth }) => {
-                const existingBorrow = await BorrowRepository.getActiveBorrowByUserAndBook(
-                    auth.email,
-                    req.params.isbn,
-                );
+            authorize: {
+                afterValidation: [
+                    async ({ req, auth }) => {
+                        const existingBorrow = await BorrowRepository.getActiveBorrowByUserAndBook(
+                            auth.email,
+                            req.params.isbn,
+                        );
 
-                if (!existingBorrow) {
-                    throw new createHttpError.Forbidden(
-                        'No active borrow record found for this user and book.',
-                    );
-                }
+                        if (!existingBorrow) {
+                            throw new createHttpError.Forbidden(
+                                'No active borrow record found for this user and book.',
+                            );
+                        }
 
-                return true;
+                        return true;
+                    },
+                ],
             },
         },
     },

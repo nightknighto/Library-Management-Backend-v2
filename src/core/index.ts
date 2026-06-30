@@ -23,6 +23,7 @@ export type {
     AccessMode,
     AuthErrorMapper,
     Authenticator,
+    AuthorizationConfig,
     Authorizer,
     ContractResponse,
     CookieOperation,

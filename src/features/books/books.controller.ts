@@ -1,13 +1,13 @@
 import createHttpError from 'http-errors';
-import { type AfterAuthorizationRequest, allOf, anyOf, createHandler } from '../../core/index.ts';
+import { anyOf, createHandler, not } from '../../core/index.ts';
 import {
     authenticateJwt,
+    canEditBook,
     createJwtAuthHandler,
-    deleteBookPolicy,
-    editsOwnAuthorName,
     hasRegisteredUser,
     hasWriteAccessHeader,
     isLibraryStaff,
+    isSystemReservedBook,
     type JwtAuthContext,
     JwtAuthSchema,
 } from '../../shared/auth-stuff.ts';
@@ -19,26 +19,20 @@ const createBook = createJwtAuthHandler(
     BookDTOs.CreateBookContract,
     {
         security: {
-            // Example 1: allOf + anyOf
+            // Example 1: bucket array + anyOf.
+            // The afterValidation bucket AND-composes its elements (no allOf needed
+            // at the top level). anyOf remains essential for the OR branch.
             // Must be a registered user, and either staff email OR internal header override.
-            authorize: allOf<
-                JwtAuthContext,
-                AfterAuthorizationRequest<typeof BookDTOs.CreateBookContract>
-            >([
-                hasRegisteredUser,
-                async ({ auth, req }) => {
-                    const existingUser = await UserRepository.getUser(auth.email);
-                    return Boolean(existingUser);
-                },
-                anyOf([
-                    isLibraryStaff,
-                    hasWriteAccessHeader,
-                    async ({ auth, req }) => {
-                        return true;
+            authorize: {
+                afterValidation: [
+                    hasRegisteredUser,
+                    async ({ auth }) => {
+                        const existingUser = await UserRepository.getUser(auth.email);
+                        return Boolean(existingUser);
                     },
-                ]),
-            ]),
-            validateBeforeAuthorization: true,
+                    anyOf<JwtAuthContext>([isLibraryStaff, hasWriteAccessHeader, async () => true]),
+                ],
+            },
         },
     },
     async ({ req, auth }) => {
@@ -61,11 +55,14 @@ const getAllBooks = createHandler(
             authenticate: authenticateJwt,
             authSchema: JwtAuthSchema,
             // could be inline function
-            authorize: async ({ auth, req }) => {
-                const existingUser = await UserRepository.getUser(auth.email);
-                return Boolean(existingUser);
+            authorize: {
+                afterValidation: [
+                    async ({ auth, req }) => {
+                        const existingUser = await UserRepository.getUser(auth.email);
+                        return Boolean(existingUser);
+                    },
+                ],
             },
-            validateBeforeAuthorization: true,
         },
         errors: {
             unauthorized: () => new createHttpError.Forbidden('Invalid authenticated user'),
@@ -113,10 +110,15 @@ const updateBook = createJwtAuthHandler(
     {
         access: 'protected',
 
-        // Example 2: anyOf
-        // Either staff users can edit, or users can edit when payload "author" matches their email handle.
+        // Example 2: essential allOf via reusable composite.
+        // canEditBook = anyOf([isLibraryStaff, allOf([hasRegisteredUser, editsOwnAuthorName])]).
+        // allOf is essential here: the AND group (registered + own-name) is one branch
+        // of an anyOf, which a bare bucket array cannot express. The composite is
+        // imported as a single Authorizer value and dropped straight into the bucket.
         security: {
-            authorize: anyOf<JwtAuthContext>([isLibraryStaff, editsOwnAuthorName]),
+            authorize: {
+                beforeValidation: [canEditBook],
+            },
         },
     },
     async ({ req, auth }) => {
@@ -127,19 +129,18 @@ const updateBook = createJwtAuthHandler(
     },
 );
 
-// // Example 3: allOf + not
-// // Delete allowed only for staff, and system-reserved books cannot be deleted.
-// const deleteBookPolicyLocal = allOf<JwtAuthContext>([
-//     hasRegisteredUser,
-//     isLibraryStaff,
-//     not<JwtAuthContext>(isSystemReservedBook),
-// ]);
-
 const deleteBook = createJwtAuthHandler(
     BookDTOs.DeleteBookContract,
     {
+        // Mixed-phase authorization: fail-fast identity checks run before
+        // validation (no typed request needed), while the system-reserved-book
+        // check runs after validation against the typed params. Semantically
+        // equivalent to allOf([hasRegisteredUser, isLibraryStaff, not(isSystemReservedBook)]).
         security: {
-            authorize: deleteBookPolicy,
+            authorize: {
+                beforeValidation: [hasRegisteredUser, isLibraryStaff],
+                afterValidation: [not<JwtAuthContext>(isSystemReservedBook)],
+            },
         },
     },
     async ({ req, auth }) => {

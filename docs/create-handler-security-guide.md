@@ -27,10 +27,11 @@ Security is configured through handler options:
 - security.authSchema:
   - Optional Zod schema to validate parsed auth context
 - security.authorize:
-  - One policy or list of policies
-- security.validateBeforeAuthorization:
-  - false (default): authorization runs before request validation
-  - true: authorization runs after request validation
+  - Nested timing buckets: `beforeValidation` and/or `afterValidation`
+  - Each bucket is an array of policies (logical-AND, short-circuit on first failure)
+  - `beforeValidation` policies receive the raw request (fail-fast)
+  - `afterValidation` policies receive the validated request (typed body/query/params)
+  - A handler may use either bucket, both, or neither — there is no global before/after toggle
 - errors.unauthenticated / errors.unauthorized:
   - Optional custom error mappers
 
@@ -120,7 +121,7 @@ const createBook = createHandler(
     security: {
       authenticate: authenticateJwt,
       authSchema: JwtAuthSchema,
-      authorize: isStaff,
+      authorize: { beforeValidation: [isStaff] },
     },
   },
   async (req, auth) => {
@@ -131,9 +132,15 @@ const createBook = createHandler(
 
 ## 5. Authorization Timing
 
-## 5.1 before (default)
+Authorization is expressed as two independent buckets under `security.authorize`.
+Each bucket is an array of policies evaluated with logical-AND semantics.
 
-If validateBeforeAuthorization is omitted, default is false (authorization runs before validation).
+## 5.1 beforeValidation (fail-fast on raw request)
+
+Policies in `beforeValidation` run against the plain Express `Request` before
+contract validation. Use this bucket for cheap checks that do not need typed
+body/query/params (e.g. role, scope, or header checks). A denial here skips
+request validation entirely.
 
 ```ts
 const beforeMode = createHandler(
@@ -142,20 +149,24 @@ const beforeMode = createHandler(
     access: "protected",
     security: {
       authenticate: authenticateJwt,
-      // validateBeforeAuthorization omitted -> false
-      authorize: async ({ auth, req }) => {
-        // req here is pre-validation request shape
-        return auth.role === "staff" && Boolean(req.headers["x-write-access"]);
+      authorize: {
+        beforeValidation: [
+          async ({ auth, req }) => {
+            // req here is the raw, unvalidated request
+            return auth.role === "staff" && Boolean(req.headers["x-write-access"]);
+          },
+        ],
       },
     },
   },
-  async (req, auth) => ({ data: req.body }),
+  async ({ req }) => ({ data: req.body }),
 );
 ```
 
-## 5.2 after (validated request in policies)
+## 5.2 afterValidation (typed request in policies)
 
-When timing is after, authorization runs after contract validation.
+Policies in `afterValidation` run after contract validation and receive the
+validated request with typed body/query/params.
 
 ```ts
 const afterMode = createHandler(
@@ -164,38 +175,105 @@ const afterMode = createHandler(
     access: "protected",
     security: {
       authenticate: authenticateJwt,
-      validateBeforeAuthorization: true,
-      authorize: async ({ auth, req }) => {
-        // req is validated contract request
-        const title = req.body.title;
-        return auth.role === "staff" && title.length > 0;
+      authorize: {
+        afterValidation: [
+          async ({ auth, req }) => {
+            // req is the validated contract request
+            const title = req.body.title;
+            return auth.role === "staff" && title.length > 0;
+          },
+        ],
       },
     },
   },
-  async (req, auth) => ({ statusCode: 201, data: "created" }),
+  async ({ req }) => ({ statusCode: 201, data: "created" }),
+);
+```
+
+## 5.3 Mixed-phase (both buckets in one handler)
+
+A handler may use both buckets. `beforeValidation` runs first (fail-fast); if it
+passes, the request is validated, then `afterValidation` runs against the typed
+request. Bucket membership is enforced by TypeScript: a policy written against
+the validated request type cannot be placed in `beforeValidation` (compile
+error), while a policy written against a plain `Request` fits either bucket.
+
+```ts
+const deleteBook = createHandler(
+  DeleteBookContract,
+  {
+    access: "protected",
+    security: {
+      authenticate: authenticateJwt,
+      authorize: {
+        beforeValidation: [isStaff],                            // raw request
+        afterValidation: [async ({ req }) => !req.params.isbn.startsWith("SYS-")], // typed
+      },
+    },
+  },
+  async ({ req }) => ({ data: undefined }),
 );
 ```
 
 ## 6. Policy Combinators
 
-- allOf: all policies must pass
-- anyOf: at least one policy must pass
-- not: invert policy
+Three combinators build composite policies:
+
+- `allOf`: AND — all policies must pass
+- `anyOf`: OR — at least one policy must pass
+- `not`: invert a policy
+
+**When you do NOT need `allOf`:** an `authorize` bucket already AND-composes its
+array. For top-level policies, write them directly as bucket elements:
 
 ```ts
-const policy = allOf<JwtAuthContext>([
-  anyOf([isStaff, hasWriteHeader]),
-  not(async ({ req }) => req.headers["x-blocked"] === "true"),
+authorize: {
+  beforeValidation: [isStaff, hasWriteHeader], // AND, no allOf needed
+}
+```
+
+**When `allOf` is essential:** when AND must be nested inside an `anyOf` or
+`not`, or when you want a reusable composite as a single policy value. A bucket
+array cannot express "(A and B) or C" — that requires `allOf` to form the AND
+branch:
+
+```ts
+// staff OR (registered user who isn't blocked)
+const policy = anyOf<JwtAuthContext>([
+  isStaff,
+  allOf<JwtAuthContext>([
+    hasRegisteredUser,
+    not(async ({ req }) => req.headers["x-blocked"] === "true"),
+  ]),
 ]);
 ```
 
-## 6.1 Important mixed-policy pattern
+## 6.1 Reusable composite policies
 
-If you mix:
-- broad reusable policies typed with plain Request
-- inline policy that needs contract-typed req in after mode
+Composites are ordinary `Authorizer` values — export them and drop them straight
+into any bucket. This is the other reason `allOf` stays relevant: it produces a
+single value you can reuse across handlers and pass to other combinators
+(something a bare policy array cannot do).
 
-use the second generic argument on allOf or anyOf.
+```ts
+// shared policy: staff may edit; otherwise must be registered AND own the author name
+export const canEditBook: Authorizer<JwtAuthContext> = anyOf<JwtAuthContext>([
+  isStaff,
+  allOf<JwtAuthContext>([hasRegisteredUser, editsOwnAuthorName]),
+]);
+
+createHandler(UpdateBookContract, {
+  access: "protected",
+  security: {
+    authenticate: authenticateJwt,
+    authorize: { beforeValidation: [canEditBook] },
+  },
+}, async ({ req }) => ({ data: req.body }));
+```
+
+If a composite runs in `afterValidation` and mixes broad (plain `Request`)
+policies with ones that need the typed request, pin the request type with the
+combinator's second generic so inline policies get typed body/query/params:
 
 ```ts
 const createBookPolicy = allOf<
@@ -203,44 +281,11 @@ const createBookPolicy = allOf<
   AfterAuthorizationRequest<typeof CreateBookContract>
 >([
   isStaff,
-  async ({ req }) => {
-    // contract-typed because we pinned TRequest explicitly
-    return req.body.title.length > 0;
-  },
+  async ({ req }) => req.body.title.length > 0, // contract-typed via the pinned generic
 ]);
-
-const createBook2 = createHandler(
-  CreateBookContract,
-  {
-    access: "protected",
-    security: {
-      authenticate: authenticateJwt,
-      validateBeforeAuthorization: true,
-      authorize: createBookPolicy,
-    },
-  },
-  async (req, auth) => ({ statusCode: 201, data: "created" }),
-);
 ```
 
-You can do the same with anyOf and not:
-
-```ts
-const canUpdate = anyOf<
-  JwtAuthContext,
-  AfterAuthorizationRequest<typeof UpdateBookContract>
->([
-  isStaff,
-  async ({ req }) => req.body.title !== undefined,
-]);
-
-const notReservedIsbn = not<
-  JwtAuthContext,
-  AfterAuthorizationRequest<typeof UpdateBookContract>
->(
-  async ({ req }) => req.params.isbn.startsWith("SYS-")
-);
-```
+The same second-generic pinning works on `anyOf` and `not`.
 
 ## 7. Factory Pattern
 
@@ -268,14 +313,14 @@ const deleteBook = createJwtAuthHandler(
   {
     security: {
       // inherits authenticate and authSchema
-      authorize: allOf([isStaff]),
+      authorize: { beforeValidation: [allOf([isStaff])] },
     },
   },
   async (req, auth) => ({ data: undefined }),
 );
 ```
 
-You can still override access or timing per endpoint:
+You can still override access or add per-handler buckets:
 
 ```ts
 const getBookOptional = createJwtAuthHandler(
@@ -283,11 +328,12 @@ const getBookOptional = createJwtAuthHandler(
   {
     access: "optional",
     security: {
-      validateBeforeAuthorization: true,
-      authorize: async ({ req }) => req.params.isbn.length > 0,
+      authorize: {
+        afterValidation: [async ({ req }) => req.params.isbn.length > 0],
+      },
     },
   },
-  async (req, auth) => ({ data: { isbn: req.params.isbn, title: "x", author: "y", shelf: "A1", total_quantity: 1 } }),
+  async ({ req }) => ({ data: { isbn: req.params.isbn, title: "x", author: "y", shelf: "A1", total_quantity: 1 } }),
 );
 ```
 
@@ -364,7 +410,7 @@ const handler = createHandler(
     access: "protected",
     security: {
       authenticate: authenticateJwt,
-      authorize: isStaff,
+      authorize: { beforeValidation: [isStaff] },
     },
     errors: {
       unauthenticated: () => new createHttpError.Unauthorized("Please login first"),
@@ -377,20 +423,22 @@ const handler = createHandler(
 
 ## 10. Practical Guidance
 
-- Use before when policy only needs headers/auth and should run early.
-- Use after when policy depends on validated body/query/params.
+- Use `beforeValidation` when a policy only needs headers/auth and should run early (fail-fast).
+- Use `afterValidation` when a policy depends on validated body/query/params.
+- A handler can use both buckets; `beforeValidation` denial skips validation entirely.
 - Prefer reusable policy constants for shared logic.
-- When combining broad and narrow policies in after mode, pin request type using the second generic argument.
+- When combining broad and narrow policies in `afterValidation`, pin request type using the second generic argument.
 - Keep authSchema enabled for safer auth context guarantees.
 
 ## 11. Quick Cheatsheet
 
-- Default mode: validateBeforeAuthorization = false
-- Enable validated request in policies: security.validateBeforeAuthorization = true
+- before-validation bucket: `security.authorize.beforeValidation = [...]` (raw request)
+- after-validation bucket: `security.authorize.afterValidation = [...]` (typed request)
+- Top-level AND: just list policies in the bucket array (no `allOf` needed)
+- Combinators (for nesting/reusable composites):
+  - allOf([...]) — AND inside an anyOf/not, or as a reusable policy value
+  - anyOf([...]) — OR
+  - not(policy) — invert
 - Typed post-validation request helper: AfterAuthorizationRequest<typeof YourContract>
-- Compose policies:
-  - allOf([...])
-  - anyOf([...])
-  - not(policy)
-- Force request typing in mixed arrays:
+- Force request typing in mixed composites:
   - allOf<AuthContext, AfterAuthorizationRequest<typeof Contract>>([...])

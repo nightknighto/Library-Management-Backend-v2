@@ -114,7 +114,7 @@ describe('createHandler (runtime)', () => {
         });
     });
 
-    it('runs authorization before validation by default', async () => {
+    it('runs the beforeValidation bucket on the raw request (fail-fast)', async () => {
         const contract = createContract({
             request: {
                 query: {
@@ -124,6 +124,7 @@ describe('createHandler (runtime)', () => {
             response: z.object({ ok: z.boolean() }),
         });
 
+        // raw req.query.page is the string '2' before coercion
         const authorize = vi.fn(async ({ req }) => typeof req.query.page === 'number');
         const handlerFn = vi.fn(async () => ({ data: { ok: true } }));
 
@@ -133,7 +134,7 @@ describe('createHandler (runtime)', () => {
                 access: 'protected',
                 security: {
                     authenticate: async () => ({ userId: '1' }),
-                    authorize,
+                    authorize: { beforeValidation: [authorize] },
                 },
             },
             handlerFn,
@@ -147,7 +148,7 @@ describe('createHandler (runtime)', () => {
         expect(handlerFn).not.toHaveBeenCalled();
     });
 
-    it('runs authorization after validation when configured', async () => {
+    it('runs the afterValidation bucket on the validated request', async () => {
         const contract = createContract({
             request: {
                 query: {
@@ -157,6 +158,7 @@ describe('createHandler (runtime)', () => {
             response: z.object({ ok: z.boolean() }),
         });
 
+        // validated req.query.page is the number 2 after coercion
         const authorize = vi.fn(async ({ req }) => typeof req.query.page === 'number');
 
         const handler = createHandler(
@@ -165,8 +167,7 @@ describe('createHandler (runtime)', () => {
                 access: 'protected',
                 security: {
                     authenticate: async () => ({ userId: '1' }),
-                    authorize,
-                    validateBeforeAuthorization: true,
+                    authorize: { afterValidation: [authorize] },
                 },
             },
             async () => ({ data: { ok: true } }),
@@ -177,6 +178,83 @@ describe('createHandler (runtime)', () => {
 
         expect(response.status).toBe(200);
         expect(authorize).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs both buckets; a beforeValidation denial skips validation and afterValidation', async () => {
+        const contract = createContract({
+            request: {
+                query: {
+                    page: z.coerce.number(),
+                },
+            },
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const beforePolicy = vi.fn(async () => false);
+        const afterPolicy = vi.fn(async () => true);
+        const handlerFn = vi.fn(async () => ({ data: { ok: true } }));
+
+        const handler = createHandler(
+            contract,
+            {
+                access: 'protected',
+                security: {
+                    authenticate: async () => ({ userId: '1' }),
+                    authorize: {
+                        beforeValidation: [beforePolicy],
+                        afterValidation: [afterPolicy],
+                    },
+                },
+            },
+            handlerFn,
+        );
+
+        const { app, route } = createTestApp(handler);
+        // request WITHOUT page -> would be a 400 if validation ran
+        const response = await request(app).get(route);
+
+        // 403 from beforeValidation proves validation was skipped (fail-fast)
+        expect(response.status).toBe(403);
+        expect(beforePolicy).toHaveBeenCalledTimes(1);
+        expect(afterPolicy).not.toHaveBeenCalled();
+        expect(handlerFn).not.toHaveBeenCalled();
+    });
+
+    it('runs both buckets; afterValidation receives the validated request', async () => {
+        const contract = createContract({
+            request: {
+                query: {
+                    page: z.coerce.number(),
+                },
+            },
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const beforePolicy = vi.fn(async () => true);
+        // validated req.query.page is the number 2
+        const afterPolicy = vi.fn(async ({ req }) => typeof req.query.page === 'number');
+
+        const handler = createHandler(
+            contract,
+            {
+                access: 'protected',
+                security: {
+                    authenticate: async () => ({ userId: '1' }),
+                    authorize: {
+                        beforeValidation: [beforePolicy],
+                        afterValidation: [afterPolicy],
+                    },
+                },
+            },
+            async () => ({ data: { ok: true } }),
+        );
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route).query({ page: '2' });
+
+        expect(response.status).toBe(200);
+        expect(beforePolicy).toHaveBeenCalledTimes(1);
+        expect(afterPolicy).toHaveBeenCalledTimes(1);
     });
 
     it('returns 400 when request validation fails', async () => {

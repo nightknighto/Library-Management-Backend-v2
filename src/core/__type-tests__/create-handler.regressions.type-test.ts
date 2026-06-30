@@ -1,3 +1,4 @@
+import type { Request } from 'express';
 import { z } from 'zod';
 import { createContract, createHandler, createHandlerFactory } from '../index.ts';
 import type { Equal, Expect, ExpectFalse, Extends, IsAny } from './type-test.utils.ts';
@@ -62,11 +63,45 @@ createHandler(
         access: 'protected',
         security: {
             authenticate: async () => ({ userId: 'r-1', role: 'staff' as const }),
-            validateBeforeAuthorization: true,
-            authorize: async ({ req, auth }) => {
-                type _body = Expect<Equal<typeof req.body, { title: string }>>;
-                type _auth = Expect<Extends<typeof auth, AuthContext>>;
-                return auth.role === 'staff' && req.body.title.length > 0;
+            authorize: {
+                afterValidation: [
+                    async ({ req, auth }) => {
+                        type _body = Expect<Equal<typeof req.body, { title: string }>>;
+                        type _auth = Expect<Extends<typeof auth, AuthContext>>;
+                        return auth.role === 'staff' && req.body.title.length > 0;
+                    },
+                ],
+            },
+        },
+    },
+    async ({ req, auth: _auth }) => ({ data: { updated: true } }),
+);
+
+/**
+ * Regression-009: mixed-phase authorization must type both buckets correctly
+ * in a single handler (before = raw Request, after = typed request).
+ */
+createHandler(
+    UpdateBookContract,
+    {
+        access: 'protected',
+        security: {
+            authenticate: async () => ({ userId: 'r-9', role: 'staff' as const }),
+            authorize: {
+                beforeValidation: [
+                    async ({ req, auth }) => {
+                        type _reqBefore = Expect<Equal<typeof req, Request>>;
+                        type _authBefore = Expect<Extends<typeof auth, AuthContext>>;
+                        return auth.role === 'staff';
+                    },
+                ],
+                afterValidation: [
+                    async ({ req, auth }) => {
+                        type _bodyAfter = Expect<Equal<typeof req.body, { title: string }>>;
+                        type _authAfter = Expect<Extends<typeof auth, AuthContext>>;
+                        return req.body.title.length > 0;
+                    },
+                ],
             },
         },
     },
@@ -134,10 +169,10 @@ createHandler(UpdateBookContract, async ({ req }) => ({
 /**
  * Regression-007: public access must reject security options in handler calls.
  */
+// @ts-expect-error public handlers must not accept security options
 createHandler(
     UpdateBookContract,
     {
-        // @ts-expect-error public handlers must not accept security options
         security: {
             authenticate: async () => ({ userId: 'r-7', role: 'staff' as const }),
         },
@@ -152,8 +187,10 @@ publicFactory(
     {
         // @ts-expect-error public factory handlers must not accept security options
         security: {
-            // @ts-expect-error auth is unknown because security is rejected
-            authorize: async ({ auth }) => auth.role === 'staff',
+            authorize: {
+                // @ts-expect-error auth is unknown because security is rejected
+                beforeValidation: [async ({ auth }) => auth.role === 'staff'],
+            },
         },
     },
     async ({ req }) => ({ data: { updated: true } }),

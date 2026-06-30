@@ -358,7 +358,8 @@ export type Authenticator<TAuthContext, TRequest extends Request<any, any, any, 
  * Authorization policy callback.
  *
  * Return true to allow the request; false to deny.
- * When validateBeforeAuthorization is true, `req` can be the validated request type.
+ * In the `afterValidation` bucket, `req` is the validated request type with
+ * typed body/query/params; in the `beforeValidation` bucket it is a plain Request.
  *
  * Note: For `optional` access, policies only run when authentication succeeds.
  *
@@ -384,20 +385,79 @@ export type AuthErrorMapper<TRequest extends Request<any, any, any, any> = Reque
 ) => createHttpError.HttpError;
 
 /**
- * Security configuration for createHandler.
+ * Authorization configuration split into two timing buckets.
  *
- * Provides authentication, authorization, and auth schema validation options.
+ * Policies in `beforeValidation` run against the raw Express `Request` before
+ * the contract request is validated (fail-fast). Policies in `afterValidation`
+ * run against the validated request (typed body/query/params).
+ *
+ * Both buckets are evaluated with logical-AND semantics and short-circuit on
+ * the first failing policy. A `beforeValidation` denial skips request
+ * validation entirely. The buckets are independent: a handler may use either,
+ * both, or neither.
+ *
+ * Bucket membership is enforced structurally by TypeScript's function-parameter
+ * contravariance: an authorizer written against a validated request type cannot
+ * be placed in `beforeValidation` (compile error), while an authorizer written
+ * against a plain `Request` fits either bucket.
+ *
+ * @typeParam TAuthContext
+ * Auth context shape produced by {@link Authenticator} and consumed by policies.
+ *
+ * @typeParam TAfterRequest
+ * Request type passed to `afterValidation` policies. Defaults to `Request` and
+ * is bound to the contract's validated request type at handler call sites.
  *
  * @example
- * const security: SecurityOptions<AuthContext> = {
+ * const authorize: AuthorizationConfig<AuthContext> = {
+ *   beforeValidation: [({ auth }) => auth.role === "staff"],
+ *   afterValidation: [({ req, auth }) => auth.userId === req.params.id],
+ * };
+ */
+export type AuthorizationConfig<
+    TAuthContext,
+    TAfterRequest extends Request<any, any, any, any> = Request,
+> = {
+    /**
+     * Authorization policies evaluated BEFORE request validation.
+     *
+     * Each policy receives a plain Express `Request` (unvalidated body/query/params).
+     * Use this bucket for fail-fast checks that do not require typed request data
+     * (e.g. role or scope checks). All policies must return true; first false
+     * short-circuits with a 403 and skips validation.
+     */
+    beforeValidation?: Array<Authorizer<TAuthContext, Request>>;
+    /**
+     * Authorization policies evaluated AFTER request validation.
+     *
+     * Each policy receives the validated request with typed body/query/params.
+     * Use this bucket for ownership or resource checks that need the parsed
+     * request. All policies must return true; first false short-circuits with a 403.
+     */
+    afterValidation?: Array<Authorizer<TAuthContext, TAfterRequest>>;
+};
+
+/**
+ * Security configuration for createHandler.
+ *
+ * Provides authentication, authorization buckets, and auth-schema validation.
+ *
+ * Authorization timing is expressed structurally via
+ * {@link AuthorizationConfig}: a handler may run policies before validation,
+ * after validation, or both. There is no global before/after toggle.
+ *
+ * @example
+ * const security: SecurityOptions<AuthContext, AfterAuthorizationRequest<typeof Contract>> = {
  *   authenticate: async (_req: Request) => ({ userId: "u-1" }),
- *   validateBeforeAuthorization: true,
- *   authorize: async ({ req, auth }) => auth.userId === req.params.userId,
+ *   authorize: {
+ *     beforeValidation: [({ auth }) => auth.role === "staff"],
+ *     afterValidation: [({ req, auth }) => auth.userId === req.params.userId],
+ *   },
  * };
  */
 export type SecurityOptions<
     TAuthContext,
-    TRequest extends Request<any, any, any, any> = Request,
+    TAfterRequest extends Request<any, any, any, any> = Request,
 > = {
     /**
      * Authentication callback used to build auth context for protected/optional handlers.
@@ -412,22 +472,13 @@ export type SecurityOptions<
      *
      * @see docs/rules/create-handler-auth-inference-limitations.md
      */
-    authenticate?: Authenticator<TAuthContext, TRequest>;
+    authenticate?: Authenticator<TAuthContext>;
     /**
-     * When true, run authorization after request validation so `authorize` receives
-     * typed body/query/params from the validated request.
+     * Authorization buckets evaluated around request validation.
      *
-     * When false (default), authorization runs before validation and receives a plain
-     * Express Request.
+     * Omit when the handler requires authentication but no authorization policies.
      */
-    validateBeforeAuthorization?: boolean;
-    /**
-     * Authorization policy or policies evaluated for the request.
-     *
-     * For `optional` access, policies only run when authentication succeeds.
-     * When multiple policies are provided, all must return true (logical AND).
-     */
-    authorize?: Authorizer<TAuthContext, TRequest> | Array<Authorizer<TAuthContext, TRequest>>;
+    authorize?: AuthorizationConfig<TAuthContext, TAfterRequest>;
     /**
      * Optional schema to validate the authentication result.
      *
@@ -461,18 +512,21 @@ export type HandlerErrorMappers<TRequest extends Request<any, any, any, any> = R
  * Top-level handler options accepted by createHandler.
  *
  * @example
- * const options: HandlerOptions<"protected", AuthContext> = {
+ * const options: HandlerOptions<"protected", AuthContext, AfterAuthorizationRequest<typeof Contract>> = {
  *   access: "protected",
  *   security: {
  *     authenticate: async () => ({ userId: "u-1" }),
- *     authorize: async ({ auth }) => auth.userId === "u-1",
+ *     authorize: {
+ *       beforeValidation: [({ auth }) => auth.role === "staff"],
+ *       afterValidation: [({ req, auth }) => auth.userId === req.params.userId],
+ *     },
  *   },
  * };
  */
 export type HandlerOptions<
     TAccess extends AccessMode,
     TAuthContext,
-    TRequest extends Request<any, any, any, any> = Request,
+    TAfterRequest extends Request<any, any, any, any> = Request,
 > = {
     /**
      * Access mode for the handler. Defaults to `public`.
@@ -482,9 +536,9 @@ export type HandlerOptions<
      * Security settings for authentication and authorization.
      * Not allowed when access is `public`.
      */
-    security?: SecurityOptions<TAuthContext, TRequest>;
+    security?: SecurityOptions<TAuthContext, TAfterRequest>;
     /**
      * Optional overrides for auth error mapping.
      */
-    errors?: HandlerErrorMappers<TRequest>;
+    errors?: HandlerErrorMappers<TAfterRequest>;
 };

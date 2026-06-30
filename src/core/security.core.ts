@@ -39,26 +39,13 @@ type AuthorizationExecutionParams<
     req: TRequest;
     access: TAccess;
     auth?: TAuthContext;
-    security?: SecurityOptions<TAuthContext, TRequest>;
+    authorizers: Array<Authorizer<TAuthContext, TRequest>>;
     errors?: HandlerErrorMappers<TRequest>;
 };
 
 // Prevents TRequest from being inferred from policy arrays when an explicit
 // request type is supplied (used by allOf/anyOf/not overloads).
 type NoInfer<T> = [T][T extends unknown ? 0 : never];
-
-/**
- * Normalizes authorize config into a flat array for iteration.
- */
-function normalizeAuthorizers<TAuthContext, TRequest extends Request>(
-    authorize: SecurityOptions<TAuthContext, TRequest>['authorize'],
-): Array<Authorizer<TAuthContext, TRequest>> {
-    if (!authorize) {
-        return [];
-    }
-
-    return Array.isArray(authorize) ? authorize : [authorize];
-}
 
 /**
  * Executes the authentication stage for a request.
@@ -121,20 +108,27 @@ export async function executeAuthenticationStage<
 }
 
 /**
- * Executes the authorization stage for a request.
+ * Executes a single authorization bucket for a request.
  *
- * When access is `protected` and no auth is available, this throws an
- * unauthorized error. For `optional` access, missing auth bypasses authorization.
+ * Evaluates the provided authorizers in order with logical-AND semantics,
+ * short-circuiting on the first policy that returns false.
  *
- * When authorizers are configured, each must return true; otherwise a forbidden
- * error is thrown. Error mappers in `errors.unauthorized` override defaults.
+ * Behavior:
+ * - When access is `protected` and auth is missing, throws an unauthorized error.
+ * - For `optional` access with missing auth, authorization is bypassed.
+ * - When any authorizer returns false, a forbidden error is thrown.
+ * - Error mappers in `errors.unauthorized` override default failures.
+ *
+ * This is called twice by the handler runtime: once for the `beforeValidation`
+ * bucket (with the raw request) and once for the `afterValidation` bucket
+ * (with the validated request).
  */
 export async function executeAuthorizationStage<
     TAuthContext,
     TAccess extends AccessMode,
     TRequest extends Request,
 >(params: AuthorizationExecutionParams<TAuthContext, TAccess, TRequest>): Promise<void> {
-    const { req, access, auth, security, errors } = params;
+    const { req, access, auth, authorizers, errors } = params;
 
     if (auth == null) {
         if (access === 'protected') {
@@ -144,7 +138,6 @@ export async function executeAuthorizationStage<
         return;
     }
 
-    const authorizers = normalizeAuthorizers(security?.authorize);
     for (const authorize of authorizers) {
         const isAllowed = await authorize({ req, auth });
         if (!isAllowed) {
@@ -158,12 +151,32 @@ export async function executeAuthorizationStage<
 // =========================================================================
 
 /**
- * Combines multiple authorizers so that all must succeed.
+ * Combines multiple authorizers with logical-AND semantics.
+ *
+ * Returns a single composite authorizer that passes only when every input
+ * policy passes, short-circuiting on the first failure.
+ *
+ * When to use it:
+ * - To AND-combine policies INSIDE an `anyOf` branch or under `not` (a handler's
+ *   `authorize` bucket array cannot express nested AND).
+ * - To build a reusable, exportable policy as a single `Authorizer` value.
+ *
+ * When NOT to use it:
+ * - For top-level policies in an `authorize` bucket. The bucket already
+ *   AND-composes its array elements, so `beforeValidation: [a, b, c]` is
+ *   preferred over `beforeValidation: [allOf([a, b, c])]`.
  *
  * Use an explicit request type if authorizers expect a narrowed request.
- * Policies are evaluated in order and stop at the first failure.
  *
  * @example
+ * // Essential nesting: AND inside an OR branch.
+ * const policy = anyOf<AuthContext>([
+ *   isStaff,
+ *   allOf<AuthContext>([hasRegisteredUser, ownsResource]),
+ * ]);
+ *
+ * @example
+ * // Reusable composite with typed request.
  * const policy = allOf<AuthContext, AfterAuthorizationRequest<typeof contract>>([
  *   async ({ auth }) => auth.role === "staff",
  *   async ({ req }) => req.body.title.length > 0,
@@ -250,6 +263,11 @@ export function not(policy: Authorizer<any, Request>): Authorizer<any, Request> 
  * Security and error mapper objects are merged by key so that callers can
  * override or extend defaults without replacing the entire object.
  *
+ * `security.authorize` is merged per bucket: each authorization bucket
+ * (`beforeValidation` / `afterValidation`) provided by the override replaces the
+ * matching default bucket; buckets the override omits are inherited from the
+ * defaults. Buckets are never concatenated.
+ *
  * Call-site values win over defaults when the same key is provided.
  */
 export function mergeHandlerSecurityDefaults<TAuthContext, TRequest extends Request = Request>(
@@ -277,6 +295,10 @@ export function mergeHandlerSecurityDefaults<TAuthContext, TRequest extends Requ
         security: {
             ...defaults?.security,
             ...overrides?.security,
+            authorize: {
+                ...defaults?.security?.authorize,
+                ...overrides?.security?.authorize,
+            },
         },
         errors: {
             ...defaults?.errors,

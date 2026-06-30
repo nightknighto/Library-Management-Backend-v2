@@ -129,7 +129,7 @@ describe('createHandlerFactory (runtime)', () => {
         expect(response.status).toBe(200);
     });
 
-    it('inherits validateBeforeAuthorization defaults', async () => {
+    it('inherits authorize bucket defaults from the factory', async () => {
         const contract = createContract({
             request: {
                 query: {
@@ -145,8 +145,7 @@ describe('createHandlerFactory (runtime)', () => {
             access: 'protected',
             security: {
                 authenticate: async () => ({ userId: '1' }),
-                authorize,
-                validateBeforeAuthorization: true,
+                authorize: { afterValidation: [authorize] },
             },
         });
 
@@ -159,7 +158,7 @@ describe('createHandlerFactory (runtime)', () => {
         expect(authorize).toHaveBeenCalledTimes(1);
     });
 
-    it('allows overriding validateBeforeAuthorization per handler', async () => {
+    it('handler authorize bucket replaces the factory default bucket (replace semantics)', async () => {
         const contract = createContract({
             request: {
                 query: {
@@ -169,14 +168,14 @@ describe('createHandlerFactory (runtime)', () => {
             response: z.object({ ok: z.boolean() }),
         });
 
-        const authorize = vi.fn(async ({ req }) => typeof req.query.page === 'number');
+        const denyPolicy = vi.fn(async () => false);
+        const allowPolicy = vi.fn(async () => true);
 
         const factory = createHandlerFactory({
             access: 'protected',
             security: {
                 authenticate: async () => ({ userId: '1' }),
-                authorize,
-                validateBeforeAuthorization: true,
+                authorize: { afterValidation: [denyPolicy] },
             },
             errors: {
                 unauthorized: () => new createHttpError.Forbidden('Denied'),
@@ -187,7 +186,7 @@ describe('createHandlerFactory (runtime)', () => {
             contract,
             {
                 security: {
-                    validateBeforeAuthorization: false,
+                    authorize: { afterValidation: [allowPolicy] },
                 },
             },
             async () => ({ data: { ok: true } }),
@@ -196,7 +195,48 @@ describe('createHandlerFactory (runtime)', () => {
         const { app, route } = createTestApp(handler);
         const response = await request(app).get(route).query({ page: '2' });
 
-        expect(response.status).toBe(403);
-        expect(response.body).toEqual({ success: false, error: 'Denied' });
+        // handler's allowPolicy replaced factory's denyPolicy (not concatenated)
+        expect(response.status).toBe(200);
+        expect(denyPolicy).not.toHaveBeenCalled();
+        expect(allowPolicy).toHaveBeenCalledTimes(1);
+    });
+
+    it('inherits the factory beforeValidation bucket while the handler adds an afterValidation bucket', async () => {
+        const contract = createContract({
+            request: {
+                query: {
+                    page: z.coerce.number(),
+                },
+            },
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const beforePolicy = vi.fn(async () => true);
+        const afterPolicy = vi.fn(async ({ req }) => typeof req.query.page === 'number');
+
+        const factory = createHandlerFactory({
+            access: 'protected',
+            security: {
+                authenticate: async () => ({ userId: '1' }),
+                authorize: { beforeValidation: [beforePolicy] },
+            },
+        });
+
+        const handler = factory(
+            contract,
+            {
+                security: {
+                    authorize: { afterValidation: [afterPolicy] },
+                },
+            },
+            async () => ({ data: { ok: true } }),
+        );
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route).query({ page: '2' });
+
+        expect(response.status).toBe(200);
+        expect(beforePolicy).toHaveBeenCalledTimes(1);
+        expect(afterPolicy).toHaveBeenCalledTimes(1);
     });
 });

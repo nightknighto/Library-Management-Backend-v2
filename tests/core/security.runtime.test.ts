@@ -99,7 +99,7 @@ describe('security (runtime)', () => {
                     req,
                     access: 'protected',
                     auth: undefined,
-                    security: undefined,
+                    authorizers: [],
                     errors: undefined,
                 }),
             ).rejects.toMatchObject({ statusCode: 401 });
@@ -111,7 +111,7 @@ describe('security (runtime)', () => {
                     req,
                     access: 'optional',
                     auth: undefined,
-                    security: undefined,
+                    authorizers: [async () => false],
                     errors: undefined,
                 }),
             ).resolves.toBeUndefined();
@@ -123,12 +123,40 @@ describe('security (runtime)', () => {
                     req,
                     access: 'protected',
                     auth: { userId: '1' },
-                    security: {
-                        authorize: async () => false,
-                    },
+                    authorizers: [async () => false],
                     errors: undefined,
                 }),
             ).rejects.toMatchObject({ statusCode: 403 });
+        });
+
+        it('passes when all policies return true', async () => {
+            await expect(
+                executeAuthorizationStage({
+                    req,
+                    access: 'protected',
+                    auth: { userId: '1' },
+                    authorizers: [async () => true, async () => true],
+                    errors: undefined,
+                }),
+            ).resolves.toBeUndefined();
+        });
+
+        it('short-circuits on the first failing policy', async () => {
+            const first = vi.fn(async () => false);
+            const second = vi.fn(async () => true);
+
+            await expect(
+                executeAuthorizationStage({
+                    req,
+                    access: 'protected',
+                    auth: { userId: '1' },
+                    authorizers: [first, second],
+                    errors: undefined,
+                }),
+            ).rejects.toMatchObject({ statusCode: 403 });
+
+            expect(first).toHaveBeenCalledTimes(1);
+            expect(second).not.toHaveBeenCalled();
         });
 
         it('uses unauthorized error mapper when provided', async () => {
@@ -137,9 +165,7 @@ describe('security (runtime)', () => {
                     req,
                     access: 'protected',
                     auth: { userId: '1' },
-                    security: {
-                        authorize: async () => false,
-                    },
+                    authorizers: [async () => false],
                     errors: {
                         unauthorized: () => new createHttpError.Forbidden('Custom deny'),
                     },
@@ -182,7 +208,7 @@ describe('security (runtime)', () => {
     });
 
     describe('mergeHandlerSecurityDefaults', () => {
-        it('shallow merges defaults with overrides', () => {
+        it('shallow merges access/security/errors', () => {
             const merged = mergeHandlerSecurityDefaults(
                 {
                     access: 'protected',
@@ -196,7 +222,7 @@ describe('security (runtime)', () => {
                 {
                     access: 'optional',
                     security: {
-                        authorize: async () => true,
+                        authorize: { afterValidation: [async () => true] },
                     },
                     errors: {
                         unauthorized: () => new createHttpError.Forbidden('Denied'),
@@ -209,6 +235,45 @@ describe('security (runtime)', () => {
             expect(merged.security?.authorize).toBeDefined();
             expect(merged.errors?.unauthenticated).toBeDefined();
             expect(merged.errors?.unauthorized).toBeDefined();
+        });
+
+        it('inherits a factory authorize bucket the handler omits', () => {
+            const beforePolicy = async () => true;
+            const merged = mergeHandlerSecurityDefaults(
+                {
+                    security: {
+                        authorize: { beforeValidation: [beforePolicy] },
+                    },
+                },
+                {
+                    security: {
+                        authorize: { afterValidation: [async () => true] },
+                    },
+                },
+            );
+
+            expect(merged.security?.authorize?.beforeValidation).toEqual([beforePolicy]);
+            expect(merged.security?.authorize?.afterValidation).toHaveLength(1);
+        });
+
+        it('replaces a factory authorize bucket when the handler specifies the same bucket', () => {
+            const defaultPolicy = async () => true;
+            const handlerPolicy = async () => false;
+            const merged = mergeHandlerSecurityDefaults(
+                {
+                    security: {
+                        authorize: { beforeValidation: [defaultPolicy] },
+                    },
+                },
+                {
+                    security: {
+                        authorize: { beforeValidation: [handlerPolicy] },
+                    },
+                },
+            );
+
+            // replace semantics, not concatenation
+            expect(merged.security?.authorize?.beforeValidation).toEqual([handlerPolicy]);
         });
     });
 });

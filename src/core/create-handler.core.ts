@@ -35,7 +35,7 @@ import {
 import type {
     AccessMode,
     Authenticator,
-    Authorizer,
+    AuthorizationConfig,
     ContractResponse,
     HandlerErrorMappers,
     HandlerOptions,
@@ -100,8 +100,9 @@ type AuthorizerBaseRequest = Request<Record<string, string>, any, unknown, any>;
  * createHandler(contract, {
  *   access: "protected",
  *   security: {
- *     validateBeforeAuthorization: true,
- *     authorize: async ({ req }) => req.body.title.length > 0,
+ *     authorize: {
+ *       afterValidation: [async ({ req }) => req.body.title.length > 0],
+ *     },
  *   },
  * }, handler);
  */
@@ -170,80 +171,45 @@ type HandlerFn<
 // =========================================================================
 
 /**
- * Security config when authorization runs BEFORE request validation.
+ * Security config for protected/optional handlers where `authenticate` is required.
  *
- * The `authorize` callback receives a plain Express `Request`.
+ * Authorization is expressed as two timing buckets via {@link AuthorizationConfig}:
+ * `beforeValidation` policies receive a plain Express `Request`; `afterValidation`
+ * policies receive the contract's validated request type.
  *
  * @example
- * const options: ProtectedBeforeOpts<AuthContext> = {
+ * const options: ProtectedOpts<AuthContext, typeof contract> = {
  *   access: 'protected',
  *   security: {
  *     authenticate: async () => ({ userId: 'u-1' }),
- *     authorize: async ({ auth }) => auth.role === 'staff',
+ *     authorize: {
+ *       beforeValidation: [({ auth }) => auth.role === 'staff'],
+ *       afterValidation: [({ req, auth }) => auth.userId === req.params.id],
+ *     },
  *   },
  * };
  */
-interface BeforeValidationSecurity<TAuth> {
+interface SecuredSecurity<TAuth, TReq extends Request = Request> {
     /** Authentication callback. Required for protected/optional access. */
     authenticate: Authenticator<TAuth>;
     /**
-     * Authorization policies evaluated before validation.
-     * Receives a plain Express Request (unvalidated body/query/params).
+     * Authorization buckets evaluated around request validation.
+     * Omit when authentication is required but no policies are needed.
      */
-    authorize?: Authorizer<TAuth, Request> | Array<Authorizer<TAuth, Request>>;
+    authorize?: AuthorizationConfig<TAuth, TReq>;
     /** Zod schema to validate auth context. Failures trigger 401. */
     authSchema?: ZodType<TAuth>;
-    /** Set to false (or omit) to authorize before validation. */
-    validateBeforeAuthorization?: false;
 }
 
 /**
- * Security config when authorization runs AFTER request validation.
- *
- * The `authorize` callback receives a typed request with validated body/query/params.
- *
- * @example
- * const options: ProtectedAfterOpts<AuthContext, typeof contract> = {
- *   access: 'protected',
- *   security: {
- *     authenticate: async () => ({ userId: 'u-1' }),
- *     authorize: async ({ req, auth }) => auth.userId === req.params.id,
- *     validateBeforeAuthorization: true,
- *   },
- * };
+ * Security config for factory-produced handlers where `authenticate` is inherited
+ * from the factory defaults. Only `authorize` / `authSchema` may be overridden.
  */
-interface AfterValidationSecurity<TAuth, TReq extends Request = Request> {
-    /** Authentication callback. Required for protected/optional access. */
-    authenticate: Authenticator<TAuth>;
-    /**
-     * Authorization policies evaluated after validation.
-     * Receives a typed request with validated body/query/params.
-     */
-    authorize?: Authorizer<TAuth, TReq> | Array<Authorizer<TAuth, TReq>>;
+interface InheritedSecurity<TAuth, TReq extends Request = Request> {
+    /** Authorization buckets evaluated around request validation. */
+    authorize?: AuthorizationConfig<TAuth, TReq>;
     /** Zod schema to validate auth context. Failures trigger 401. */
     authSchema?: ZodType<TAuth>;
-    /** Must be true. Authorize runs after request validation. */
-    validateBeforeAuthorization: true;
-}
-
-/**
- * Security config when authenticate is inherited from factory defaults.
- * authorize runs BEFORE validation (validateBeforeAuthorization omitted or false).
- */
-interface InheritedBeforeSecurity<TAuth> {
-    authorize?: Authorizer<TAuth, Request> | Array<Authorizer<TAuth, Request>>;
-    authSchema?: ZodType<TAuth>;
-    validateBeforeAuthorization?: false;
-}
-
-/**
- * Security config when authenticate is inherited from factory defaults.
- * authorize runs AFTER validation (validateBeforeAuthorization explicitly true).
- */
-interface InheritedAfterSecurity<TAuth, TReq extends Request = Request> {
-    authorize?: Authorizer<TAuth, TReq> | Array<Authorizer<TAuth, TReq>>;
-    authSchema?: ZodType<TAuth>;
-    validateBeforeAuthorization?: true;
 }
 
 /**
@@ -262,50 +228,36 @@ interface PublicHandlerOpts {
 }
 
 /**
- * Options for protected handlers with authorization before validation.
+ * Options for protected handlers.
+ *
+ * Authentication is required. Authorization may run before validation, after
+ * validation, or both via the nested `authorize` buckets.
  *
  * @example
  * createHandler(contract, {
  *   access: 'protected',
  *   security: {
  *     authenticate: async () => ({ userId: 'u-1' }),
- *     authorize: async ({ auth }) => auth.role === 'staff',
+ *     authorize: {
+ *       beforeValidation: [({ auth }) => auth.role === 'staff'],
+ *       afterValidation: [({ req, auth }) => auth.userId === req.params.id],
+ *     },
  *   },
  * }, async ({ req, auth }) => ({ data: ... }));
  */
-interface ProtectedBeforeOpts<TAuth> {
+interface ProtectedOpts<TAuth, TContract extends AnyContract> {
     /** Access mode: authentication required. */
     access: 'protected';
-    /** Security configuration. `authenticate` is required. `authorize` receives plain Request. */
-    security: BeforeValidationSecurity<TAuth>;
+    /** Security configuration with nested authorization buckets. */
+    security: SecuredSecurity<TAuth, AfterAuthorizationRequest<TContract>>;
     /** Custom error responses for auth failures. */
     errors?: HandlerErrorMappers;
 }
 
 /**
- * Options for protected handlers with authorization after validation.
+ * Options for optional handlers.
  *
- * @example
- * createHandler(contract, {
- *   access: 'protected',
- *   security: {
- *     authenticate: async () => ({ userId: 'u-1' }),
- *     authorize: async ({ req, auth }) => auth.userId === req.params.id,
- *     validateBeforeAuthorization: true,
- *   },
- * }, async ({ req, auth }) => ({ data: ... }));
- */
-interface ProtectedAfterOpts<TAuth, TContract extends AnyContract> {
-    /** Access mode: authentication required. */
-    access: 'protected';
-    /** Security configuration. `authorize` receives typed request. */
-    security: AfterValidationSecurity<TAuth, AfterAuthorizationRequest<TContract>>;
-    /** Custom error responses for auth failures. */
-    errors?: HandlerErrorMappers;
-}
-
-/**
- * Options for optional handlers with authorization before validation.
+ * Authentication may run; auth context is optional in the handler.
  *
  * @example
  * createHandler(contract, {
@@ -313,33 +265,11 @@ interface ProtectedAfterOpts<TAuth, TContract extends AnyContract> {
  *   security: { authenticate: async () => ({ userId: 'u-1' }) },
  * }, async ({ req, auth }) => ({ data: ... }));
  */
-interface OptionalBeforeOpts<TAuth> {
+interface OptionalOpts<TAuth, TContract extends AnyContract> {
     /** Access mode: authentication may run, auth context optional in handler. */
     access: 'optional';
-    /** Security configuration. `authenticate` is required. `authorize` receives plain Request. */
-    security: BeforeValidationSecurity<TAuth>;
-    /** Custom error responses for auth failures. */
-    errors?: HandlerErrorMappers;
-}
-
-/**
- * Options for optional handlers with authorization after validation.
- *
- * @example
- * createHandler(contract, {
- *   access: 'optional',
- *   security: {
- *     authenticate: async () => ({ userId: 'u-1' }),
- *     validateBeforeAuthorization: true,
- *     authorize: async ({ req, auth }) => auth.role === 'staff',
- *   },
- * }, async ({ req, auth }) => ({ data: ... }));
- */
-interface OptionalAfterOpts<TAuth, TContract extends AnyContract> {
-    /** Access mode: authentication may run, auth context optional in handler. */
-    access: 'optional';
-    /** Security configuration. `authorize` receives typed request. */
-    security: AfterValidationSecurity<TAuth, AfterAuthorizationRequest<TContract>>;
+    /** Security configuration with nested authorization buckets. */
+    security: SecuredSecurity<TAuth, AfterAuthorizationRequest<TContract>>;
     /** Custom error responses for auth failures. */
     errors?: HandlerErrorMappers;
 }
@@ -466,16 +396,14 @@ function createHandlerRuntime<TContract extends AnyContract, TAuth>(
                         errors,
                     })) as { auth?: TAuth });
 
-            if (access !== 'public' && security?.validateBeforeAuthorization !== true) {
+            const authorize = security?.authorize;
+
+            if (access !== 'public' && authorize?.beforeValidation?.length) {
                 await executeAuthorizationStage({
                     req,
                     access,
                     auth: authenticationResult.auth,
-                    security: security
-                        ? {
-                            authorize: security.authorize,
-                        }
-                        : undefined,
+                    authorizers: authorize.beforeValidation,
                     errors,
                 });
             }
@@ -485,14 +413,12 @@ function createHandlerRuntime<TContract extends AnyContract, TAuth>(
                 return;
             }
 
-            if (access !== 'public' && security?.validateBeforeAuthorization === true) {
+            if (access !== 'public' && authorize?.afterValidation?.length) {
                 await executeAuthorizationStage({
                     req: validatedReq as AfterAuthorizationRequest<TContract>,
                     access,
                     auth: authenticationResult.auth,
-                    security: {
-                        authorize: security.authorize,
-                    },
+                    authorizers: authorize.afterValidation,
                     errors,
                 });
             }
@@ -557,10 +483,12 @@ function createHandlerRuntime<TContract extends AnyContract, TAuth>(
  * - `protected`: auth context is required in the handler
  *
  * Authorization timing:
- * - `validateBeforeAuthorization: false` (default) runs authorization before
- *   request validation, so `authorize` receives a plain Express Request.
- * - `validateBeforeAuthorization: true` runs authorization after validation,
- *   so `authorize` receives typed body/query/params.
+ * - `authorize.beforeValidation` policies run on the raw Express `Request`
+ *   before request validation (fail-fast on cheap checks like roles/scopes).
+ * - `authorize.afterValidation` policies run on the validated request with typed
+ *   body/query/params (resource ownership, payload-dependent checks).
+ * - A handler may use either bucket, both, or neither. Both buckets use
+ *   logical-AND semantics and short-circuit on the first failure.
  *
  * Auth inference note:
  * When providing `security.authenticate` with a parameter, explicitly annotate
@@ -582,8 +510,10 @@ function createHandlerRuntime<TContract extends AnyContract, TAuth>(
  *   access: "protected",
  *   security: {
  *     authenticate: async (_req: Request) => ({ userId: "u-1" }),
- *     validateBeforeAuthorization: true,
- *     authorize: async ({ req, auth }) => auth.userId === req.params.id,
+ *     authorize: {
+ *       beforeValidation: [({ auth }) => auth.role === "staff"],
+ *       afterValidation: [({ req, auth }) => auth.userId === req.params.id],
+ *     },
  *   },
  * }, async ({ req, auth }) => ({ data: { updated: true } }));
  *
@@ -626,7 +556,7 @@ export function createHandler<
     TResult extends ContractHandlerSuccessResult<TContract>,
 >(
     contract: TContract,
-    options: ProtectedBeforeOpts<TAuth>,
+    options: ProtectedOpts<TAuth, TContract>,
     handler: HandlerFn<TContract, TAuth, 'protected', TResult>,
 ): RequestHandler;
 
@@ -636,27 +566,7 @@ export function createHandler<
     TResult extends ContractHandlerSuccessResult<TContract>,
 >(
     contract: TContract,
-    options: ProtectedAfterOpts<TAuth, TContract>,
-    handler: HandlerFn<TContract, TAuth, 'protected', TResult>,
-): RequestHandler;
-
-export function createHandler<
-    TContract extends AnyContract,
-    TAuth,
-    TResult extends ContractHandlerSuccessResult<TContract>,
->(
-    contract: TContract,
-    options: OptionalBeforeOpts<TAuth>,
-    handler: HandlerFn<TContract, TAuth, 'optional', TResult>,
-): RequestHandler;
-
-export function createHandler<
-    TContract extends AnyContract,
-    TAuth,
-    TResult extends ContractHandlerSuccessResult<TContract>,
->(
-    contract: TContract,
-    options: OptionalAfterOpts<TAuth, TContract>,
+    options: OptionalOpts<TAuth, TContract>,
     handler: HandlerFn<TContract, TAuth, 'optional', TResult>,
 ): RequestHandler;
 
@@ -664,15 +574,13 @@ export function createHandler<TContract extends AnyContract, TAuth>(
     contract: TContract,
     arg2:
         | PublicHandlerOpts
-        | ProtectedBeforeOpts<TAuth>
-        | ProtectedAfterOpts<TAuth, TContract>
-        | OptionalBeforeOpts<TAuth>
-        | OptionalAfterOpts<TAuth, TContract>
+        | ProtectedOpts<TAuth, TContract>
+        | OptionalOpts<TAuth, TContract>
         | ((ctx: any) => Promise<any>),
     arg3?: (ctx: any) => Promise<any>,
 ): RequestHandler {
     const { handler, options } = resolveHandlerArgs<
-        PublicHandlerOpts | ProtectedBeforeOpts<TAuth> | ProtectedAfterOpts<TAuth, TContract> | OptionalBeforeOpts<TAuth> | OptionalAfterOpts<TAuth, TContract>,
+        PublicHandlerOpts | ProtectedOpts<TAuth, TContract> | OptionalOpts<TAuth, TContract>,
         (ctx: any) => Promise<any>
     >(arg2, arg3, 'createHandler requires a handler function as the last argument.');
 
@@ -716,27 +624,15 @@ type HandlerFactoryDefaults<TAuthContext> = {
     errors?: HandlerErrorMappers<Request>;
 };
 
-type FactoryProtectedBeforeOpts<TAuth> = {
+type FactoryProtectedOpts<TAuth, TContract extends AnyContract> = {
     access?: 'protected';
-    security?: InheritedBeforeSecurity<TAuth>;
+    security?: InheritedSecurity<TAuth, AfterAuthorizationRequest<TContract>>;
     errors?: HandlerErrorMappers;
 };
 
-type FactoryProtectedAfterOpts<TAuth, TContract extends AnyContract> = {
-    access?: 'protected';
-    security?: InheritedAfterSecurity<TAuth, AfterAuthorizationRequest<TContract>>;
-    errors?: HandlerErrorMappers;
-};
-
-type FactoryOptionalBeforeOpts<TAuth> = {
-    access: 'optional';
-    security?: InheritedBeforeSecurity<TAuth>;
-    errors?: HandlerErrorMappers;
-};
-
-type FactoryOptionalAfterOpts<TAuth, TContract extends AnyContract> = {
-    access: 'optional';
-    security?: InheritedAfterSecurity<TAuth, AfterAuthorizationRequest<TContract>>;
+type FactoryOptionalOpts<TAuth, TContract extends AnyContract> = {
+    access?: 'optional';
+    security?: InheritedSecurity<TAuth, AfterAuthorizationRequest<TContract>>;
     errors?: HandlerErrorMappers;
 };
 
@@ -746,10 +642,16 @@ type FactoryPublicOverrideOpts = {
 };
 
 /**
- * Handler factory return type when defaults include `validateBeforeAuthorization: true`.
- * After-validation overload comes first so `authorize` receives typed request by default.
+ * Handler factory return type for protected/optional factories.
+ *
+ * A single factory interface covers both before- and after-validation
+ * authorization, because timing is expressed per-bucket in `authorize` rather
+ * than as a factory-level toggle. Per-handler overrides may use either bucket.
+ *
+ * @typeParam TAuth - Auth context type from the factory's `authenticate` default.
+ * @typeParam TDefaultAccess - Default access mode (protected or optional).
  */
-interface AfterValidateFactory<
+interface SecuredFactory<
     TAuth,
     TDefaultAccess extends Exclude<AccessMode, 'public'>,
 > {
@@ -760,69 +662,13 @@ interface AfterValidateFactory<
 
     <TContract extends AnyContract, TResult extends ContractHandlerSuccessResult<TContract>>(
         contract: TContract,
-        options: FactoryProtectedAfterOpts<TAuth, TContract>,
+        options: FactoryProtectedOpts<TAuth, TContract>,
         handler: HandlerFn<TContract, TAuth, 'protected', TResult>,
     ): RequestHandler;
 
     <TContract extends AnyContract, TResult extends ContractHandlerSuccessResult<TContract>>(
         contract: TContract,
-        options: FactoryProtectedBeforeOpts<TAuth>,
-        handler: HandlerFn<TContract, TAuth, 'protected', TResult>,
-    ): RequestHandler;
-
-    <TContract extends AnyContract, TResult extends ContractHandlerSuccessResult<TContract>>(
-        contract: TContract,
-        options: FactoryOptionalAfterOpts<TAuth, TContract>,
-        handler: HandlerFn<TContract, TAuth, 'optional', TResult>,
-    ): RequestHandler;
-
-    <TContract extends AnyContract, TResult extends ContractHandlerSuccessResult<TContract>>(
-        contract: TContract,
-        options: FactoryOptionalBeforeOpts<TAuth>,
-        handler: HandlerFn<TContract, TAuth, 'optional', TResult>,
-    ): RequestHandler;
-
-    <TContract extends AnyContract, TResult extends ContractHandlerSuccessResult<TContract>>(
-        contract: TContract,
-        options: FactoryPublicOverrideOpts,
-        handler: HandlerFn<TContract, never, 'public', TResult>,
-    ): RequestHandler;
-}
-
-/**
- * Handler factory return type when defaults do NOT include `validateBeforeAuthorization: true`.
- * Before-validation overload comes first so `authorize` receives plain Request by default.
- */
-interface BeforeValidateFactory<
-    TAuth,
-    TDefaultAccess extends Exclude<AccessMode, 'public'>,
-> {
-    <TContract extends AnyContract, TResult extends ContractHandlerSuccessResult<TContract>>(
-        contract: TContract,
-        handler: HandlerFn<TContract, TAuth, TDefaultAccess, TResult>,
-    ): RequestHandler;
-
-    <TContract extends AnyContract, TResult extends ContractHandlerSuccessResult<TContract>>(
-        contract: TContract,
-        options: FactoryProtectedBeforeOpts<TAuth>,
-        handler: HandlerFn<TContract, TAuth, 'protected', TResult>,
-    ): RequestHandler;
-
-    <TContract extends AnyContract, TResult extends ContractHandlerSuccessResult<TContract>>(
-        contract: TContract,
-        options: FactoryProtectedAfterOpts<TAuth, TContract>,
-        handler: HandlerFn<TContract, TAuth, 'protected', TResult>,
-    ): RequestHandler;
-
-    <TContract extends AnyContract, TResult extends ContractHandlerSuccessResult<TContract>>(
-        contract: TContract,
-        options: FactoryOptionalBeforeOpts<TAuth>,
-        handler: HandlerFn<TContract, TAuth, 'optional', TResult>,
-    ): RequestHandler;
-
-    <TContract extends AnyContract, TResult extends ContractHandlerSuccessResult<TContract>>(
-        contract: TContract,
-        options: FactoryOptionalAfterOpts<TAuth, TContract>,
+        options: FactoryOptionalOpts<TAuth, TContract>,
         handler: HandlerFn<TContract, TAuth, 'optional', TResult>,
     ): RequestHandler;
 
@@ -851,25 +697,13 @@ interface PublicFactory {
 
     <TContract extends AnyContract, TAuth, TResult extends ContractHandlerSuccessResult<TContract>>(
         contract: TContract,
-        options: ProtectedBeforeOpts<TAuth>,
+        options: ProtectedOpts<TAuth, TContract>,
         handler: HandlerFn<TContract, TAuth, 'protected', TResult>,
     ): RequestHandler;
 
     <TContract extends AnyContract, TAuth, TResult extends ContractHandlerSuccessResult<TContract>>(
         contract: TContract,
-        options: ProtectedAfterOpts<TAuth, TContract>,
-        handler: HandlerFn<TContract, TAuth, 'protected', TResult>,
-    ): RequestHandler;
-
-    <TContract extends AnyContract, TAuth, TResult extends ContractHandlerSuccessResult<TContract>>(
-        contract: TContract,
-        options: OptionalBeforeOpts<TAuth>,
-        handler: HandlerFn<TContract, TAuth, 'optional', TResult>,
-    ): RequestHandler;
-
-    <TContract extends AnyContract, TAuth, TResult extends ContractHandlerSuccessResult<TContract>>(
-        contract: TContract,
-        options: OptionalAfterOpts<TAuth, TContract>,
+        options: OptionalOpts<TAuth, TContract>,
         handler: HandlerFn<TContract, TAuth, 'optional', TResult>,
     ): RequestHandler;
 }
@@ -913,64 +747,33 @@ interface PublicFactory {
  *   access: "protected",
  *   security: {
  *     authenticate: async (_req: Request) => ({ userId: "u-3" }),
- *     validateBeforeAuthorization: true,
+ *     authorize: { afterValidation: [({ auth }) => auth.userId.startsWith("u-")] },
  *   },
  * });
  *
- * strictFactory(contract, {
- *   security: { validateBeforeAuthorization: false },
- * }, async ({ req, auth }) => ({ data: { id: auth.userId } }));
+ * strictFactory(contract, async ({ req, auth }) => ({ data: { id: auth.userId } }));
  */
 export function createHandlerFactory<TAuth>(
     defaults: HandlerFactoryDefaults<TAuth> & {
         access: 'protected';
-        security: { authenticate: Authenticator<TAuth, Request>; validateBeforeAuthorization: true };
     },
-): AfterValidateFactory<TAuth, 'protected'>;
+): SecuredFactory<TAuth, 'protected'>;
 
 export function createHandlerFactory<TAuth>(
     defaults: HandlerFactoryDefaults<TAuth> & {
         access: 'optional';
-        security: { authenticate: Authenticator<TAuth, Request>; validateBeforeAuthorization: true };
     },
-): AfterValidateFactory<TAuth, 'optional'>;
-
-export function createHandlerFactory<TAuth>(
-    defaults: HandlerFactoryDefaults<TAuth> & {
-        access: 'protected';
-        security: { authenticate: Authenticator<TAuth, Request> };
-    },
-): BeforeValidateFactory<TAuth, 'protected'>;
-
-export function createHandlerFactory<TAuth>(
-    defaults: HandlerFactoryDefaults<TAuth> & {
-        access: 'optional';
-        security: { authenticate: Authenticator<TAuth, Request> };
-    },
-): BeforeValidateFactory<TAuth, 'optional'>;
-
-export function createHandlerFactory<TAuth>(
-    defaults: HandlerFactoryDefaults<TAuth> & { access: 'protected' },
-): BeforeValidateFactory<TAuth, 'protected'>;
-
-export function createHandlerFactory<TAuth>(
-    defaults: HandlerFactoryDefaults<TAuth> & { access: 'optional' },
-): BeforeValidateFactory<TAuth, 'optional'>;
+): SecuredFactory<TAuth, 'optional'>;
 
 export function createHandlerFactory<TAuth>(
     defaults: { access: 'public'; security?: never; errors?: never },
 ): PublicFactory;
 
-export function createHandlerFactory<TAuth>(
-): PublicFactory;
+export function createHandlerFactory<TAuth>(): PublicFactory;
 
 export function createHandlerFactory<TAuth>(
     defaults?: HandlerFactoryDefaults<TAuth>,
-):
-    | AfterValidateFactory<TAuth, Exclude<AccessMode, 'public'>>
-    | BeforeValidateFactory<TAuth, Exclude<AccessMode, 'public'>>
-    | PublicFactory
-{
+): SecuredFactory<TAuth, Exclude<AccessMode, 'public'>> | PublicFactory {
     if (defaults?.security && (defaults.access ?? 'public') === 'public') {
         throw new Error(
             'createHandlerFactory: public access cannot define security defaults. ' +
@@ -1012,13 +815,9 @@ export function createHandlerFactory<TAuth>(
         return createHandlerInternal<TContract, TAuth>(contract, handler, mergedOptions);
     }
 
-    if (defaults?.security?.validateBeforeAuthorization) {
-        return createConfiguredHandler as AfterValidateFactory<TAuth, Exclude<AccessMode, 'public'>>;
+    if ((defaults?.access ?? 'public') === 'public') {
+        return createConfiguredHandler as PublicFactory;
     }
 
-    if (defaults?.security?.authenticate) {
-        return createConfiguredHandler as BeforeValidateFactory<TAuth, Exclude<AccessMode, 'public'>>;
-    }
-
-    return createConfiguredHandler as PublicFactory;
+    return createConfiguredHandler as SecuredFactory<TAuth, Exclude<AccessMode, 'public'>>;
 }

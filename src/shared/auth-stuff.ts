@@ -1,7 +1,7 @@
 import createHttpError from 'http-errors';
 import z from 'zod';
 import type { Authenticator, Authorizer } from '../core/index.ts';
-import { allOf, createHandlerFactory, not } from '../core/index.ts';
+import { allOf, anyOf, createHandlerFactory } from '../core/index.ts';
 import { UserRepository } from '../features/users/users.repository.ts';
 import { JwtUtils } from '../utils/jwt.util.ts';
 
@@ -69,12 +69,33 @@ export const isSystemReservedBook: Authorizer<JwtAuthContext> = ({ req }) => {
     return Boolean(isbn?.startsWith('SYS-'));
 };
 
-// Example 3: allOf + not
-// Delete allowed only for staff, and system-reserved books cannot be deleted.
-export const deleteBookPolicy = allOf<JwtAuthContext>([
-    hasRegisteredUser,
+/**
+ * Reusable composite authorization policy for editing books.
+ *
+ * This is the canonical case where `allOf` is still essential: AND-combining
+ * policies INSIDE an `anyOf` branch. A handler's `authorize` bucket array can
+ * only express top-level AND; it cannot express "(A and B) or C". For that you
+ * need `allOf` to produce a single authorizer that becomes one branch of the
+ * `anyOf`.
+ *
+ * Semantics: staff may edit any book; everyone else may edit only if they are a
+ * registered user AND the payload `author` matches their email handle.
+ *
+ * Exported as a single `Authorizer` value so it can be reused across handlers
+ * and passed directly to other combinators (`anyOf`/`not`) — something a bare
+ * policy array cannot do.
+ *
+ * @example
+ * createHandler(contract, {
+ *   access: 'protected',
+ *   security: {
+ *     authorize: { beforeValidation: [canEditBook] },
+ *   },
+ * }, handler);
+ */
+export const canEditBook: Authorizer<JwtAuthContext> = anyOf<JwtAuthContext>([
     isLibraryStaff,
-    not<JwtAuthContext>(isSystemReservedBook),
+    allOf<JwtAuthContext>([hasRegisteredUser, editsOwnAuthorName]),
 ]);
 
 export const createJwtAuthHandler = createHandlerFactory<JwtAuthContext>({
