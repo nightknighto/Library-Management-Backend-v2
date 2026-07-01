@@ -37,36 +37,53 @@ export const authenticateJwt: Authenticator<JwtAuthContext> = async (req) => {
 
 export const hasRegisteredUser: Authorizer<JwtAuthContext> = async ({ auth }) => {
     const existingUser = await UserRepository.getUser(auth.email);
-    return Boolean(existingUser);
+    if (!existingUser) {
+        throw new createHttpError.Forbidden('Registered user only');
+    }
+    return true;
 };
 
-export const isLibraryStaff: Authorizer<JwtAuthContext> = ({ auth }) =>
-    auth.email.endsWith('@library.local');
+export const isLibraryStaff: Authorizer<JwtAuthContext> = async ({ auth }) => {
+    if (!auth.email.endsWith('@library.local')) {
+        throw new createHttpError.Forbidden('Library staff only');
+    }
+    return true;
+};
 
-export const hasWriteAccessHeader: Authorizer<JwtAuthContext> = ({ req }) =>
-    req.headers['x-write-access'] === 'enabled';
+export const hasWriteAccessHeader: Authorizer<JwtAuthContext> = async ({ req }) => {
+    if (req.headers['x-write-access'] !== 'enabled') {
+        throw new createHttpError.Forbidden('Write access header required');
+    }
+    return true;
+};
 
-export const editsOwnAuthorName: Authorizer<JwtAuthContext> = ({ req, auth }) => {
+export const editsOwnAuthorName: Authorizer<JwtAuthContext> = async ({ req, auth }) => {
     const authorValue =
         req.body && typeof req.body === 'object'
             ? (req.body as { author?: unknown }).author
             : undefined;
 
     if (typeof authorValue !== 'string') {
-        return false;
+        throw new createHttpError.Forbidden('Author must match your account name');
     }
 
     const normalizedAuthor = authorValue.trim().toLowerCase();
     const emailHandle = auth.email.split('@')[0]?.replace(/[._-]/g, ' ').toLowerCase() ?? '';
-    return normalizedAuthor === emailHandle;
+    if (normalizedAuthor !== emailHandle) {
+        throw new createHttpError.Forbidden('Author must match your account name');
+    }
+    return true;
 };
 
-export const isSystemReservedBook: Authorizer<JwtAuthContext> = ({ req }) => {
+export const isSystemReservedBook: Authorizer<JwtAuthContext> = async ({ req }) => {
     const isbn =
         req.params && typeof req.params === 'object'
             ? (req.params as { isbn?: string }).isbn
             : undefined;
-    return Boolean(isbn?.startsWith('SYS-'));
+    if (!isbn?.startsWith('SYS-')) {
+        throw new createHttpError.Forbidden('Not a system-reserved book');
+    }
+    return true;
 };
 
 /**
@@ -106,8 +123,6 @@ export const createJwtAuthHandler = createHandlerFactory<JwtAuthContext>({
     },
     errors: {
         unauthenticated: () => new createHttpError.Unauthorized('Authentication required'),
-        unauthorized: () =>
-            new createHttpError.Forbidden('Authorization policy denied this operation'),
     },
 });
 
@@ -121,7 +136,5 @@ export const createJwtAuthHandler2 = createHandlerFactory({
     },
     errors: {
         unauthenticated: () => new createHttpError.Unauthorized('Authentication required'),
-        unauthorized: () =>
-            new createHttpError.Forbidden('Authorization policy denied this operation'),
     },
 });

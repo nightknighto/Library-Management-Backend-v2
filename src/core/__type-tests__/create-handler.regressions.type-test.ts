@@ -1,6 +1,7 @@
 import type { Request } from 'express';
+import createHttpError from 'http-errors';
 import { z } from 'zod';
-import { createContract, createHandler, createHandlerFactory } from '../index.ts';
+import { allOf, anyOf, createContract, createHandler, createHandlerFactory, not } from '../index.ts';
 import type { Equal, Expect, ExpectFalse, Extends, IsAny } from './type-test.utils.ts';
 
 /**
@@ -68,7 +69,7 @@ createHandler(
                     async ({ req, auth }) => {
                         type _body = Expect<Equal<typeof req.body, { title: string }>>;
                         type _auth = Expect<Extends<typeof auth, AuthContext>>;
-                        return auth.role === 'staff' && req.body.title.length > 0;
+                        if (!(auth.role === 'staff' && req.body.title.length > 0)) throw new createHttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -92,14 +93,14 @@ createHandler(
                     async ({ req, auth }) => {
                         type _reqBefore = Expect<Equal<typeof req, Request>>;
                         type _authBefore = Expect<Extends<typeof auth, AuthContext>>;
-                        return auth.role === 'staff';
+                        if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true;
                     },
                 ],
                 afterValidation: [
                     async ({ req, auth }) => {
                         type _bodyAfter = Expect<Equal<typeof req.body, { title: string }>>;
                         type _authAfter = Expect<Extends<typeof auth, AuthContext>>;
-                        return req.body.title.length > 0;
+                        if (req.body.title.length === 0) throw new createHttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -182,16 +183,45 @@ createHandler(
 
 const publicFactory = createHandlerFactory<AuthContext>({ access: 'public' });
 
+// @ts-expect-error public factory handlers must not accept security options
 publicFactory(
     UpdateBookContract,
     {
-        // @ts-expect-error public factory handlers must not accept security options
         security: {
             authorize: {
                 // @ts-expect-error auth is unknown because security is rejected
-                beforeValidation: [async ({ auth }) => auth.role === 'staff'],
+                beforeValidation: [async ({ auth }) => { if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true; }],
             },
         },
     },
     async ({ req }) => ({ data: { updated: true } }),
+);
+
+/**
+ * Regression-010: throw-model combinator composites still compose and install.
+ *
+ * Backward-compat: the bucket install mechanism and combinator composition are
+ * unchanged; only the authorizer return contract changed (allow = `return true`,
+ * deny = throw HttpError). A composite built from allOf/anyOf/not — including
+ * the new `denialError` parameter on anyOf/not — must still type-check and
+ * install into a bucket.
+ */
+const _compositePolicy = anyOf<AuthContext>([
+    allOf<AuthContext>([
+        async () => true,
+        async ({ auth }) => { if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true; },
+    ]),
+    not<AuthContext>(async () => true, new createHttpError.Forbidden('not-allowed')),
+]);
+
+createHandler(
+    UpdateBookContract,
+    {
+        access: 'protected',
+        security: {
+            authenticate: async () => ({ userId: 'r-10', role: 'staff' as const }),
+            authorize: { beforeValidation: [_compositePolicy] },
+        },
+    },
+    async ({ req, auth: _auth }) => ({ data: { updated: true } }),
 );

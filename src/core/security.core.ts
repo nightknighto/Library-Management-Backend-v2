@@ -31,16 +31,10 @@ type SecurityExecutionResult<TAuthContext, TAccess extends AccessMode> = TAccess
     ? { auth?: TAuthContext }
     : { auth?: undefined };
 
-type AuthorizationExecutionParams<
-    TAuthContext,
-    TAccess extends AccessMode,
-    TRequest extends Request,
-> = {
+type AuthorizationExecutionParams<TAuthContext, TRequest extends Request> = {
     req: TRequest;
-    access: TAccess;
     auth?: TAuthContext;
     authorizers: Array<Authorizer<TAuthContext, TRequest>>;
-    errors?: HandlerErrorMappers<TRequest>;
 };
 
 // Prevents TRequest from being inferred from policy arrays when an explicit
@@ -110,39 +104,31 @@ export async function executeAuthenticationStage<
 /**
  * Executes a single authorization bucket for a request.
  *
- * Evaluates the provided authorizers in order with logical-AND semantics,
- * short-circuiting on the first policy that returns false.
+ * Evaluates the provided authorizers in order with logical-AND semantics. Each
+ * authorizer allows by returning `true` and denies by throwing an `HttpError`.
  *
  * Behavior:
- * - When access is `protected` and auth is missing, throws an unauthorized error.
- * - For `optional` access with missing auth, authorization is bypassed.
- * - When any authorizer returns false, a forbidden error is thrown.
- * - Error mappers in `errors.unauthorized` override default failures.
+ * - When auth is missing, the bucket is bypassed (no policies run).
+ * - Authorizers are awaited in order; the first thrown `HttpError` propagates
+ *   verbatim (its status code and message become the response) and short-circuits
+ *   the remaining authorizers.
+ * - Non-`HttpError` exceptions propagate unchanged as unexpected errors (500).
  *
  * This is called twice by the handler runtime: once for the `beforeValidation`
  * bucket (with the raw request) and once for the `afterValidation` bucket
  * (with the validated request).
  */
-export async function executeAuthorizationStage<
-    TAuthContext,
-    TAccess extends AccessMode,
-    TRequest extends Request,
->(params: AuthorizationExecutionParams<TAuthContext, TAccess, TRequest>): Promise<void> {
-    const { req, access, auth, authorizers, errors } = params;
+export async function executeAuthorizationStage<TAuthContext, TRequest extends Request>(
+    params: AuthorizationExecutionParams<TAuthContext, TRequest>,
+): Promise<void> {
+    const { req, auth, authorizers } = params;
 
     if (auth == null) {
-        if (access === 'protected') {
-            throw errors?.unauthorized?.(req) ?? new createHttpError.Unauthorized('Unauthorized');
-        }
-
         return;
     }
 
     for (const authorize of authorizers) {
-        const isAllowed = await authorize({ req, auth });
-        if (!isAllowed) {
-            throw errors?.unauthorized?.(req) ?? new createHttpError.Forbidden('Forbidden');
-        }
+        await authorize({ req, auth });
     }
 }
 
@@ -153,8 +139,12 @@ export async function executeAuthorizationStage<
 /**
  * Combines multiple authorizers with logical-AND semantics.
  *
- * Returns a single composite authorizer that passes only when every input
- * policy passes, short-circuiting on the first failure.
+ * Returns a single composite authorizer that allows only when every input
+ * policy allows, short-circuiting on the first thrown denial.
+ *
+ * - A policy that throws an `HttpError` short-circuits the loop; that error
+ *   propagates verbatim (status code and message preserved).
+ * - A policy that throws a non-`HttpError` propagates unchanged.
  *
  * When to use it:
  * - To AND-combine policies INSIDE an `anyOf` branch or under `not` (a handler's
@@ -178,8 +168,14 @@ export async function executeAuthorizationStage<
  * @example
  * // Reusable composite with typed request.
  * const policy = allOf<AuthContext, AfterAuthorizationRequest<typeof contract>>([
- *   async ({ auth }) => auth.role === "staff",
- *   async ({ req }) => req.body.title.length > 0,
+ *   async ({ auth }) => {
+ *     if (auth.role !== "staff") throw new createHttpError.Forbidden("staff only");
+ *     return true;
+ *   },
+ *   async ({ req }) => {
+ *     if (req.body.title.length === 0) throw new createHttpError.BadRequest("empty title");
+ *     return true;
+ *   },
  * ]);
  */
 export function allOf<TContext, TRequest extends Request>(
@@ -191,10 +187,7 @@ export function allOf<TContext, TRequest extends Request = Request>(
 export function allOf(policies: Array<Authorizer<any, Request>>): Authorizer<any, Request> {
     return async (params) => {
         for (const policy of policies) {
-            const result = await policy(params);
-            if (!result) {
-                return false;
-            }
+            await policy(params);
         }
 
         return true;
@@ -202,54 +195,120 @@ export function allOf(policies: Array<Authorizer<any, Request>>): Authorizer<any
 }
 
 /**
- * Combines multiple authorizers so that any may succeed.
+ * Combines multiple authorizers so that any may succeed (logical-OR).
+ *
+ * Returns a single composite authorizer that allows as soon as one branch
+ * allows.
+ *
+ * - The first branch that resolves (does not throw) short-circuits the composite.
+ * - A branch `HttpError` is treated as a denial and swallowed; the next branch
+ *   is tried.
+ * - A branch that throws a non-`HttpError` propagates immediately and aborts the OR.
+ * - When every branch denies (or the list is empty), throws `denialError` if
+ *   provided, otherwise `new Forbidden('Forbidden')` (403). The exact instance
+ *   is thrown as-is.
+ *
+ * `denialError` is useful when the OR should fail with a specific status/message
+ * (e.g. a 404 to avoid leaking resource existence).
  *
  * Use an explicit request type if authorizers expect a narrowed request.
- * Policies are evaluated in order and stop at the first success.
  *
  * @example
  * const policy = anyOf<AuthContext>([
- *   async ({ auth }) => auth.role === "staff",
- *   async ({ auth }) => auth.scopes.includes("books:write"),
+ *   async ({ auth }) => {
+ *     if (auth.role !== "staff") throw new createHttpError.Forbidden("staff only");
+ *     return true;
+ *   },
+ *   async ({ auth }) => {
+ *     if (!auth.scopes.includes("books:write")) throw new createHttpError.Forbidden("no scope");
+ *     return true;
+ *   },
  * ]);
+ *
+ * @example
+ * // Custom denial error for the whole OR when every branch denies.
+ * const policy = anyOf<AuthContext>(
+ *   [isStaff, ownsResource],
+ *   new createHttpError.NotFound("resource not found"),
+ * );
  */
 export function anyOf<TContext, TRequest extends Request>(
     policies: Array<Authorizer<TContext, NoInfer<TRequest>>>,
+    denialError?: createHttpError.HttpError,
 ): Authorizer<TContext, TRequest>;
 export function anyOf<TContext, TRequest extends Request = Request>(
     policies: Array<Authorizer<TContext, TRequest>>,
+    denialError?: createHttpError.HttpError,
 ): Authorizer<TContext, TRequest>;
-export function anyOf(policies: Array<Authorizer<any, Request>>): Authorizer<any, Request> {
+export function anyOf(
+    policies: Array<Authorizer<any, Request>>,
+    denialError?: createHttpError.HttpError,
+): Authorizer<any, Request> {
     return async (params) => {
         for (const policy of policies) {
-            const result = await policy(params);
-            if (result) {
+            try {
+                await policy(params);
                 return true;
+            } catch (error) {
+                if (!(error instanceof createHttpError.HttpError)) {
+                    throw error;
+                }
             }
         }
 
-        return false;
+        throw denialError ?? new createHttpError.Forbidden('Forbidden');
     };
 }
 
 /**
- * Negates an authorizer result.
+ * Negates an authorizer (logical-NOT).
+ *
+ * Allows when the wrapped policy denies; denies when the wrapped policy allows.
+ *
+ * - If the wrapped policy throws an `HttpError`, `not` resolves with `true`
+ *   (the wrapped denial is swallowed).
+ * - If the wrapped policy resolves with `true`, `not` throws `denialError` if
+ *   provided, otherwise `new Forbidden('Forbidden')` (403). The exact instance
+ *   is thrown as-is.
+ * - If the wrapped policy throws a non-`HttpError`, it propagates unchanged.
  *
  * Useful for denial rules or composing policies with allOf/anyOf.
  *
  * @example
- * const policy = not<AuthContext>(async ({ auth }) => auth.role === "member");
+ * const policy = not<AuthContext>(
+ *   async ({ auth }) => {
+ *     if (auth.role === "member") throw new createHttpError.Forbidden("members blocked");
+ *     return true;
+ *   },
+ * );
+ *
+ * @example
+ * // Custom denial error when the wrapped policy allows.
+ * const policy = not<AuthContext>(isPublicUser, new createHttpError.Forbidden("public not allowed"));
  */
 export function not<TContext, TRequest extends Request>(
     policy: Authorizer<TContext, NoInfer<TRequest>>,
+    denialError?: createHttpError.HttpError,
 ): Authorizer<TContext, TRequest>;
 export function not<TContext, TRequest extends Request = Request>(
     policy: Authorizer<TContext, TRequest>,
+    denialError?: createHttpError.HttpError,
 ): Authorizer<TContext, TRequest>;
-export function not(policy: Authorizer<any, Request>): Authorizer<any, Request> {
+export function not(
+    policy: Authorizer<any, Request>,
+    denialError?: createHttpError.HttpError,
+): Authorizer<any, Request> {
     return async (params) => {
-        const result = await policy(params);
-        return !result;
+        try {
+            await policy(params);
+        } catch (error) {
+            if (!(error instanceof createHttpError.HttpError)) {
+                throw error;
+            }
+            return true;
+        }
+
+        throw denialError ?? new createHttpError.Forbidden('Forbidden');
     };
 }
 

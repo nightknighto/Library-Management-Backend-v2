@@ -28,7 +28,8 @@ const borrowBook = createHandler(
                     async ({ auth }) => {
                         // For this example, we'll allow any authenticated user to borrow books.
                         // In a real implementation, you might check user roles or permissions here.
-                        return Boolean(auth?.email);
+                        if (!auth?.email) throw new createHttpError.Forbidden('Authenticated user required');
+                        return true;
                     },
                 ],
             },

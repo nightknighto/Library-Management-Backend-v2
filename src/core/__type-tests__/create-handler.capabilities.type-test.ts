@@ -212,7 +212,7 @@ createHandler(
                             Equal<typeof req.body, { title: string; totalQuantity: number }>
                         >;
                         type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                        return auth.role === 'staff' && req.body.title.length > 0;
+                        if (!(auth.role === 'staff' && req.body.title.length > 0)) throw new createHttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -233,7 +233,7 @@ createHandler(
                     async ({ req, auth }) => {
                         type _authorizedReq = Expect<Equal<typeof req, Request>>;
                         type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                        return auth.role === 'staff';
+                        if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -243,10 +243,10 @@ createHandler(
 );
 
 const composedPolicy = allOf<AuthContext>([
-    async ({ auth }) => auth.role === 'staff',
+    async ({ auth }) => { if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true; },
     anyOf<AuthContext>([
-        async ({ auth }) => auth.userId.startsWith('u-'),
-        not<AuthContext>(async ({ auth }) => auth.role === 'member'),
+        async ({ auth }) => { if (!auth.userId.startsWith('u-')) throw new createHttpError.Forbidden('denied'); return true; },
+        not<AuthContext>(async ({ auth }) => { if (auth.role === 'member') throw new createHttpError.Forbidden('denied'); return true; }),
     ]),
 ]);
 
@@ -262,10 +262,6 @@ createHandler(
             unauthenticated: (req) => {
                 type _reqShape = Expect<Extends<typeof req, Request>>;
                 return new createHttpError.Unauthorized('Unauthenticated');
-            },
-            unauthorized: (req) => {
-                type _reqShape = Expect<Extends<typeof req, Request>>;
-                return new createHttpError.Unauthorized('Unauthorized');
             },
         },
     },
@@ -316,7 +312,7 @@ privateFactoryAuthSchemaAndAuthenticate(
                     async ({ req, auth }) => {
                         type _authorizedReq = Expect<Equal<typeof req, Request>>;
                         type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                        return auth.role === 'staff';
+                        if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -339,7 +335,7 @@ privateFactoryAuthSchemaAndAuthenticate(
                             Equal<typeof req.body, { title: string; totalQuantity: number }>
                         >;
                         type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                        return auth.role === 'staff' && req.body.title.length > 0;
+                        if (!(auth.role === 'staff' && req.body.title.length > 0)) throw new createHttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -367,7 +363,7 @@ privateFactoryAuthenticateOnly(
                     async ({ req, auth }) => {
                         type _authorizedReq = Expect<Equal<typeof req, Request>>;
                         type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                        return auth.role === 'staff';
+                        if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -397,7 +393,7 @@ privateFactoryInheritedAfterAuthorize(
                             Equal<typeof req.body, { title: string; totalQuantity: number }>
                         >;
                         type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                        return auth.role === 'staff' && req.body.title.length > 0;
+                        if (!(auth.role === 'staff' && req.body.title.length > 0)) throw new createHttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -423,7 +419,7 @@ createHandler(
                 beforeValidation: [
                     async ({ auth }) => {
                         type _authBefore = Expect<Extends<typeof auth, AuthContext>>;
-                        return auth.role === 'staff';
+                        if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true;
                     },
                 ],
                 afterValidation: [
@@ -432,7 +428,7 @@ createHandler(
                             Equal<typeof req.body, { title: string; totalQuantity: number }>
                         >;
                         type _authAfter = Expect<Extends<typeof auth, AuthContext>>;
-                        return req.body.title.length > 0;
+                        if (req.body.title.length === 0) throw new createHttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -465,7 +461,7 @@ createHandler(
 const afterTypedPolicy: Authorizer<
     AuthContext,
     AfterAuthorizationRequest<typeof UpdateBookContract>
-> = async ({ req }) => req.body.title.length > 0;
+> = async ({ req }) => { if (req.body.title.length === 0) throw new createHttpError.Forbidden('denied'); return true; };
 
 createHandler(
     UpdateBookContract,
@@ -556,10 +552,10 @@ createHandler(
     async ({ req }) => ({ data: { updated: true } }),
 );
 
+// @ts-expect-error public handlers must not accept security options
 createHandler(
     UpdateBookContract,
     {
-        // @ts-expect-error public handlers must not accept security options
         security: {
             authorize: { beforeValidation: [async () => true] },
         },
@@ -649,3 +645,26 @@ createHandler(
         return { data: true };
     },
 );
+
+/**
+ * Capability: strict authorizer return contract.
+ *
+ * An authorizer MUST return the literal `true` to allow and throw an HttpError
+ * to deny. A bare boolean return carries no denial reason and is rejected.
+ */
+const _strictAllow: Authorizer<AuthContext> = async () => true;
+const _strictAllowGuard: Authorizer<AuthContext> = async ({ auth }) => {
+    if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied');
+    return true;
+};
+
+// @ts-expect-error a literal `false` return is not assignable to the strict authorizer type
+const _booleanFalseReturn: Authorizer<AuthContext> = async () => false;
+
+// @ts-expect-error a boolean expression return is rejected (must return literal `true`)
+const _booleanExprReturn: Authorizer<AuthContext> = async ({ auth }) => auth.role === 'staff';
+
+// @ts-expect-error an authorizer that omits `return true` (void return) is rejected
+const _voidReturn: Authorizer<AuthContext> = ({ auth }) => {
+    if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied');
+};

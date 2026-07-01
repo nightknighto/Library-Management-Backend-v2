@@ -28,7 +28,8 @@ const createBook = createJwtAuthHandler(
                     hasRegisteredUser,
                     async ({ auth }) => {
                         const existingUser = await UserRepository.getUser(auth.email);
-                        return Boolean(existingUser);
+                        if (!existingUser) throw new createHttpError.Forbidden('Registered user only');
+                        return true;
                     },
                     anyOf<JwtAuthContext>([isLibraryStaff, hasWriteAccessHeader, async () => true]),
                 ],
@@ -57,15 +58,13 @@ const getAllBooks = createHandler(
             // could be inline function
             authorize: {
                 afterValidation: [
-                    async ({ auth, req }) => {
+                    async ({ auth }) => {
                         const existingUser = await UserRepository.getUser(auth.email);
-                        return Boolean(existingUser);
+                        if (!existingUser) throw new createHttpError.Forbidden('Registered user only');
+                        return true;
                     },
                 ],
             },
-        },
-        errors: {
-            unauthorized: () => new createHttpError.Forbidden('Invalid authenticated user'),
         },
     },
     async ({ req, auth }) => {

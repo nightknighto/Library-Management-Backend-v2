@@ -19,9 +19,12 @@ import createHttpError from 'http-errors';
 import { z } from 'zod';
 import {
     type AfterAuthorizationRequest,
+    allOf,
+    anyOf,
     createContract,
     createHandler,
     createHandlerFactory,
+    not,
 } from '../index.ts';
 import type { Equal, Expect, Extends } from './type-test.utils.ts';
 
@@ -85,14 +88,11 @@ createHandler(
                             Extends<typeof req.query, { q: string; page: number; limit: number }>
                         >;
                         type _auth = Expect<Extends<typeof auth, ScopedAuthContext>>;
-                        return auth.scopes.includes('books:read') && req.query.limit <= 50;
+                        if (!(auth.scopes.includes('books:read') && req.query.limit <= 50)) throw new createHttpError.Forbidden('denied'); return true;
                     },
-                    async ({ auth }) => auth.role === 'staff',
+                    async ({ auth }) => { if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true; },
                 ],
             },
-        },
-        errors: {
-            unauthorized: () => new createHttpError.Forbidden('Forbidden'),
         },
     },
     async ({ req, auth }) => {
@@ -139,7 +139,7 @@ createHandler(
             authSchema: ScopedAuthSchema,
             authorize: {
                 beforeValidation: [
-                    async ({ auth }) => auth.scopes.includes('books:write'),
+                    async ({ auth }) => { if (!auth.scopes.includes('books:write')) throw new createHttpError.Forbidden('denied'); return true; },
                 ],
             },
         },
@@ -179,7 +179,7 @@ protectedFactory(
                     async ({ req, auth }) => {
                         type _body = Expect<Equal<typeof req.body, { title: string }>>;
                         type _auth = Expect<Extends<typeof auth, ScopedAuthContext>>;
-                        return auth.role === 'staff' && req.body.title.length > 0;
+                        if (!(auth.role === 'staff' && req.body.title.length > 0)) throw new createHttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -207,20 +207,17 @@ createHandler(
             }),
             authSchema: ScopedAuthSchema,
             authorize: {
-                beforeValidation: [async ({ auth }) => auth.scopes.includes('books:read')],
+                beforeValidation: [async ({ auth }) => { if (!auth.scopes.includes('books:read')) throw new createHttpError.Forbidden('denied'); return true; }],
                 afterValidation: [
                     async ({ req, auth }) => {
                         type _query = Expect<
                             Extends<typeof req.query, { q: string; page: number; limit: number }>
                         >;
                         type _auth = Expect<Extends<typeof auth, ScopedAuthContext>>;
-                        return auth.scopes.includes('books:write') && req.query.limit <= 50;
+                        if (!(auth.scopes.includes('books:write') && req.query.limit <= 50)) throw new createHttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
-        },
-        errors: {
-            unauthorized: () => new createHttpError.Forbidden('Forbidden'),
         },
     },
     async ({ req, auth }) => {
@@ -239,9 +236,31 @@ protectedFactory(
         access: 'public',
         security: {
             authorize: {
-                beforeValidation: [async ({ auth }) => auth.role === 'staff'],
+                beforeValidation: [async ({ auth }) => { if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true; }],
             },
         },
     },
     async ({ req }) => ({ data: { updated: true } }),
 );
+
+/**
+ * Interaction: combinator denialError parameter.
+ *
+ * `anyOf` and `not` accept an optional `denialError: HttpError` thrown when the
+ * combinator itself denies. `allOf` takes no such parameter (a branch's own
+ * thrown error is the meaningful denial). The denialError must be an HttpError.
+ */
+const _anyOfCustomDenial = anyOf<ScopedAuthContext>(
+    [async () => true],
+    new createHttpError.PaymentRequired('pay up'),
+);
+const _notCustomDenial = not<ScopedAuthContext>(
+    async () => true,
+    new createHttpError.PaymentRequired('pay up'),
+);
+
+// @ts-expect-error allOf does not accept a denialError parameter
+const _allOfNoDenial = allOf<ScopedAuthContext>([async () => true], new createHttpError.Forbidden('x'));
+
+// @ts-expect-error denialError must be an HttpError instance, not a generic Error
+const _anyOfBadDenialType = anyOf<ScopedAuthContext>([async () => true], new Error('not http'));

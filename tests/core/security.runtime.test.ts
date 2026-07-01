@@ -93,65 +93,77 @@ describe('security (runtime)', () => {
     });
 
     describe('executeAuthorizationStage', () => {
-        it('throws unauthorized when protected and auth is missing', async () => {
+        it('skips authorization when auth is missing (optional access path)', async () => {
+            const authorizer = vi.fn(async (): Promise<true> => true);
             await expect(
                 executeAuthorizationStage({
                     req,
-                    access: 'protected',
                     auth: undefined,
-                    authorizers: [],
-                    errors: undefined,
-                }),
-            ).rejects.toMatchObject({ statusCode: 401 });
-        });
-
-        it('skips authorization when optional and auth is missing', async () => {
-            await expect(
-                executeAuthorizationStage({
-                    req,
-                    access: 'optional',
-                    auth: undefined,
-                    authorizers: [async () => false],
-                    errors: undefined,
+                    authorizers: [authorizer],
                 }),
             ).resolves.toBeUndefined();
+            expect(authorizer).not.toHaveBeenCalled();
         });
 
-        it('throws forbidden when a policy returns false', async () => {
+        it('resolves when every authorizer allows', async () => {
             await expect(
                 executeAuthorizationStage({
                     req,
-                    access: 'protected',
-                    auth: { userId: '1' },
-                    authorizers: [async () => false],
-                    errors: undefined,
-                }),
-            ).rejects.toMatchObject({ statusCode: 403 });
-        });
-
-        it('passes when all policies return true', async () => {
-            await expect(
-                executeAuthorizationStage({
-                    req,
-                    access: 'protected',
                     auth: { userId: '1' },
                     authorizers: [async () => true, async () => true],
-                    errors: undefined,
                 }),
             ).resolves.toBeUndefined();
         });
 
-        it('short-circuits on the first failing policy', async () => {
-            const first = vi.fn(async () => false);
-            const second = vi.fn(async () => true);
+        it('resolves with an empty authorizer list when auth is present', async () => {
+            await expect(
+                executeAuthorizationStage({
+                    req,
+                    auth: { userId: '1' },
+                    authorizers: [],
+                }),
+            ).resolves.toBeUndefined();
+        });
+
+        it('propagates the HttpError thrown by a denying authorizer', async () => {
+            await expect(
+                executeAuthorizationStage({
+                    req,
+                    auth: { userId: '1' },
+                    authorizers: [
+                        async () => {
+                            throw new createHttpError.Forbidden('not allowed');
+                        },
+                    ],
+                }),
+            ).rejects.toMatchObject({ statusCode: 403, message: 'not allowed' });
+        });
+
+        it('preserves the specific status code and message of a thrown denial', async () => {
+            await expect(
+                executeAuthorizationStage({
+                    req,
+                    auth: { userId: '1' },
+                    authorizers: [
+                        async () => {
+                            throw new createHttpError.NotFound('resource missing');
+                        },
+                    ],
+                }),
+            ).rejects.toMatchObject({ statusCode: 404, message: 'resource missing' });
+        });
+
+        it('short-circuits: a denying authorizer skips the remaining ones', async () => {
+            const first = vi.fn(async () => {
+                throw new createHttpError.Forbidden('nope');
+            });
+            const second = vi.fn(async (): Promise<true> => true);
 
             await expect(
                 executeAuthorizationStage({
                     req,
-                    access: 'protected',
                     auth: { userId: '1' },
                     authorizers: [first, second],
-                    errors: undefined,
                 }),
             ).rejects.toMatchObject({ statusCode: 403 });
 
@@ -159,51 +171,206 @@ describe('security (runtime)', () => {
             expect(second).not.toHaveBeenCalled();
         });
 
-        it('uses unauthorized error mapper when provided', async () => {
+        it('propagates a non-HttpError unchanged (unexpected error, not mapped to 403)', async () => {
             await expect(
                 executeAuthorizationStage({
                     req,
-                    access: 'protected',
                     auth: { userId: '1' },
-                    authorizers: [async () => false],
-                    errors: {
-                        unauthorized: () => new createHttpError.Forbidden('Custom deny'),
-                    },
+                    authorizers: [
+                        async () => {
+                            throw new Error('boom');
+                        },
+                    ],
                 }),
-            ).rejects.toMatchObject({ statusCode: 403, message: 'Custom deny' });
+            ).rejects.toThrow('boom');
         });
     });
 
     describe('policy combinators', () => {
-        it('allOf short-circuits on failure', async () => {
-            const first = vi.fn(async () => false);
-            const second = vi.fn(async () => true);
-            const policy = allOf([first, second]);
+        type Ctx = { userId: string };
+        const ctx = { userId: '1' };
 
-            const result = await policy({ req, auth: { userId: '1' } });
-
-            expect(result).toBe(false);
-            expect(first).toHaveBeenCalledTimes(1);
-            expect(second).not.toHaveBeenCalled();
+        const allow = vi.fn(async (): Promise<true> => true);
+        const denyForbidden = vi.fn(async () => {
+            throw new createHttpError.Forbidden('branch-deny');
+        });
+        const denyNotFound = vi.fn(async () => {
+            throw new createHttpError.NotFound('branch-missing');
+        });
+        const boom = vi.fn(async () => {
+            throw new Error('unexpected');
         });
 
-        it('anyOf short-circuits on success', async () => {
-            const first = vi.fn(async () => true);
-            const second = vi.fn(async () => false);
-            const policy = anyOf([first, second]);
-
-            const result = await policy({ req, auth: { userId: '1' } });
-
-            expect(result).toBe(true);
-            expect(first).toHaveBeenCalledTimes(1);
-            expect(second).not.toHaveBeenCalled();
+        afterEach(() => {
+            [allow, denyForbidden, denyNotFound, boom].forEach((fn) => fn.mockClear());
         });
 
-        it('not inverts policy results', async () => {
-            const policy = not(async () => true);
-            const result = await policy({ req, auth: { userId: '1' } });
+        describe('allOf (AND, no denialError)', () => {
+            it('resolves when every policy allows', async () => {
+                const policy = allOf<Ctx>([async () => true, async () => true]);
+                await expect(policy({ req, auth: ctx })).resolves.toBe(true);
+            });
 
-            expect(result).toBe(false);
+            it('resolves for an empty policy list (vacuous truth)', async () => {
+                const policy = allOf<Ctx>([]);
+                await expect(policy({ req, auth: ctx })).resolves.toBe(true);
+            });
+
+            it('propagates the thrown HttpError and short-circuits remaining policies', async () => {
+                const second = vi.fn(async (): Promise<true> => true);
+                const policy = allOf<Ctx>([denyForbidden, second]);
+
+                await expect(policy({ req, auth: ctx })).rejects.toMatchObject({
+                    statusCode: 403,
+                    message: 'branch-deny',
+                });
+                expect(second).not.toHaveBeenCalled();
+            });
+
+            it('propagates the exact HttpError of a failing policy', async () => {
+                const policy = allOf<Ctx>([denyNotFound]);
+                await expect(policy({ req, auth: ctx })).rejects.toMatchObject({
+                    statusCode: 404,
+                    message: 'branch-missing',
+                });
+            });
+
+            it('propagates a non-HttpError unchanged', async () => {
+                const policy = allOf<Ctx>([boom]);
+                await expect(policy({ req, auth: ctx })).rejects.toThrow('unexpected');
+            });
+        });
+
+        describe('anyOf (OR, optional denialError)', () => {
+            it('resolves when the first policy allows (short-circuit)', async () => {
+                const second = vi.fn(async (): Promise<true> => true);
+                const policy = anyOf<Ctx>([allow, second]);
+
+                await expect(policy({ req, auth: ctx })).resolves.toBe(true);
+                expect(second).not.toHaveBeenCalled();
+            });
+
+            it('resolves when a later policy allows after earlier ones deny', async () => {
+                const policy = anyOf<Ctx>([denyForbidden, denyNotFound, async () => true]);
+                await expect(policy({ req, auth: ctx })).resolves.toBe(true);
+            });
+
+            it('throws the default Forbidden when every policy denies', async () => {
+                const policy = anyOf<Ctx>([denyForbidden, denyNotFound]);
+                await expect(policy({ req, auth: ctx })).rejects.toMatchObject({
+                    statusCode: 403,
+                    message: 'Forbidden',
+                });
+            });
+
+            it('swallows branch denial errors when all branches deny', async () => {
+                // branch throws 404 NotFound; combinator must surface its own 403, not the 404
+                const policy = anyOf<Ctx>([denyNotFound]);
+                const error = await policy({ req, auth: ctx }).then(
+                    () => undefined,
+                    (e: unknown) => e,
+                );
+                expect(error).toBeInstanceOf(createHttpError.Forbidden);
+                expect(error).not.toBeInstanceOf(createHttpError.NotFound);
+            });
+
+            it('throws the provided custom denialError when every policy denies', async () => {
+                const denial = new createHttpError.PaymentRequired('pay up');
+                const policy = anyOf<Ctx>([denyForbidden], denial);
+                await expect(policy({ req, auth: ctx })).rejects.toMatchObject({
+                    statusCode: 402,
+                    message: 'pay up',
+                });
+            });
+
+            it('throws exactly the provided denialError instance', async () => {
+                const denial = new createHttpError.Forbidden('custom');
+                const policy = anyOf<Ctx>([denyForbidden], denial);
+                await expect(policy({ req, auth: ctx })).rejects.toBe(denial);
+            });
+
+            it('propagates a non-HttpError unchanged (not treated as a denial)', async () => {
+                const second = vi.fn(async (): Promise<true> => true);
+                const policy = anyOf<Ctx>([boom, second]);
+
+                await expect(policy({ req, auth: ctx })).rejects.toThrow('unexpected');
+                expect(second).not.toHaveBeenCalled();
+            });
+
+            it('throws the default Forbidden for an empty policy list', async () => {
+                const policy = anyOf<Ctx>([]);
+                await expect(policy({ req, auth: ctx })).rejects.toMatchObject({
+                    statusCode: 403,
+                    message: 'Forbidden',
+                });
+            });
+        });
+
+        describe('not (negation, optional denialError)', () => {
+            it('resolves when the wrapped policy denies', async () => {
+                const policy = not<Ctx>(denyForbidden);
+                await expect(policy({ req, auth: ctx })).resolves.toBe(true);
+            });
+
+            it('throws the default Forbidden when the wrapped policy allows', async () => {
+                const policy = not<Ctx>(async () => true);
+                await expect(policy({ req, auth: ctx })).rejects.toMatchObject({
+                    statusCode: 403,
+                    message: 'Forbidden',
+                });
+            });
+
+            it('throws the provided custom denialError when the wrapped policy allows', async () => {
+                const denial = new createHttpError.PaymentRequired('pay up');
+                const policy = not<Ctx>(async () => true, denial);
+                await expect(policy({ req, auth: ctx })).rejects.toMatchObject({
+                    statusCode: 402,
+                    message: 'pay up',
+                });
+            });
+
+            it('throws exactly the provided denialError instance', async () => {
+                const denial = new createHttpError.Forbidden('custom');
+                const policy = not<Ctx>(async () => true, denial);
+                await expect(policy({ req, auth: ctx })).rejects.toBe(denial);
+            });
+
+            it('propagates a non-HttpError unchanged (does not silently allow)', async () => {
+                const policy = not<Ctx>(boom);
+                await expect(policy({ req, auth: ctx })).rejects.toThrow('unexpected');
+            });
+        });
+
+        describe('composition', () => {
+            it('allOf inside anyOf: an allOf denial falls through to the next branch', async () => {
+                const policy = anyOf<Ctx>([
+                    allOf<Ctx>([denyForbidden, async () => true]),
+                    async () => true,
+                ]);
+                await expect(policy({ req, auth: ctx })).resolves.toBe(true);
+            });
+
+            it('not inside anyOf: a denied negation allows the OR', async () => {
+                const policy = anyOf<Ctx>([not<Ctx>(denyForbidden), async () => true]);
+                await expect(policy({ req, auth: ctx })).resolves.toBe(true);
+            });
+
+            it('anyOf inside allOf: the OR is one AND branch', async () => {
+                const policy = allOf<Ctx>([
+                    anyOf<Ctx>([denyForbidden, async () => true]),
+                    async () => true,
+                ]);
+                await expect(policy({ req, auth: ctx })).resolves.toBe(true);
+            });
+
+            it('anyOf denialError wraps the whole OR when every branch denies', async () => {
+                const denial = new createHttpError.Forbidden('or-denied');
+                const policy = anyOf<Ctx>(
+                    [allOf<Ctx>([denyNotFound]), not<Ctx>(async () => true)],
+                    denial,
+                );
+                await expect(policy({ req, auth: ctx })).rejects.toBe(denial);
+            });
         });
     });
 
@@ -224,9 +391,6 @@ describe('security (runtime)', () => {
                     security: {
                         authorize: { afterValidation: [async () => true] },
                     },
-                    errors: {
-                        unauthorized: () => new createHttpError.Forbidden('Denied'),
-                    },
                 },
             );
 
@@ -234,11 +398,10 @@ describe('security (runtime)', () => {
             expect(merged.security?.authenticate).toBeDefined();
             expect(merged.security?.authorize).toBeDefined();
             expect(merged.errors?.unauthenticated).toBeDefined();
-            expect(merged.errors?.unauthorized).toBeDefined();
         });
 
         it('inherits a factory authorize bucket the handler omits', () => {
-            const beforePolicy = async () => true;
+            const beforePolicy = async (): Promise<true> => true;
             const merged = mergeHandlerSecurityDefaults(
                 {
                     security: {
@@ -257,8 +420,8 @@ describe('security (runtime)', () => {
         });
 
         it('replaces a factory authorize bucket when the handler specifies the same bucket', () => {
-            const defaultPolicy = async () => true;
-            const handlerPolicy = async () => false;
+            const defaultPolicy = async (): Promise<true> => true;
+            const handlerPolicy = async (): Promise<true> => true;
             const merged = mergeHandlerSecurityDefaults(
                 {
                     security: {

@@ -34,8 +34,8 @@ Required axes:
 - Request typing and response typing from createHandler callbacks
 - Pagination result requirements for response-paginated and non-response-paginated contracts
 - Authentication typing across public, optional, and protected access modes
-- Authorization callback typing, including validateBeforeAuthorization: true
-- Error mapper typing (unauthenticated, unauthorized)
+- Authorization callback typing: strict `Promise<true>` return contract (allow = resolve `true`, deny = throw `HttpError`), and policy combinators `allOf` / `anyOf` / `not` (including `denialError` on `anyOf` / `not`)
+- Error mapper typing (`unauthenticated` only — authorization denials are thrown by authorizers, so there is no `unauthorized` mapper)
 - Factory typing behavior for createHandlerFactory
 - Contract inference via createContract
 - Request envelope and promotion typing via request schema and validation utilities

@@ -139,7 +139,10 @@ describe('createHandlerFactory (runtime)', () => {
             response: z.object({ ok: z.boolean() }),
         });
 
-        const authorize = vi.fn(async ({ req }) => typeof req.query.page === 'number');
+        const authorize = vi.fn(async ({ req }): Promise<true> => {
+            if (typeof req.query.page !== 'number') throw new createHttpError.Forbidden('denied');
+            return true;
+        });
 
         const factory = createHandlerFactory({
             access: 'protected',
@@ -168,17 +171,16 @@ describe('createHandlerFactory (runtime)', () => {
             response: z.object({ ok: z.boolean() }),
         });
 
-        const denyPolicy = vi.fn(async () => false);
-        const allowPolicy = vi.fn(async () => true);
+        const denyPolicy = vi.fn(async () => {
+            throw new createHttpError.Forbidden('factory-deny');
+        });
+        const allowPolicy = vi.fn(async (): Promise<true> => true);
 
         const factory = createHandlerFactory({
             access: 'protected',
             security: {
                 authenticate: async () => ({ userId: '1' }),
                 authorize: { afterValidation: [denyPolicy] },
-            },
-            errors: {
-                unauthorized: () => new createHttpError.Forbidden('Denied'),
             },
         });
 
@@ -211,8 +213,11 @@ describe('createHandlerFactory (runtime)', () => {
             response: z.object({ ok: z.boolean() }),
         });
 
-        const beforePolicy = vi.fn(async () => true);
-        const afterPolicy = vi.fn(async ({ req }) => typeof req.query.page === 'number');
+        const beforePolicy = vi.fn(async (): Promise<true> => true);
+        const afterPolicy = vi.fn(async ({ req }): Promise<true> => {
+            if (typeof req.query.page !== 'number') throw new createHttpError.Forbidden('denied');
+            return true;
+        });
 
         const factory = createHandlerFactory({
             access: 'protected',

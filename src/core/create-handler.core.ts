@@ -401,10 +401,8 @@ function createHandlerRuntime<TContract extends AnyContract, TAuth>(
             if (access !== 'public' && authorize?.beforeValidation?.length) {
                 await executeAuthorizationStage({
                     req,
-                    access,
                     auth: authenticationResult.auth,
                     authorizers: authorize.beforeValidation,
-                    errors,
                 });
             }
 
@@ -416,10 +414,8 @@ function createHandlerRuntime<TContract extends AnyContract, TAuth>(
             if (access !== 'public' && authorize?.afterValidation?.length) {
                 await executeAuthorizationStage({
                     req: validatedReq as AfterAuthorizationRequest<TContract>,
-                    access,
                     auth: authenticationResult.auth,
                     authorizers: authorize.afterValidation,
-                    errors,
                 });
             }
 
@@ -496,7 +492,7 @@ function createHandlerRuntime<TContract extends AnyContract, TAuth>(
  * See docs/rules/create-handler-auth-inference-limitations.md.
  *
  * Error mapping:
- * Use `options.errors` to override unauthenticated/unauthorized error responses.
+ * Use `options.errors` to override the unauthenticated error response.
  *
  * @param contract - Contract describing request and response schemas.
  * @param options - Optional access/security/errors configuration.

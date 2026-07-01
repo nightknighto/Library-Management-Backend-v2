@@ -32,8 +32,9 @@ Security is configured through handler options:
   - `beforeValidation` policies receive the raw request (fail-fast)
   - `afterValidation` policies receive the validated request (typed body/query/params)
   - A handler may use either bucket, both, or neither — there is no global before/after toggle
-- errors.unauthenticated / errors.unauthorized:
-  - Optional custom error mappers
+- errors.unauthenticated:
+  - Optional custom error mapper for authentication failures
+  - (Authorization denials come from the `HttpError` an authorizer throws — see §6)
 
 ## 2. Imports You Will Use
 
@@ -58,6 +59,12 @@ import type {
 
 ## 3. Auth Context Setup
 
+Authorizers use a **throw model**: allow by resolving to `true`, deny by throwing
+an `HttpError`. The thrown error's status code and message become the HTTP
+response, so a policy can deny with any semantics (403, 404, 402, ...). Returning
+`false` or a boolean expression is a compile-time error — a denial must be an
+explicit thrown error.
+
 ```ts
 type JwtAuthContext = {
   email: string;
@@ -79,8 +86,14 @@ const authenticateJwt: Authenticator<JwtAuthContext> = async (req) => {
   return { email: "a@library.local", role: "staff" };
 };
 
-const isStaff: Authorizer<JwtAuthContext> = ({ auth }) => auth.role === "staff";
-const hasWriteHeader: Authorizer<JwtAuthContext> = ({ req }) => req.headers["x-write-access"] === "enabled";
+const isStaff: Authorizer<JwtAuthContext> = async ({ auth }) => {
+  if (auth.role !== "staff") throw new createHttpError.Forbidden("staff only");
+  return true;
+};
+const hasWriteHeader: Authorizer<JwtAuthContext> = async ({ req }) => {
+  if (req.headers["x-write-access"] !== "enabled") throw new createHttpError.Forbidden("write header required");
+  return true;
+};
 ```
 
 ## 4. Basic Handler Patterns
@@ -153,7 +166,10 @@ const beforeMode = createHandler(
         beforeValidation: [
           async ({ auth, req }) => {
             // req here is the raw, unvalidated request
-            return auth.role === "staff" && Boolean(req.headers["x-write-access"]);
+            if (auth.role !== "staff" || req.headers["x-write-access"] !== "enabled") {
+              throw new createHttpError.Forbidden("staff with write header only");
+            }
+            return true;
           },
         ],
       },
@@ -180,7 +196,10 @@ const afterMode = createHandler(
           async ({ auth, req }) => {
             // req is the validated contract request
             const title = req.body.title;
-            return auth.role === "staff" && title.length > 0;
+            if (auth.role !== "staff" || title.length === 0) {
+              throw new createHttpError.Forbidden("staff and non-empty title required");
+            }
+            return true;
           },
         ],
       },
@@ -207,7 +226,12 @@ const deleteBook = createHandler(
       authenticate: authenticateJwt,
       authorize: {
         beforeValidation: [isStaff],                            // raw request
-        afterValidation: [async ({ req }) => !req.params.isbn.startsWith("SYS-")], // typed
+        afterValidation: [
+          async ({ req }) => {
+            if (req.params.isbn.startsWith("SYS-")) throw new createHttpError.Forbidden("system-reserved book");
+            return true;
+          },
+        ], // typed
       },
     },
   },
@@ -217,11 +241,31 @@ const deleteBook = createHandler(
 
 ## 6. Policy Combinators
 
-Three combinators build composite policies:
+Three combinators build composite policies. Under the throw model, each branch
+allows by resolving to `true` and denies by throwing an `HttpError`.
 
-- `allOf`: AND — all policies must pass
-- `anyOf`: OR — at least one policy must pass
-- `not`: invert a policy
+- `allOf(policies)`: AND — every policy must allow; the first thrown `HttpError`
+  propagates verbatim (status code and message preserved).
+- `anyOf(policies, denialError?)`: OR — the first branch that allows
+  short-circuits; a branch `HttpError` is swallowed and the next branch is
+  tried. If every branch denies, throws `denialError` (default
+  `new Forbidden('Forbidden')`).
+- `not(policy, denialError?)`: invert — allows when the wrapped policy denies,
+  denies (with `denialError`) when it allows.
+
+A non-`HttpError` thrown from any branch propagates unchanged through all three
+combinators (it is never treated as a denial), so a bug in a policy cannot
+silently allow a request.
+
+`denialError` (on `anyOf`/`not`) makes the composite fail with a specific status
+code/message — e.g. a 404 to avoid leaking whether a resource exists:
+
+```ts
+const policy = anyOf<JwtAuthContext>(
+  [isStaff, ownsResource],
+  new createHttpError.NotFound("resource not found"),
+);
+```
 
 **When you do NOT need `allOf`:** an `authorize` bucket already AND-composes its
 array. For top-level policies, write them directly as bucket elements:
@@ -238,12 +282,15 @@ array cannot express "(A and B) or C" — that requires `allOf` to form the AND
 branch:
 
 ```ts
-// staff OR (registered user who isn't blocked)
+// staff OR (registered user who is not blocked)
 const policy = anyOf<JwtAuthContext>([
   isStaff,
   allOf<JwtAuthContext>([
     hasRegisteredUser,
-    not(async ({ req }) => req.headers["x-blocked"] === "true"),
+    async ({ req }) => {
+      if (req.headers["x-blocked"] === "true") throw new createHttpError.Forbidden("user blocked");
+      return true;
+    },
   ]),
 ]);
 ```
@@ -281,7 +328,10 @@ const createBookPolicy = allOf<
   AfterAuthorizationRequest<typeof CreateBookContract>
 >([
   isStaff,
-  async ({ req }) => req.body.title.length > 0, // contract-typed via the pinned generic
+  async ({ req }) => {
+    if (req.body.title.length === 0) throw new createHttpError.BadRequest("empty title");
+    return true; // contract-typed body via the pinned generic
+  },
 ]);
 ```
 
@@ -300,7 +350,6 @@ const createJwtAuthHandler = createHandlerFactory<JwtAuthContext>({
   },
   errors: {
     unauthenticated: () => new createHttpError.Unauthorized("Authentication required"),
-    unauthorized: () => new createHttpError.Forbidden("Authorization denied"),
   },
 });
 ```
@@ -403,7 +452,16 @@ const listBooks = createHandler(
 
 ## 9. Error Customization
 
+Only authentication failures are customizable via `errors.unauthenticated`.
+Authorization denials are whatever `HttpError` the authorizer throws — its status
+code and message become the response directly:
+
 ```ts
+const isStaff: Authorizer<JwtAuthContext> = async ({ auth }) => {
+  if (auth.role !== "staff") throw new createHttpError.Forbidden("Staff role is required");
+  return true;
+};
+
 const handler = createHandler(
   SomeContract,
   {
@@ -414,7 +472,6 @@ const handler = createHandler(
     },
     errors: {
       unauthenticated: () => new createHttpError.Unauthorized("Please login first"),
-      unauthorized: () => new createHttpError.Forbidden("Staff role is required"),
     },
   },
   async (req, auth) => ({ data: "ok" }),

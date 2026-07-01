@@ -1,8 +1,10 @@
+import createHttpError from 'http-errors';
 import { z } from 'zod';
 import {
     type AfterAuthorizationRequest,
     createContract,
     createHandler,
+    type HandlerErrorMappers,
     type HandlerRequest,
 } from '../index.ts';
 import type { Equal, Expect, ExpectFalse, Extends, IsAny } from './type-test.utils.ts';
@@ -97,3 +99,22 @@ createHandler(
         return { data: { updated: true } };
     },
 );
+
+/**
+ * Invariant: HandlerErrorMappers is a single-key map (`unauthenticated` only).
+ *
+ * The authorization half (`unauthorized`) was removed when authorizers adopted
+ * the throw model — every denial now carries its own explicit HttpError. The
+ * errors map is authn-only. Re-adding `unauthorized` must be treated as a
+ * breaking change.
+ */
+type _errorsSingleKey = Expect<Equal<keyof HandlerErrorMappers, 'unauthenticated'>>;
+
+const _validErrors: HandlerErrorMappers = {
+    unauthenticated: () => new createHttpError.Unauthorized('login required'),
+};
+
+const _removedUnauthorized: HandlerErrorMappers = {
+    // @ts-expect-error `unauthorized` is no longer a valid error mapper key
+    unauthorized: () => new createHttpError.Forbidden('denied'),
+};

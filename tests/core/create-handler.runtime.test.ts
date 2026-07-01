@@ -125,7 +125,10 @@ describe('createHandler (runtime)', () => {
         });
 
         // raw req.query.page is the string '2' before coercion
-        const authorize = vi.fn(async ({ req }) => typeof req.query.page === 'number');
+        const authorize = vi.fn(async ({ req }): Promise<true> => {
+            if (typeof req.query.page !== 'number') throw new createHttpError.Forbidden('denied');
+            return true;
+        });
         const handlerFn = vi.fn(async () => ({ data: { ok: true } }));
 
         const handler = createHandler(
@@ -159,7 +162,10 @@ describe('createHandler (runtime)', () => {
         });
 
         // validated req.query.page is the number 2 after coercion
-        const authorize = vi.fn(async ({ req }) => typeof req.query.page === 'number');
+        const authorize = vi.fn(async ({ req }): Promise<true> => {
+            if (typeof req.query.page !== 'number') throw new createHttpError.Forbidden('denied');
+            return true;
+        });
 
         const handler = createHandler(
             contract,
@@ -190,8 +196,10 @@ describe('createHandler (runtime)', () => {
             response: z.object({ ok: z.boolean() }),
         });
 
-        const beforePolicy = vi.fn(async () => false);
-        const afterPolicy = vi.fn(async () => true);
+        const beforePolicy = vi.fn(async () => {
+            throw new createHttpError.Forbidden('before-deny');
+        });
+        const afterPolicy = vi.fn(async (): Promise<true> => true);
         const handlerFn = vi.fn(async () => ({ data: { ok: true } }));
 
         const handler = createHandler(
@@ -230,9 +238,12 @@ describe('createHandler (runtime)', () => {
             response: z.object({ ok: z.boolean() }),
         });
 
-        const beforePolicy = vi.fn(async () => true);
+        const beforePolicy = vi.fn(async (): Promise<true> => true);
         // validated req.query.page is the number 2
-        const afterPolicy = vi.fn(async ({ req }) => typeof req.query.page === 'number');
+        const afterPolicy = vi.fn(async ({ req }): Promise<true> => {
+            if (typeof req.query.page !== 'number') throw new createHttpError.Forbidden('denied');
+            return true;
+        });
 
         const handler = createHandler(
             contract,

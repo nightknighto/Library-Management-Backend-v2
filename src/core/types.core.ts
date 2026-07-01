@@ -357,19 +357,54 @@ export type Authenticator<TAuthContext, TRequest extends Request<any, any, any, 
 /**
  * Authorization policy callback.
  *
- * Return true to allow the request; false to deny.
+ * Allow the request by resolving to `true`; deny by throwing an `HttpError`
+ * (for example `new createHttpError.Forbidden('...')`). The thrown error's
+ * status code and message become the HTTP response, so a policy may deny with
+ * any semantics (403 Forbidden, 404 Not Found, 402 Payment Required, ...).
+ *
+ * The strict `Promise<true>` return type rejects `return false` and boolean
+ * expressions — a denial must always be an explicit thrown `HttpError`.
+ *
+ * Non-`HttpError` exceptions are not treated as denials and propagate as
+ * unexpected errors (500).
+ *
  * In the `afterValidation` bucket, `req` is the validated request type with
  * typed body/query/params; in the `beforeValidation` bucket it is a plain Request.
  *
  * Note: For `optional` access, policies only run when authentication succeeds.
  *
+ * @typeParam TAuthContext
+ * Auth context shape produced by {@link Authenticator} and consumed by policies.
+ *
+ * @typeParam TRequest
+ * Request type passed to the policy. For `afterValidation` authorizers this is
+ * bound to the contract's validated request type.
+ *
  * @example
- * const canEdit: Authorizer<AuthContext> = async ({ auth }) => auth.role === "staff";
+ * const canEdit: Authorizer<AuthContext> = async ({ auth }) => {
+ *   if (auth.role !== "staff") throw new createHttpError.Forbidden("staff only");
+ *   return true;
+ * };
+ *
+ * @example
+ * // A denial carries its own status code and message verbatim.
+ * const ownsResource: Authorizer<AuthContext, ValidatedRequest<typeof contract>> = async ({ req, auth }) => {
+ *   if (req.params.ownerId !== auth.userId) {
+ *     throw new createHttpError.NotFound("resource not found");
+ *   }
+ *   return true;
+ * };
  */
+// Design note: the return type is `Promise<true>`, not `MaybePromise<true>`.
+// TypeScript does not narrow an async literal return (`async () => true`) against
+// a union contextual type — it would widen to `Promise<boolean>` and defeat the
+// strict `true` enforcement (an accidental `return false` could then ship). The
+// non-union `Promise<true>` narrows correctly while keeping the literal check.
+// Sync authorizers are therefore rejected; authorizers must be `async`.
 export type Authorizer<
     TAuthContext,
     TRequest extends Request<any, any, any, any> = Request,
-> = (params: { req: TRequest; auth: TAuthContext }) => MaybePromise<boolean>;
+> = (params: { req: TRequest; auth: TAuthContext }) => Promise<true>;
 
 /**
  * Error mapper for authentication/authorization failures.
@@ -392,7 +427,7 @@ export type AuthErrorMapper<TRequest extends Request<any, any, any, any> = Reque
  * run against the validated request (typed body/query/params).
  *
  * Both buckets are evaluated with logical-AND semantics and short-circuit on
- * the first failing policy. A `beforeValidation` denial skips request
+ * the first thrown denial. A `beforeValidation` denial skips request
  * validation entirely. The buckets are independent: a handler may use either,
  * both, or neither.
  *
@@ -410,8 +445,18 @@ export type AuthErrorMapper<TRequest extends Request<any, any, any, any> = Reque
  *
  * @example
  * const authorize: AuthorizationConfig<AuthContext> = {
- *   beforeValidation: [({ auth }) => auth.role === "staff"],
- *   afterValidation: [({ req, auth }) => auth.userId === req.params.id],
+ *   beforeValidation: [
+ *     async ({ auth }) => {
+ *       if (auth.role !== "staff") throw new createHttpError.Forbidden("staff only");
+ *       return true;
+ *     },
+ *   ],
+ *   afterValidation: [
+ *     async ({ req, auth }) => {
+ *       if (auth.userId !== req.params.id) throw new createHttpError.Forbidden("not owner");
+ *       return true;
+ *     },
+ *   ],
  * };
  */
 export type AuthorizationConfig<
@@ -423,8 +468,10 @@ export type AuthorizationConfig<
      *
      * Each policy receives a plain Express `Request` (unvalidated body/query/params).
      * Use this bucket for fail-fast checks that do not require typed request data
-     * (e.g. role or scope checks). All policies must return true; first false
-     * short-circuits with a 403 and skips validation.
+     * (e.g. role or scope checks). Each policy allows by returning `true` and
+     * denies by throwing an `HttpError` (whose status code/message become the
+     * response). The first thrown denial short-circuits the bucket and skips
+     * request validation.
      */
     beforeValidation?: Array<Authorizer<TAuthContext, Request>>;
     /**
@@ -432,7 +479,9 @@ export type AuthorizationConfig<
      *
      * Each policy receives the validated request with typed body/query/params.
      * Use this bucket for ownership or resource checks that need the parsed
-     * request. All policies must return true; first false short-circuits with a 403.
+     * request. Each policy allows by returning `true` and denies by throwing an
+     * `HttpError` (whose status code/message become the response). The first
+     * thrown denial short-circuits the bucket.
      */
     afterValidation?: Array<Authorizer<TAuthContext, TAfterRequest>>;
 };
@@ -450,8 +499,18 @@ export type AuthorizationConfig<
  * const security: SecurityOptions<AuthContext, AfterAuthorizationRequest<typeof Contract>> = {
  *   authenticate: async (_req: Request) => ({ userId: "u-1" }),
  *   authorize: {
- *     beforeValidation: [({ auth }) => auth.role === "staff"],
- *     afterValidation: [({ req, auth }) => auth.userId === req.params.userId],
+ *     beforeValidation: [
+ *       async ({ auth }) => {
+ *         if (auth.role !== "staff") throw new createHttpError.Forbidden("staff only");
+ *         return true;
+ *       },
+ *     ],
+ *     afterValidation: [
+ *       async ({ req, auth }) => {
+ *         if (auth.userId !== req.params.userId) throw new createHttpError.Forbidden("not owner");
+ *         return true;
+ *       },
+ *     ],
  *   },
  * };
  */
@@ -489,12 +548,14 @@ export type SecurityOptions<
 };
 
 /**
- * Error mapper overrides for auth-related failures.
+ * Error mapper overrides for authentication failures.
+ *
+ * Authorization denials are not mapped here: an authorizer denies by throwing
+ * its own `HttpError`, whose status code and message become the response.
  *
  * @example
  * const errors: HandlerErrorMappers = {
  *   unauthenticated: () => new createHttpError.Unauthorized("Missing token"),
- *   unauthorized: () => new createHttpError.Forbidden("Not allowed"),
  * };
  */
 export type HandlerErrorMappers<TRequest extends Request<any, any, any, any> = Request> = {
@@ -502,10 +563,6 @@ export type HandlerErrorMappers<TRequest extends Request<any, any, any, any> = R
      * Override for authentication failures (missing/invalid auth context).
      */
     unauthenticated?: AuthErrorMapper<TRequest>;
-    /**
-     * Override for authorization failures (policy denies or missing auth for protected).
-     */
-    unauthorized?: AuthErrorMapper<TRequest>;
 };
 
 /**
@@ -517,8 +574,18 @@ export type HandlerErrorMappers<TRequest extends Request<any, any, any, any> = R
  *   security: {
  *     authenticate: async () => ({ userId: "u-1" }),
  *     authorize: {
- *       beforeValidation: [({ auth }) => auth.role === "staff"],
- *       afterValidation: [({ req, auth }) => auth.userId === req.params.userId],
+ *       beforeValidation: [
+ *         async ({ auth }) => {
+ *           if (auth.role !== "staff") throw new createHttpError.Forbidden("staff only");
+ *           return true;
+ *         },
+ *       ],
+ *       afterValidation: [
+ *         async ({ req, auth }) => {
+ *           if (auth.userId !== req.params.userId) throw new createHttpError.Forbidden("not owner");
+ *           return true;
+ *         },
+ *       ],
  *     },
  *   },
  * };
