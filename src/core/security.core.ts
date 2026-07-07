@@ -55,10 +55,11 @@ type NoInfer<T> = [T][T extends unknown ? 0 : never];
  * - Authenticator resolves `null` (absence) + `protected` → throws the
  *   authenticator's `onMissingCredentials` default, or the framework default 401.
  * - Authenticator resolves `null` + `optional` → succeeds with `auth = undefined`.
- * - Authenticator resolves a context → succeeds (optionally parsed by `authSchema`).
+ * - Authenticator resolves a context → succeeds. The authenticator is the single
+ *   source of its output's validity; if it needs schema validation, it performs
+ *   that internally and throws the appropriate error.
  * - Authenticator *throws* → propagates verbatim in **both** access modes
  *   (fail-closed: `optional` swallows absence, never failures).
- * - `authSchema` parse failure → throws the framework default 401.
  */
 export async function executeAuthenticationStage<
     TAuthContext,
@@ -91,15 +92,7 @@ export async function executeAuthenticationStage<
         return {} as SecurityExecutionResult<TAuthContext, TAccess>;
     }
 
-    let parsedAuth: TAuthContext;
-
-    try {
-        parsedAuth = security?.authSchema ? await security.authSchema.parseAsync(auth) : auth;
-    } catch {
-        throw new createHttpError.Unauthorized('Invalid authentication data');
-    }
-
-    return { auth: parsedAuth } as SecurityExecutionResult<TAuthContext, TAccess>;
+    return { auth } as SecurityExecutionResult<TAuthContext, TAccess>;
 }
 
 /**

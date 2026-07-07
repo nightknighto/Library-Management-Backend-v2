@@ -36,11 +36,6 @@ type AuthContext = {
     role: 'staff' | 'member';
 };
 
-const AuthSchema = z.object({
-    userId: z.string(),
-    role: z.enum(['staff', 'member']),
-});
-
 const UpdateBookContract = createContract({
     request: {
         body: {
@@ -143,7 +138,6 @@ createHandler(
         access: 'protected',
         security: {
             authenticate: async () => ({ userId: 'u-1', role: 'staff' as const }),
-            authSchema: AuthSchema,
         },
     },
     async ({ req, auth }) => {
@@ -206,7 +200,6 @@ createHandler(
         access: 'protected',
         security: {
             authenticate: async () => ({ userId: 'u-3', role: 'staff' as const }),
-            authSchema: AuthSchema,
             authorize: {
                 afterValidation: [
                     async ({ req, auth }) => {
@@ -229,7 +222,6 @@ createHandler(
         access: 'protected',
         security: {
             authenticate: async () => ({ userId: 'u-3', role: 'staff' as const }),
-            authSchema: AuthSchema,
             authorize: {
                 beforeValidation: [
                     async ({ req, auth }) => {
@@ -282,7 +274,6 @@ publicFactory(
         access: 'protected',
         security: {
             authenticate: async () => ({ userId: 'u-5', role: 'staff' as const }),
-            authSchema: AuthSchema,
         },
     },
     async ({ req, auth }) => {
@@ -291,15 +282,14 @@ publicFactory(
     },
 );
 
-const privateFactoryAuthSchemaAndAuthenticate = createHandlerFactory({
+const privateFactoryAuthenticateAndAuthorize = createHandlerFactory({
     access: 'protected',
     security: {
-        authSchema: AuthSchema,
         authenticate: async () => ({ userId: 'u-5', role: 'staff' as const }),
     },
 });
 
-privateFactoryAuthSchemaAndAuthenticate(
+privateFactoryAuthenticateAndAuthorize(
     UpdateBookContract,
     {
         security: {
@@ -320,7 +310,7 @@ privateFactoryAuthSchemaAndAuthenticate(
     },
 );
 
-privateFactoryAuthSchemaAndAuthenticate(
+privateFactoryAuthenticateAndAuthorize(
     UpdateBookContract,
     {
         security: {
@@ -410,7 +400,6 @@ createHandler(
         access: 'protected',
         security: {
             authenticate: async () => ({ userId: 'u-mix', role: 'staff' as const }),
-            authSchema: AuthSchema,
             authorize: {
                 beforeValidation: [
                     async ({ auth }) => {
@@ -517,25 +506,27 @@ const optionalFactoryWithoutAuthenticate = createHandlerFactory<AuthContext>({
 // NOTE: Same as above — runtime failure, not compile-time.
 optionalFactoryWithoutAuthenticate(UpdateBookContract, async ({ req: _req, auth: _auth }) => ({ data: { updated: true } }));
 
-const protectedFactoryAuthSchemaWithoutAuthenticate = createHandlerFactory<AuthContext>({
-    access: 'protected',
-    security: {
-        authSchema: AuthSchema,
+/**
+ * Invariant: `authSchema` has been removed from the framework security surface.
+ *
+ * The authenticator is the single source of its output's validity. If it needs
+ * schema validation, it performs that internally and throws the appropriate
+ * error. Reintroducing a framework-level `authSchema` would resurrect the last
+ * framework-owned auth error and the fail-wrong failure mode documented in
+ * docs/specs/2026-07-07-authschema-removal.md.
+ */
+createHandler(
+    UpdateBookContract,
+    {
+        access: 'protected',
+        security: {
+            authenticate: async () => ({ userId: 'u-no-schema', role: 'staff' as const }),
+            // @ts-expect-error SecurityOptions no longer accepts authSchema
+            authSchema: z.object({ userId: z.string() }),
+        },
     },
-});
-
-// NOTE: Same as above — runtime failure, not compile-time.
-protectedFactoryAuthSchemaWithoutAuthenticate(UpdateBookContract, async ({ req: _req, auth: _auth }) => ({ data: { updated: true } }));
-
-const optionalFactoryAuthSchemaWithoutAuthenticate = createHandlerFactory<AuthContext>({
-    access: 'optional',
-    security: {
-        authSchema: AuthSchema,
-    },
-});
-
-// NOTE: Same as above — runtime failure, not compile-time.
-optionalFactoryAuthSchemaWithoutAuthenticate(UpdateBookContract, async ({ req: _req, auth: _auth }) => ({ data: { updated: true } }));
+    async () => ({ data: { updated: true } }),
+);
 
 // @ts-expect-error public handlers must not accept security options
 createHandler(

@@ -90,22 +90,6 @@ describe('createHandlerFactory (runtime)', () => {
         ).toThrow('require an authenticate function');
     });
 
-    it('throws when factory has authSchema but no authenticate and handler omits it', () => {
-        const contract = createContract({
-            request: {},
-            response: z.object({ ok: z.boolean() }),
-        });
-
-        const factory = createHandlerFactory({
-            access: 'protected',
-            security: { authSchema: z.object({ userId: z.string() }) },
-        });
-
-        expect(() =>
-            factory(contract, async ({ req }) => ({ data: { ok: true } })),
-        ).toThrow('require an authenticate function');
-    });
-
     it('succeeds when factory omits authenticate but handler provides it', async () => {
         const contract = createContract({
             request: {},

@@ -87,7 +87,7 @@ describe('createHandler (runtime)', () => {
         expect(seenAuth).toBeUndefined();
     });
 
-    it('rejects invalid auth payloads using authSchema', async () => {
+    it('renders the authenticator-owned output-validation error: the authenticator owns its output validity', async () => {
         const contract = createContract({
             request: {},
             response: z.object({ ok: z.boolean() }),
@@ -98,8 +98,16 @@ describe('createHandler (runtime)', () => {
             {
                 access: 'protected',
                 security: {
-                    authenticate: async () => ({ email: 'nope' }),
-                    authSchema: z.object({ email: z.string().email() }),
+                    // The authenticator is the single source of its output's validity.
+                    // When it needs schema validation, it performs it internally and
+                    // throws the appropriate error — the framework no longer re-validates.
+                    authenticate: async () => {
+                        const parsed = z.object({ email: z.string().email() }).safeParse({ email: 'nope' });
+                        if (!parsed.success) {
+                            throw new createHttpError.Unauthorized('Invalid authentication data');
+                        }
+                        return parsed.data;
+                    },
                 },
             },
             async () => ({ data: { ok: true } }),

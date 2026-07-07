@@ -47,7 +47,6 @@ Covers high-risk combinations of features using pairwise coverage.
 Minimum dimensions:
 - Access mode
 - Authorization timing (before or after validation)
-- Auth schema usage
 - Authorizer mode (single or array/composed)
 - Pagination mode
 - Authenticator absence-default source (custom `onMissingCredentials` via `createAuthenticator` vs framework default)

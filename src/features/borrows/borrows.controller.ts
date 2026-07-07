@@ -1,6 +1,5 @@
 import type { Request } from 'express';
 import createHttpError from 'http-errors';
-import z from 'zod';
 import { createHandler, createHandlerFactory } from '../../core/index.ts';
 import { authenticateJwt } from '../../shared/auth-stuff.ts';
 import { BorrowRepository } from './borrows.repository.ts';
@@ -33,9 +32,6 @@ const borrowBook = createHandler(
                     },
                 ],
             },
-            authSchema: z.object({
-                email: z.string().email(),
-            }),
         },
     },
     async ({ req, auth }) => {

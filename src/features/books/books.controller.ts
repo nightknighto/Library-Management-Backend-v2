@@ -9,7 +9,6 @@ import {
     isLibraryStaff,
     isSystemReservedBook,
     type JwtAuthContext,
-    JwtAuthSchema,
 } from '../../shared/auth-stuff.ts';
 import { UserRepository } from '../users/users.repository.ts';
 import * as BookDTOs from './books.schemas.ts';
@@ -54,7 +53,6 @@ const getAllBooks = createHandler(
 
         security: {
             authenticate: authenticateJwt,
-            authSchema: JwtAuthSchema,
             // could be inline function
             authorize: {
                 afterValidation: [

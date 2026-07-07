@@ -1,5 +1,4 @@
 import createHttpError from 'http-errors';
-import z from 'zod';
 import type { Authorizer } from '../core/index.ts';
 import { allOf, anyOf, createAuthenticator, createHandlerFactory } from '../core/index.ts';
 import { UserRepository } from '../features/users/users.repository.ts';
@@ -8,10 +7,6 @@ import { JwtUtils } from '../utils/jwt.util.ts';
 export type JwtAuthContext = {
     email: string;
 };
-
-export const JwtAuthSchema = z.object({
-    email: z.string().email(),
-});
 
 export const authenticateJwt = createAuthenticator<JwtAuthContext>(
     async (req) => {
@@ -122,7 +117,6 @@ export const createJwtAuthHandler = createHandlerFactory<JwtAuthContext>({
     access: 'protected',
     security: {
         authenticate: authenticateJwt,
-        authSchema: JwtAuthSchema,
     },
 });
 
@@ -130,8 +124,5 @@ export const createJwtAuthHandler2 = createHandlerFactory({
     access: 'protected',
     security: {
         authenticate: (req) => ({ email: 'a@library.local' }),
-        authSchema: z.object({
-            email: z.string().email(),
-        }),
     },
 });

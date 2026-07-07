@@ -3,7 +3,7 @@
  *
  * Put tests here when:
  * - A scenario combines two or more feature axes and you need to prove they work together.
- * - Examples: protected + authSchema + authorize-after-validation + pagination.
+ * - Examples: protected + authenticate + authorize-after-validation + pagination.
  *
  * Do not put tests here when:
  * - The test checks only one isolated behavior (use the capability lane file).
@@ -34,12 +34,6 @@ type ScopedAuthContext = {
     role: 'staff' | 'member';
     scopes: string[];
 };
-
-const ScopedAuthSchema = z.object({
-    userId: z.string(),
-    role: z.enum(['staff', 'member']),
-    scopes: z.array(z.string()),
-});
 
 const SearchBooksContract = createContract({
     request: {
@@ -81,7 +75,6 @@ createHandler(
                 role: 'staff' as const,
                 scopes: ['books:read'],
             }),
-            authSchema: ScopedAuthSchema,
             authorize: {
                 afterValidation: [
                     async ({ req, auth }) => {
@@ -137,7 +130,6 @@ createHandler(
                 role: 'member' as const,
                 scopes: ['books:write'],
             }),
-            authSchema: ScopedAuthSchema,
             authorize: {
                 beforeValidation: [
                     async ({ auth }) => { if (!auth.scopes.includes('books:write')) throw new createHttpError.Forbidden('denied'); return true; },
@@ -152,8 +144,8 @@ createHandler(
     },
 );
 
-// @ts-expect-error interaction: protected/authSchema handlers reject unknown top-level result keys (metax)
-createHandler(UpdateBookContract, { access: 'protected', security: { authenticate: async () => ({ userId: 'u-11b', role: 'staff' as ScopedAuthContext['role'], scopes: ['books:write'] }), authSchema: ScopedAuthSchema } }, async ({ req, auth: _auth }) => ({ data: { updated: true }, metax: { traceId: 'trace-1' } }));
+// @ts-expect-error interaction: protected handlers reject unknown top-level result keys (metax)
+createHandler(UpdateBookContract, { access: 'protected', security: { authenticate: async () => ({ userId: 'u-11b', role: 'staff' as ScopedAuthContext['role'], scopes: ['books:write'] }) } }, async ({ req, auth: _auth }) => ({ data: { updated: true }, metax: { traceId: 'trace-1' } }));
 
 const protectedFactory = createHandlerFactory<ScopedAuthContext>({
     access: 'protected',
@@ -163,7 +155,6 @@ const protectedFactory = createHandlerFactory<ScopedAuthContext>({
             role: 'staff' as const,
             scopes: ['books:write'],
         }),
-        authSchema: ScopedAuthSchema,
     },
 });
 
@@ -203,7 +194,6 @@ createHandler(
                 role: 'staff' as const,
                 scopes: ['books:read', 'books:write'],
             }),
-            authSchema: ScopedAuthSchema,
             authorize: {
                 beforeValidation: [async ({ auth }) => { if (!auth.scopes.includes('books:read')) throw new createHttpError.Forbidden('denied'); return true; }],
                 afterValidation: [

@@ -1,6 +1,5 @@
 import type { Request } from 'express';
 import createHttpError from 'http-errors';
-import { z } from 'zod';
 import {
     allOf,
     anyOf,
@@ -114,20 +113,6 @@ describe('security (runtime)', () => {
             await expect(
                 executeAuthenticationStage({ req, access: 'optional', security: { authenticate: failing } }),
             ).rejects.toThrow('boom');
-        });
-
-        // --- authSchema (out of scope; fixed default) ---
-        it('throws the fixed default when authSchema parse fails', async () => {
-            await expect(
-                executeAuthenticationStage({
-                    req,
-                    access: 'protected',
-                    security: {
-                        authenticate: async () => ({ email: 'nope' }),
-                        authSchema: z.object({ email: z.string().email() }),
-                    },
-                }),
-            ).rejects.toMatchObject({ statusCode: 401, message: 'Invalid authentication data' });
         });
     });
 

@@ -12,7 +12,7 @@
 
 import type { CookieOptions, Request } from 'express';
 import type createHttpError from 'http-errors';
-import type { input as Input, ZodType, ZodTypeAny } from 'zod';
+import type { input as Input, ZodTypeAny } from 'zod';
 
 // ============================================================================
 // SECTION 1: RESPONSE FORMAT TYPES
@@ -539,13 +539,6 @@ export type SecurityOptions<
      * Omit when the handler requires authentication but no authorization policies.
      */
     authorize?: AuthorizationConfig<TAuthContext, TAfterRequest>;
-    /**
-     * Optional schema to validate the authentication result.
-     *
-     * If provided, auth context is parsed with this schema and failures are treated as
-     * unauthenticated errors.
-     */
-    authSchema?: ZodType<TAuthContext>;
 };
 
 /**

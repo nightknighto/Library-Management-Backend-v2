@@ -196,19 +196,15 @@ interface SecuredSecurity<TAuth, TReq extends Request = Request> {
      * Omit when authentication is required but no policies are needed.
      */
     authorize?: AuthorizationConfig<TAuth, TReq>;
-    /** Zod schema to validate auth context. Failures trigger 401. */
-    authSchema?: ZodType<TAuth>;
 }
 
 /**
  * Security config for factory-produced handlers where `authenticate` is inherited
- * from the factory defaults. Only `authorize` / `authSchema` may be overridden.
+ * from the factory defaults. Only `authorize` may be overridden.
  */
 interface InheritedSecurity<TAuth, TReq extends Request = Request> {
     /** Authorization buckets evaluated around request validation. */
     authorize?: AuthorizationConfig<TAuth, TReq>;
-    /** Zod schema to validate auth context. Failures trigger 401. */
-    authSchema?: ZodType<TAuth>;
 }
 
 /**
@@ -382,7 +378,6 @@ function createHandlerRuntime<TContract extends AnyContract, TAuth>(
                         security: security
                             ? {
                                 authenticate: security.authenticate,
-                                authSchema: security.authSchema,
                             }
                             : undefined,
                     })) as { auth?: TAuth });

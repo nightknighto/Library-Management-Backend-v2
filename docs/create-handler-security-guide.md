@@ -30,8 +30,9 @@ Security is configured through handler options:
   - Author with `createAuthenticator` (inference-stable; see §3); its optional
     `onMissingCredentials` default is the error used when credentials are absent
     on a protected route
-- security.authSchema:
-  - Optional Zod schema to validate parsed auth context
+  - The authenticator owns its output validity: if it needs schema validation,
+    it performs that internally and throws the appropriate error. The framework
+    does not re-validate the authenticator's result.
 - security.authorize:
   - Nested timing buckets: `beforeValidation` and/or `afterValidation`
   - Each bucket is an array of policies (logical-AND, short-circuit on first failure)
@@ -74,11 +75,6 @@ type JwtAuthContext = {
   email: string;
   role: "member" | "staff";
 };
-
-const JwtAuthSchema = z.object({
-  email: z.string().email(),
-  role: z.enum(["member", "staff"]),
-});
 
 // Authenticators use the same throw model as authorizers:
 // - resolve the context on success
@@ -150,7 +146,6 @@ const createBook = createHandler(
     access: "protected",
     security: {
       authenticate: authenticateJwt,
-      authSchema: JwtAuthSchema,
       authorize: { beforeValidation: [isStaff] },
     },
   },
@@ -363,7 +358,6 @@ const createJwtAuthHandler = createHandlerFactory<JwtAuthContext>({
   access: "protected",
   security: {
     authenticate: authenticateJwt, // carries its own onMissingCredentials default
-    authSchema: JwtAuthSchema,
   },
 });
 ```
@@ -375,7 +369,7 @@ const deleteBook = createJwtAuthHandler(
   DeleteBookContract,
   {
     security: {
-      // inherits authenticate and authSchema
+      // inherits authenticate
       authorize: { beforeValidation: [allOf([isStaff])] },
     },
   },
@@ -513,7 +507,7 @@ failures. An authenticator that throws propagates the error even in `optional` m
 - A handler can use both buckets; `beforeValidation` denial skips validation entirely.
 - Prefer reusable policy constants for shared logic.
 - When combining broad and narrow policies in `afterValidation`, pin request type using the second generic argument.
-- Keep authSchema enabled for safer auth context guarantees.
+- The authenticator owns its output validity. If it needs schema validation, perform it inside the authenticator and throw the appropriate error.
 
 ## 11. Quick Cheatsheet
 
