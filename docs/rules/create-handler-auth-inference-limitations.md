@@ -17,8 +17,8 @@ The surprising behavior is this:
 
 After a long investigation, the final decision is:
 
-- When `authenticate` has a parameter, explicitly annotate it (`req: Request` or `_req: Request`).
-- If request access is not needed, use a parameterless callback.
+- Prefer `createAuthenticator` for authoring authenticators. It infers `TAuthContext` directly from the callback's return type (argument 1) with no backward flow into a handler signature, so it sidesteps this limitation entirely. It is also the only way to attach `onMissingCredentials`.
+- When inlining `authenticate` directly inside `createHandler` options, the limitation still applies: if the callback has a parameter, explicitly annotate it (`req: Request` or `_req: Request`); if request access is not needed, use a parameterless callback.
 
 This is not a stylistic preference. It is a targeted mitigation for a known TypeScript inference limitation in this API shape.
 

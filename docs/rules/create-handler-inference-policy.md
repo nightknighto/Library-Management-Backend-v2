@@ -35,7 +35,8 @@ Required axes:
 - Pagination result requirements for response-paginated and non-response-paginated contracts
 - Authentication typing across public, optional, and protected access modes
 - Authorization callback typing: strict `Promise<true>` return contract (allow = resolve `true`, deny = throw `HttpError`), and policy combinators `allOf` / `anyOf` / `not` (including `denialError` on `anyOf` / `not`)
-- Error mapper typing (`unauthenticated` only — authorization denials are thrown by authorizers, so there is no `unauthorized` mapper)
+- Authenticator typing: callable `Authenticator` carrying an optional `onMissingCredentials`; `createAuthenticator` infers `TAuthContext` from the callback return (no backward flow — inference-stable); a plain-function authenticator is still assignable
+- No handler-level error mapper (the authenticator owns `onMissingCredentials`; authorization denials are thrown by authorizers)
 - Factory typing behavior for createHandlerFactory
 - Contract inference via createContract
 - Request envelope and promotion typing via request schema and validation utilities
@@ -49,7 +50,7 @@ Minimum dimensions:
 - Auth schema usage
 - Authorizer mode (single or array/composed)
 - Pagination mode
-- Error mapper usage
+- Authenticator absence-default source (custom `onMissingCredentials` via `createAuthenticator` vs framework default)
 
 ### 3. Invariant Lane
 Locks previously shipped inference guarantees that should remain stable.

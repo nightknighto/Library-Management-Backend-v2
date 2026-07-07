@@ -59,7 +59,8 @@ Feature folders are mainly integration and validation surfaces, not the primary 
 ## IntelliSense-First Documentation Standards
 - Treat IntelliSense as the primary documentation channel for reusable framework APIs.
 - Every reusable exported framework function, utility, factory, and consumer-facing type must include complete JSDoc.
-- JSDoc for reusable APIs must describe what the API does, important usage notes, caveats, and when to use each supported mode/variant.
+- JSDoc content is consumer-facing behavior ONLY: what the API does, how to call it, its inputs, outputs, and observable outcomes/contracts. The first sentence must state what the API is or does. Write for someone reading a tooltip who needs to use the API right now.
+- Internal design rationale never goes in JSDoc — not inference mechanics, not trade-off analysis, not "by design" justifications, not implementation notes, not cross-references to rules docs. Put those in a `//` comment next to the code or in a `docs/rules/` spec. Hard rule: if a user cannot act on a sentence from a tooltip, it does not belong in JSDoc.
 - Include one or more @example blocks that cover common and relevant advanced usage so users can apply the API without opening source files or external docs.
 - Document not only the top-level function/type, but also everything users interact with: parameters, option-object properties, nested properties, return values, generic type parameters, and exported type members.
 - If an API has overloads or mode-dependent behavior, document the behavior and selection criteria for each variant.

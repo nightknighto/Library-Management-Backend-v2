@@ -8,7 +8,14 @@
 
 import type { Request } from 'express';
 import createHttpError from 'http-errors';
-import type { AccessMode, Authorizer, HandlerErrorMappers, SecurityOptions } from './types.core.ts';
+import type {
+    AccessMode,
+    Authenticator,
+    AuthenticatorOptions,
+    Authorizer,
+    MaybePromise,
+    SecurityOptions,
+} from './types.core.ts';
 
 // =========================================================================
 // SECTION 1: EXECUTION TYPES
@@ -22,7 +29,6 @@ type AuthenticationExecutionParams<
     req: TRequest;
     access: TAccess;
     security?: SecurityOptions<TAuthContext, TRequest>;
-    errors?: HandlerErrorMappers<TRequest>;
 };
 
 type SecurityExecutionResult<TAuthContext, TAccess extends AccessMode> = TAccess extends 'protected'
@@ -44,12 +50,15 @@ type NoInfer<T> = [T][T extends unknown ? 0 : never];
 /**
  * Executes the authentication stage for a request.
  *
- * Behavior:
- * - If no authenticator is provided and access is `protected`, throws 401.
- * - If authenticator returns null/undefined and access is `protected`, throws 401.
- * - If authSchema is provided, its parse result becomes the auth context.
- * - If authSchema parsing fails, throws unauthenticated error.
- * - Error mappers in `errors.unauthenticated` override default failures.
+ * Outcome model:
+ * - No authenticator configured + `protected` → throws the framework default 401.
+ * - Authenticator resolves `null` (absence) + `protected` → throws the
+ *   authenticator's `onMissingCredentials` default, or the framework default 401.
+ * - Authenticator resolves `null` + `optional` → succeeds with `auth = undefined`.
+ * - Authenticator resolves a context → succeeds (optionally parsed by `authSchema`).
+ * - Authenticator *throws* → propagates verbatim in **both** access modes
+ *   (fail-closed: `optional` swallows absence, never failures).
+ * - `authSchema` parse failure → throws the framework default 401.
  */
 export async function executeAuthenticationStage<
     TAuthContext,
@@ -58,16 +67,13 @@ export async function executeAuthenticationStage<
 >(
     params: AuthenticationExecutionParams<TAuthContext, TAccess, TRequest>,
 ): Promise<SecurityExecutionResult<TAuthContext, TAccess>> {
-    const { req, access, security, errors } = params;
+    const { req, access, security } = params;
 
     const authenticate = security?.authenticate;
 
     if (!authenticate) {
         if (access === 'protected') {
-            throw (
-                errors?.unauthenticated?.(req) ??
-                new createHttpError.Unauthorized('Unauthenticated')
-            );
+            throw new createHttpError.Unauthorized('Unauthenticated');
         }
 
         return {} as SecurityExecutionResult<TAuthContext, TAccess>;
@@ -78,10 +84,8 @@ export async function executeAuthenticationStage<
 
     if (auth === null) {
         if (access === 'protected') {
-            throw (
-                errors?.unauthenticated?.(req) ??
-                new createHttpError.Unauthorized('Unauthenticated')
-            );
+            throw authenticate.onMissingCredentials?.()
+                ?? new createHttpError.Unauthorized('Unauthenticated');
         }
 
         return {} as SecurityExecutionResult<TAuthContext, TAccess>;
@@ -91,14 +95,51 @@ export async function executeAuthenticationStage<
 
     try {
         parsedAuth = security?.authSchema ? await security.authSchema.parseAsync(auth) : auth;
-    } catch (_e) {
-        throw (
-            errors?.unauthenticated?.(req) ??
-            new createHttpError.Unauthorized('Invalid authentication data')
-        );
+    } catch {
+        throw new createHttpError.Unauthorized('Invalid authentication data');
     }
 
     return { auth: parsedAuth } as SecurityExecutionResult<TAuthContext, TAccess>;
+}
+
+/**
+ * Builds an {@link Authenticator} from your authentication callback.
+ *
+ * The callback decides the outcome of each request:
+ * - **Resolve a context object** → authentication succeeds; the context flows to
+ *   your handler and authorizers.
+ * - **Resolve `null`** → no credentials present. For `optional` handlers the
+ *   request continues unauthenticated; for `protected` handlers it is rejected.
+ * - **Throw an `HttpError`** → authentication failure (e.g. expired or malformed
+ *   token). The thrown status and message become the response, in both access modes.
+ *
+ * Pass the result to `security.authenticate` in your handler options.
+ *
+ * @param authenticate - The authentication callback (see outcomes above).
+ * @param options.onMissingCredentials - Error returned when a `protected` handler
+ *   receives no credentials. Omit to use the framework default (`401 Unauthorized`).
+ *
+ * @returns A callable {@link Authenticator} carrying your defaults.
+ *
+ * @example
+ * const authenticateJwt = createAuthenticator(
+ *   async (req: Request) => {
+ *     const header = req.headers.authorization;
+ *     if (!header?.startsWith("Bearer ")) return null;            // no credentials
+ *     try { return { email: verifyJwt(header).email }; }
+ *     catch { throw new createHttpError.Unauthorized("Invalid token"); } // failure
+ *   },
+ *   { onMissingCredentials: () => new createHttpError.Unauthorized("Missing Bearer token") },
+ * );
+ */
+// Callback-first so TAuthContext is inferred from the callback return (arg 1) with
+// no backward flow into a handler signature — this avoids the inline-inference
+// degradation documented in docs/rules/create-handler-auth-inference-limitations.md.
+export function createAuthenticator<TAuthContext, TRequest extends Request = Request>(
+    authenticate: (req: TRequest) => MaybePromise<TAuthContext | null>,
+    options?: AuthenticatorOptions,
+): Authenticator<TAuthContext, TRequest> {
+    return Object.assign(authenticate, options ?? {}) as Authenticator<TAuthContext, TRequest>;
 }
 
 /**
@@ -334,20 +375,17 @@ export function mergeHandlerSecurityDefaults<TAuthContext, TRequest extends Requ
         | {
             access?: AccessMode;
             security?: SecurityOptions<TAuthContext, TRequest>;
-            errors?: HandlerErrorMappers<TRequest>;
         }
         | undefined,
     overrides:
         | {
             access?: AccessMode;
             security?: SecurityOptions<TAuthContext, TRequest>;
-            errors?: HandlerErrorMappers<TRequest>;
         }
         | undefined,
 ): {
     access?: AccessMode;
     security?: SecurityOptions<TAuthContext, TRequest>;
-    errors?: HandlerErrorMappers<TRequest>;
 } {
     return {
         access: overrides?.access ?? defaults?.access,
@@ -358,10 +396,6 @@ export function mergeHandlerSecurityDefaults<TAuthContext, TRequest extends Requ
                 ...defaults?.security?.authorize,
                 ...overrides?.security?.authorize,
             },
-        },
-        errors: {
-            ...defaults?.errors,
-            ...overrides?.errors,
         },
     };
 }

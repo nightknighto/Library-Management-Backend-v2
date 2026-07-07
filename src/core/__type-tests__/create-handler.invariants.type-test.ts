@@ -1,10 +1,10 @@
-import createHttpError from 'http-errors';
 import { z } from 'zod';
 import {
     type AfterAuthorizationRequest,
+    type Authenticator,
     createContract,
     createHandler,
-    type HandlerErrorMappers,
+    type HandlerOptions,
     type HandlerRequest,
 } from '../index.ts';
 import type { Equal, Expect, ExpectFalse, Extends, IsAny } from './type-test.utils.ts';
@@ -101,20 +101,30 @@ createHandler(
 );
 
 /**
- * Invariant: HandlerErrorMappers is a single-key map (`unauthenticated` only).
+ * Invariant: the shared `errors` surface is gone.
  *
- * The authorization half (`unauthorized`) was removed when authorizers adopted
- * the throw model — every denial now carries its own explicit HttpError. The
- * errors map is authn-only. Re-adding `unauthorized` must be treated as a
- * breaking change.
+ * Both security primitives now own their own errors — authorizers throw denials,
+ * authenticators declare an `onMissingCredentials` default. `HandlerErrorMappers`
+ * / `AuthErrorMapper` and the `errors` option no longer exist; re-introducing an
+ * `errors` key on handler options must be treated as a breaking change.
  */
-type _errorsSingleKey = Expect<Equal<keyof HandlerErrorMappers, 'unauthenticated'>>;
+type _errorsGoneFromHandlerOptions = Expect<
+    Equal<'errors' extends keyof HandlerOptions<'protected', AuthContext> ? true : false, false>
+>;
 
-const _validErrors: HandlerErrorMappers = {
-    unauthenticated: () => new createHttpError.Unauthorized('login required'),
-};
+/**
+ * Invariant: the Authenticator is a callable carrying an optional
+ * `onMissingCredentials` default (authenticator-dictated, single source).
+ */
+type _authenticatorHasOnMissingCredentials = Expect<
+    Extends<'onMissingCredentials', keyof Authenticator<AuthContext>>
+>;
 
-const _removedUnauthorized: HandlerErrorMappers = {
-    // @ts-expect-error `unauthorized` is no longer a valid error mapper key
-    unauthorized: () => new createHttpError.Forbidden('denied'),
-};
+/**
+ * Backward-compat: a plain function is still assignable to Authenticator.
+ *
+ * Inline `authenticate` callbacks remain valid without `createAuthenticator`;
+ * `createAuthenticator` is the recommended inference-stable authoring path and
+ * the only way to attach `onMissingCredentials`.
+ */
+const _plainAuthenticatorAssignable: Authenticator<AuthContext> = async () => ({ userId: 'u-1' });

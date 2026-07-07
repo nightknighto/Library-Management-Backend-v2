@@ -23,7 +23,13 @@ Security is configured through handler options:
   - optional: auth is optional, handler can receive auth if present
   - protected: auth is required
 - security.authenticate:
-  - Function that builds auth context from request
+  - Authenticator that builds auth context from the request
+  - Resolve a context on success; resolve `null` for "no credentials"; throw an
+    `HttpError` for a specific failure (expired/revoked/malformed). Failures
+    propagate in both `optional` and `protected` access (fail-closed)
+  - Author with `createAuthenticator` (inference-stable; see §3); its optional
+    `onMissingCredentials` default is the error used when credentials are absent
+    on a protected route
 - security.authSchema:
   - Optional Zod schema to validate parsed auth context
 - security.authorize:
@@ -32,9 +38,6 @@ Security is configured through handler options:
   - `beforeValidation` policies receive the raw request (fail-fast)
   - `afterValidation` policies receive the validated request (typed body/query/params)
   - A handler may use either bucket, both, or neither — there is no global before/after toggle
-- errors.unauthenticated:
-  - Optional custom error mapper for authentication failures
-  - (Authorization denials come from the `HttpError` an authorizer throws — see §6)
 
 ## 2. Imports You Will Use
 
@@ -45,12 +48,13 @@ import { z } from "zod";
 import {
   createHandler,
   createHandlerFactory,
+  createAuthenticator,
   allOf,
   anyOf,
   not,
   type HandlerRequest,
   type AfterAuthorizationRequest,
-} from "../src/core/create-handler.core.ts";
+} from "../src/core/index.ts";
 import type {
   Authenticator,
   Authorizer,
@@ -76,15 +80,28 @@ const JwtAuthSchema = z.object({
   role: z.enum(["member", "staff"]),
 });
 
-const authenticateJwt: Authenticator<JwtAuthContext> = async (req) => {
-  const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
-    return null;
-  }
+// Authenticators use the same throw model as authorizers:
+// - resolve the context on success
+// - resolve `null` for "no credentials" (legitimate for optional; an error for protected)
+// - throw an HttpError for a specific failure (expired/revoked/malformed)
+//
+// `createAuthenticator` is the recommended, inference-stable authoring helper and
+// the only way to attach `onMissingCredentials` (the default error used when
+// credentials are absent on a protected route). A plain function is also accepted
+// inline, but cannot carry `onMissingCredentials`.
+const authenticateJwt = createAuthenticator<JwtAuthContext>(
+  async (req) => {
+    const header = req.headers.authorization;
+    if (!header?.startsWith("Bearer ")) {
+      return null; // absence
+    }
 
-  // decode token and return context
-  return { email: "a@library.local", role: "staff" };
-};
+    // decode token; on a bad/expired token, throw a specific error:
+    //   throw new createHttpError.Unauthorized("Invalid or expired token");
+    return { email: "a@library.local", role: "staff" };
+  },
+  { onMissingCredentials: () => new createHttpError.Unauthorized("Missing Bearer token") },
+);
 
 const isStaff: Authorizer<JwtAuthContext> = async ({ auth }) => {
   if (auth.role !== "staff") throw new createHttpError.Forbidden("staff only");
@@ -345,11 +362,8 @@ Use createHandlerFactory to share defaults.
 const createJwtAuthHandler = createHandlerFactory<JwtAuthContext>({
   access: "protected",
   security: {
-    authenticate: authenticateJwt,
+    authenticate: authenticateJwt, // carries its own onMissingCredentials default
     authSchema: JwtAuthSchema,
-  },
-  errors: {
-    unauthenticated: () => new createHttpError.Unauthorized("Authentication required"),
   },
 });
 ```
@@ -452,11 +466,25 @@ const listBooks = createHandler(
 
 ## 9. Error Customization
 
-Only authentication failures are customizable via `errors.unauthenticated`.
-Authorization denials are whatever `HttpError` the authorizer throws — its status
-code and message become the response directly:
+There is no handler-level error mapper. Each security primitive owns its own errors:
+
+- **Authorization denials** — the `HttpError` the authorizer throws (status + message become the response).
+- **Authentication failures** (expired/revoked/malformed credentials) — the `HttpError` the authenticator throws.
+- **"No credentials on a protected route"** — the authenticator's `onMissingCredentials` default (set via `createAuthenticator`), or the framework default `401 Unauthorized('Unauthenticated')`.
+
+Customize each by throwing/declaring a specific error at the primitive that owns it:
 
 ```ts
+const authenticateJwt = createAuthenticator<JwtAuthContext>(
+  async (req) => {
+    const header = req.headers.authorization;
+    if (!header?.startsWith("Bearer ")) return null;                     // absence
+    // throw new createHttpError.Unauthorized("Invalid or expired token"); // failure
+    return decodeJwt(header);                                            // success
+  },
+  { onMissingCredentials: () => new createHttpError.Unauthorized("Please log in") },
+);
+
 const isStaff: Authorizer<JwtAuthContext> = async ({ auth }) => {
   if (auth.role !== "staff") throw new createHttpError.Forbidden("Staff role is required");
   return true;
@@ -470,13 +498,13 @@ const handler = createHandler(
       authenticate: authenticateJwt,
       authorize: { beforeValidation: [isStaff] },
     },
-    errors: {
-      unauthenticated: () => new createHttpError.Unauthorized("Please login first"),
-    },
   },
   async (req, auth) => ({ data: "ok" }),
 );
 ```
+
+Note: `optional` access swallows *absence* (`null`) — it does **not** swallow
+failures. An authenticator that throws propagates the error even in `optional` mode.
 
 ## 10. Practical Guidance
 

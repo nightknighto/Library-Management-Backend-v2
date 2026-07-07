@@ -5,6 +5,8 @@ import {
     type AfterAuthorizationRequest,
     allOf,
     anyOf,
+    type Authenticator,
+    createAuthenticator,
     createContract,
     createHandler,
     createHandlerFactory,
@@ -257,12 +259,6 @@ createHandler(
         security: {
             authenticate: async () => ({ userId: 'u-4', role: 'staff' as const }),
             authorize: { beforeValidation: [composedPolicy] },
-        },
-        errors: {
-            unauthenticated: (req) => {
-                type _reqShape = Expect<Extends<typeof req, Request>>;
-                return new createHttpError.Unauthorized('Unauthenticated');
-            },
         },
     },
     async ({ req, auth: _auth }) => ({ data: { updated: true } }),
@@ -668,3 +664,44 @@ const _booleanExprReturn: Authorizer<AuthContext> = async ({ auth }) => auth.rol
 const _voidReturn: Authorizer<AuthContext> = ({ auth }) => {
     if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied');
 };
+
+/**
+ * Capability: createAuthenticator infers TAuth from the callback return.
+ *
+ * The factory is inference-stable by construction — TAuth pins from the callback
+ * return (argument 1) with no backward flow into a handler signature, unlike an
+ * inline `authenticate` inside createHandler which can degrade TAuthContext to
+ * `unknown` (see docs/rules/create-handler-auth-inference-limitations.md).
+ */
+const _inferredAuthSimple = createAuthenticator(async (req) => ({ userId: 'u-auth', role: 'staff' as const }));
+type _inferredAuthSimpleT = Expect<
+    Equal<typeof _inferredAuthSimple, Authenticator<{ userId: string; role: 'staff' }, Request>>
+>;
+
+const _inferredAuthWithAbsence = createAuthenticator(async (req) => {
+    if (!req.headers.authorization) return null;
+    return { userId: 'u-auth', role: 'staff' as const };
+});
+type _inferredAuthWithAbsenceT = Expect<
+    Equal<typeof _inferredAuthWithAbsence, Authenticator<{ userId: string; role: 'staff' }, Request>>
+>;
+
+/**
+ * Capability: onMissingCredentials is carried on the returned Authenticator.
+ *
+ * Parameterless by design (D2): the no-credentials message is mechanism-specific
+ * — a constant traveling with the authenticator — so it does not depend on the
+ * request. Request-specific concerns like i18n belong to the error-rendering layer.
+ */
+const _authWithDefault = createAuthenticator(
+    async () => ({ userId: 'u-auth', role: 'staff' as const }),
+    {
+        onMissingCredentials: () => new createHttpError.Unauthorized('Missing Bearer token'),
+    },
+);
+type _onMissingTyped = Expect<
+    Equal<
+        typeof _authWithDefault.onMissingCredentials,
+        (() => createHttpError.HttpError) | undefined
+    >
+>;

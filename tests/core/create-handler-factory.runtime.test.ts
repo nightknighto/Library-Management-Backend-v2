@@ -3,6 +3,7 @@ import request from 'supertest';
 import { z } from 'zod';
 import { createContract } from '../../src/core/create-contract.core';
 import { createHandlerFactory } from '../../src/core/create-handler.core';
+import { createAuthenticator } from '../../src/core/security.core';
 import { createTestApp } from './test-utils';
 
 describe('createHandlerFactory (runtime)', () => {
@@ -37,6 +38,30 @@ describe('createHandlerFactory (runtime)', () => {
 
         expect(response.status).toBe(401);
         expect(response.body).toEqual({ success: false, error: 'Unauthenticated' });
+    });
+
+    it("inherits the factory authenticator's onMissingCredentials default", async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const authenticate = createAuthenticator(async () => null, {
+            onMissingCredentials: () => new createHttpError.Unauthorized('Missing Bearer token'),
+        });
+
+        const factory = createHandlerFactory({
+            access: 'protected',
+            security: { authenticate },
+        });
+
+        const handler = factory(contract, async () => ({ data: { ok: true } }));
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        expect(response.status).toBe(401);
+        expect(response.body).toEqual({ success: false, error: 'Missing Bearer token' });
     });
 
     it('throws when protected factory handler has no authenticate', () => {

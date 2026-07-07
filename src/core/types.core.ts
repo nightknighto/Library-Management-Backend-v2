@@ -312,47 +312,61 @@ export type MaybePromise<T> = T | Promise<T>;
 export type AccessMode = 'public' | 'protected' | 'optional';
 
 /**
- * Authentication callback contract used by framework handlers.
+ * Extracts an auth context from a request. Assign one to `security.authenticate`
+ * in a handler's options.
  *
- * Important typing note for this repository:
- * in handler-first call shapes, TypeScript can lose `TAuthContext` inference
- * when this callback uses an unannotated parameter (for example
- * `authenticate: async (req) => ({ ... })`).
+ * The callback has three outcomes:
+ * - **Resolve a context object** → the request is authenticated; the context flows
+ *   to your handler and authorizers.
+ * - **Resolve `null`** → no credentials present. Fine for `optional` access; for
+ *   `protected` access the runtime rejects the request (see `onMissingCredentials`).
+ * - **Throw an `HttpError`** → authentication failure (expired, revoked, or
+ *   malformed token). The thrown status and message become the response, in both
+ *   access modes. `optional` swallows *absence*, never *failures*.
  *
- * If the callback needs `req`, annotate it explicitly:
- * `authenticate: async (req: Request) => ({ ... })`.
+ * `onMissingCredentials`, when set, is the error returned when a `protected` handler
+ * receives no credentials. Build with {@link createAuthenticator} to set it; a plain
+ * function matching the call signature is also assignable when you don't need it.
  *
- * If `req` is not needed, prefer parameterless:
- * `authenticate: async () => ({ ... })`.
- *
- * Behavior:
- * - Return a context object to authenticate the request.
- * - Return null/undefined to indicate no auth context.
- * - For `protected` access, null/undefined triggers an unauthenticated error.
- *
- * @typeParam TAuthContext
- * Auth context shape returned by authentication and propagated to handlers/authorizers.
- *
- * @typeParam TRequest
- * Request type accepted by the callback.
+ * @typeParam TAuthContext - Auth context returned on success.
+ * @typeParam TRequest - Request type accepted by the callback.
  *
  * @example
  * type JwtAuth = { email: string };
  *
- * const authenticate: Authenticator<JwtAuth> = async (req: Request) => {
- *   const header = req.headers.authorization;
- *   if (!header) {
- *     return null;
- *   }
- *
- *   return { email: "user@example.com" };
- * };
- *
- * @see docs/rules/create-handler-auth-inference-limitations.md
+ * const authenticateJwt = createAuthenticator<JwtAuth>(
+ *   async (req: Request) => {
+ *     const header = req.headers.authorization;
+ *     if (!header?.startsWith("Bearer ")) return null;
+ *     try { return { email: verifyJwt(header).email }; }
+ *     catch { throw new createHttpError.Unauthorized("Invalid token"); }
+ *   },
+ *   { onMissingCredentials: () => new createHttpError.Unauthorized("Missing Bearer token") },
+ * );
  */
-export type Authenticator<TAuthContext, TRequest extends Request<any, any, any, any> = Request> = (
-    req: TRequest,
-) => MaybePromise<TAuthContext | null | undefined>;
+// Design note: `Authenticator` is a callable carrying an optional `onMissingCredentials`
+// property (rather than a plain function or an object) so that `security.authenticate`
+// stays a function-typed field (minimal disruption) while the absence-default travels
+// with the reusable unit. A plain function remains assignable because the property part
+// is all-optional, preserving inline usage.
+export type Authenticator<
+    TAuthContext,
+    TRequest extends Request<any, any, any, any> = Request,
+> = ((req: TRequest) => MaybePromise<TAuthContext | null>) & {
+    onMissingCredentials?: () => createHttpError.HttpError;
+};
+
+/**
+ * Optional defaults applied to an {@link Authenticator} by {@link createAuthenticator}.
+ */
+export type AuthenticatorOptions = {
+    /**
+     * Error returned when a `protected` handler receives no credentials (the
+     * authenticator resolved `null`). Omit to use the framework default
+     * (`401 Unauthorized`).
+     */
+    onMissingCredentials?: () => createHttpError.HttpError;
+};
 
 /**
  * Authorization policy callback.
@@ -405,19 +419,6 @@ export type Authorizer<
     TAuthContext,
     TRequest extends Request<any, any, any, any> = Request,
 > = (params: { req: TRequest; auth: TAuthContext }) => Promise<true>;
-
-/**
- * Error mapper for authentication/authorization failures.
- *
- * Return an HttpError to override the default error response for auth failures.
- *
- * @example
- * const unauthenticated: AuthErrorMapper = () =>
- *   new createHttpError.Unauthorized("Missing token");
- */
-export type AuthErrorMapper<TRequest extends Request<any, any, any, any> = Request> = (
-    req: TRequest,
-) => createHttpError.HttpError;
 
 /**
  * Authorization configuration split into two timing buckets.
@@ -548,24 +549,6 @@ export type SecurityOptions<
 };
 
 /**
- * Error mapper overrides for authentication failures.
- *
- * Authorization denials are not mapped here: an authorizer denies by throwing
- * its own `HttpError`, whose status code and message become the response.
- *
- * @example
- * const errors: HandlerErrorMappers = {
- *   unauthenticated: () => new createHttpError.Unauthorized("Missing token"),
- * };
- */
-export type HandlerErrorMappers<TRequest extends Request<any, any, any, any> = Request> = {
-    /**
-     * Override for authentication failures (missing/invalid auth context).
-     */
-    unauthenticated?: AuthErrorMapper<TRequest>;
-};
-
-/**
  * Top-level handler options accepted by createHandler.
  *
  * @example
@@ -604,8 +587,4 @@ export type HandlerOptions<
      * Not allowed when access is `public`.
      */
     security?: SecurityOptions<TAuthContext, TAfterRequest>;
-    /**
-     * Optional overrides for auth error mapping.
-     */
-    errors?: HandlerErrorMappers<TAfterRequest>;
 };

@@ -21,6 +21,7 @@ import {
     type AfterAuthorizationRequest,
     allOf,
     anyOf,
+    createAuthenticator,
     createContract,
     createHandler,
     createHandlerFactory,
@@ -143,9 +144,6 @@ createHandler(
                 ],
             },
         },
-        errors: {
-            unauthenticated: () => new createHttpError.Unauthorized('Unauthorized'),
-        },
     },
     async ({ req, auth }) => {
         type _authHasUndefined = Expect<Extends<undefined, typeof auth>>;
@@ -264,3 +262,42 @@ const _allOfNoDenial = allOf<ScopedAuthContext>([async () => true], new createHt
 
 // @ts-expect-error denialError must be an HttpError instance, not a generic Error
 const _anyOfBadDenialType = anyOf<ScopedAuthContext>([async () => true], new Error('not http'));
+
+/**
+ * Interaction: a createAuthenticator-built authenticator wires into createHandler
+ * and its TAuth flows to both the authorizer and the handler callback, while the
+ * authenticator's onMissingCredentials default travels with it (authenticator-
+ * dictated, with no handler-level errors config).
+ */
+const _InteractionContract = createContract({
+    request: { query: { q: z.string() } },
+    response: z.object({ ok: z.boolean() }),
+});
+
+const _interactionAuthenticator = createAuthenticator(
+    async () => ({ userId: 'u-int', role: 'staff' as const, scopes: ['books:write'] }),
+    { onMissingCredentials: () => new createHttpError.Unauthorized('Missing Bearer token') },
+);
+
+createHandler(
+    _InteractionContract,
+    {
+        access: 'protected',
+        security: {
+            authenticate: _interactionAuthenticator,
+            authorize: {
+                beforeValidation: [
+                    async ({ auth }) => {
+                        type _authReachesAuthorizer = Expect<Extends<typeof auth, ScopedAuthContext>>;
+                        if (!auth.scopes.includes('books:write')) throw new createHttpError.Forbidden('denied');
+                        return true;
+                    },
+                ],
+            },
+        },
+    },
+    async ({ auth }) => {
+        type _authReachesHandler = Expect<Extends<typeof auth, ScopedAuthContext>>;
+        return { data: { ok: true } };
+    },
+);

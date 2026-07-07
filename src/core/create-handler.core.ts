@@ -37,7 +37,6 @@ import type {
     Authenticator,
     AuthorizationConfig,
     ContractResponse,
-    HandlerErrorMappers,
     HandlerOptions,
     HandlerSuccessResult,
     SecurityOptions,
@@ -223,8 +222,6 @@ interface PublicHandlerOpts {
     access?: 'public';
     /** @internal Not allowed for public handlers. */
     security?: never;
-    /** @internal Not allowed for public handlers. */
-    errors?: never;
 }
 
 /**
@@ -250,8 +247,6 @@ interface ProtectedOpts<TAuth, TContract extends AnyContract> {
     access: 'protected';
     /** Security configuration with nested authorization buckets. */
     security: SecuredSecurity<TAuth, AfterAuthorizationRequest<TContract>>;
-    /** Custom error responses for auth failures. */
-    errors?: HandlerErrorMappers;
 }
 
 /**
@@ -270,8 +265,6 @@ interface OptionalOpts<TAuth, TContract extends AnyContract> {
     access: 'optional';
     /** Security configuration with nested authorization buckets. */
     security: SecuredSecurity<TAuth, AfterAuthorizationRequest<TContract>>;
-    /** Custom error responses for auth failures. */
-    errors?: HandlerErrorMappers;
 }
 
 // =========================================================================
@@ -379,7 +372,6 @@ function createHandlerRuntime<TContract extends AnyContract, TAuth>(
         try {
             const access = options?.access ?? 'public';
             const security = options?.security;
-            const errors = options?.errors;
 
             const authenticationResult =
                 access === 'public'
@@ -393,7 +385,6 @@ function createHandlerRuntime<TContract extends AnyContract, TAuth>(
                                 authSchema: security.authSchema,
                             }
                             : undefined,
-                        errors,
                     })) as { auth?: TAuth });
 
             const authorize = security?.authorize;
@@ -491,11 +482,15 @@ function createHandlerRuntime<TContract extends AnyContract, TAuth>(
  * it as `Request` to avoid auth context degrading to `unknown`.
  * See docs/rules/create-handler-auth-inference-limitations.md.
  *
- * Error mapping:
- * Use `options.errors` to override the unauthenticated error response.
+ * Authentication errors:
+ * Authentication failures (expired/revoked/malformed credentials) are thrown by
+ * the authenticator and propagate in both `optional` and `protected` access. The
+ * "no credentials on a protected route" default is owned by the authenticator via
+ * `onMissingCredentials` (set with `createAuthenticator`); there is no handler-
+ * level error mapper. See docs/create-handler-security-guide.md.
  *
  * @param contract - Contract describing request and response schemas.
- * @param options - Optional access/security/errors configuration.
+ * @param options - Optional access/security configuration.
  * @param handler - Async handler receiving a context object and returning a contract-aligned result.
  *
  * @example
@@ -614,22 +609,16 @@ type HandlerFactoryDefaults<TAuthContext> = {
      * Default security configuration merged into each handler's options.
      */
     security?: SecurityOptions<TAuthContext, Request>;
-    /**
-     * Default auth error mappers merged into each handler's options.
-     */
-    errors?: HandlerErrorMappers<Request>;
 };
 
 type FactoryProtectedOpts<TAuth, TContract extends AnyContract> = {
     access?: 'protected';
     security?: InheritedSecurity<TAuth, AfterAuthorizationRequest<TContract>>;
-    errors?: HandlerErrorMappers;
 };
 
 type FactoryOptionalOpts<TAuth, TContract extends AnyContract> = {
     access?: 'optional';
     security?: InheritedSecurity<TAuth, AfterAuthorizationRequest<TContract>>;
-    errors?: HandlerErrorMappers;
 };
 
 type FactoryPublicOverrideOpts = {
@@ -709,17 +698,17 @@ interface PublicFactory {
 // =========================================================================
 
 /**
- * Creates a preconfigured handler factory with default access/security/errors.
+ * Creates a preconfigured handler factory with default access/security.
  *
  * Defaults are shallow-merged with per-handler options. If defaults include
  * `authenticate`, callers do not need to provide it again.
  *
  * Merge rules:
  * - `access` is overridden by per-handler options when provided.
- * - `security` and `errors` are merged by key (callers can override specific fields).
+ * - `security` is merged by key (callers can override specific fields).
  * - Public access cannot define or accept security options.
  *
- * @param defaults - Default access, security, and error mapping settings.
+ * @param defaults - Default access and security settings.
  * @returns A handler factory that enforces the configured defaults.
  *
  * @example
@@ -762,7 +751,7 @@ export function createHandlerFactory<TAuth>(
 ): SecuredFactory<TAuth, 'optional'>;
 
 export function createHandlerFactory<TAuth>(
-    defaults: { access: 'public'; security?: never; errors?: never },
+    defaults: { access: 'public'; security?: never },
 ): PublicFactory;
 
 export function createHandlerFactory<TAuth>(): PublicFactory;
@@ -805,7 +794,6 @@ export function createHandlerFactory<TAuth>(
             ...options,
             access: resolvedAccess,
             security: merged.security,
-            errors: merged.errors,
         };
 
         return createHandlerInternal<TContract, TAuth>(contract, handler, mergedOptions);

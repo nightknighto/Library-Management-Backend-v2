@@ -3,6 +3,7 @@ import request from 'supertest';
 import { z } from 'zod';
 import { createContract } from '../../src/core/create-contract.core';
 import { createHandler } from '../../src/core/create-handler.core';
+import { createAuthenticator } from '../../src/core/security.core';
 import { createTestApp, isValidIsoTimestamp } from './test-utils';
 
 describe('createHandler (runtime)', () => {
@@ -112,6 +113,58 @@ describe('createHandler (runtime)', () => {
             success: false,
             error: 'Invalid authentication data',
         });
+    });
+
+    it('fails closed: an authenticator failure renders 401 even for optional access', async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const handler = createHandler(
+            contract,
+            {
+                access: 'optional',
+                security: {
+                    authenticate: async () => {
+                        throw new createHttpError.Unauthorized('Invalid or expired token');
+                    },
+                },
+            },
+            async () => ({ data: { ok: true } }),
+        );
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        expect(response.status).toBe(401);
+        expect(response.body).toEqual({
+            success: false,
+            error: 'Invalid or expired token',
+        });
+    });
+
+    it("uses the authenticator's onMissingCredentials default for protected no-credentials", async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const authenticate = createAuthenticator(async () => null, {
+            onMissingCredentials: () => new createHttpError.Unauthorized('Missing Bearer token'),
+        });
+
+        const handler = createHandler(
+            contract,
+            { access: 'protected', security: { authenticate } },
+            async () => ({ data: { ok: true } }),
+        );
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        expect(response.status).toBe(401);
+        expect(response.body).toEqual({ success: false, error: 'Missing Bearer token' });
     });
 
     it('runs the beforeValidation bucket on the raw request (fail-fast)', async () => {

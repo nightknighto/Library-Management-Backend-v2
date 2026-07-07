@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
     allOf,
     anyOf,
+    createAuthenticator,
     executeAuthenticationStage,
     executeAuthorizationStage,
     mergeHandlerSecurityDefaults,
@@ -14,55 +15,109 @@ describe('security (runtime)', () => {
     const req = {} as Request;
 
     describe('executeAuthenticationStage', () => {
-        it('throws unauthorized when protected and no authenticator', async () => {
+        const req = {} as Request;
+
+        // --- no authenticator configured ---
+        it('throws the framework default 401 when protected and no authenticator', async () => {
+            await expect(
+                executeAuthenticationStage({ req, access: 'protected', security: undefined }),
+            ).rejects.toMatchObject({ statusCode: 401, message: 'Unauthenticated' });
+        });
+
+        it('returns empty auth for optional access without authenticator', async () => {
+            await expect(
+                executeAuthenticationStage({ req, access: 'optional', security: undefined }),
+            ).resolves.toEqual({});
+        });
+
+        // --- absence (null) ---
+        it('throws the framework default 401 when authenticator returns null for protected', async () => {
             await expect(
                 executeAuthenticationStage({
                     req,
                     access: 'protected',
-                    security: undefined,
-                    errors: undefined,
+                    security: { authenticate: async () => null },
                 }),
-            ).rejects.toMatchObject({ statusCode: 401 });
+            ).rejects.toMatchObject({ statusCode: 401, message: 'Unauthenticated' });
         });
 
-        it('returns empty auth for optional access without authenticate', async () => {
-            const result = await executeAuthenticationStage({
-                req,
-                access: 'optional',
-                security: undefined,
-                errors: undefined,
+        it('uses the authenticator onMissingCredentials default when it returns null for protected', async () => {
+            const auth = createAuthenticator(async () => null, {
+                onMissingCredentials: () => new createHttpError.Unauthorized('Missing Bearer token'),
             });
-
-            expect(result).toEqual({});
+            await expect(
+                executeAuthenticationStage({ req, access: 'protected', security: { authenticate: auth } }),
+            ).rejects.toMatchObject({ statusCode: 401, message: 'Missing Bearer token' });
         });
 
-        it('throws when authenticate returns null for protected access', async () => {
+        it('falls back to the framework default when authenticator has no onMissingCredentials', async () => {
+            const auth = createAuthenticator(async () => null);
+            await expect(
+                executeAuthenticationStage({ req, access: 'protected', security: { authenticate: auth } }),
+            ).rejects.toMatchObject({ statusCode: 401, message: 'Unauthenticated' });
+        });
+
+        it('accepts null auth for optional access (anonymous)', async () => {
+            await expect(
+                executeAuthenticationStage({
+                    req,
+                    access: 'optional',
+                    security: { authenticate: async () => null },
+                }),
+            ).resolves.toEqual({});
+        });
+
+        // --- success ---
+        it('flows the auth context for protected access', async () => {
             await expect(
                 executeAuthenticationStage({
                     req,
                     access: 'protected',
-                    security: {
-                        authenticate: async () => null,
-                    },
-                    errors: undefined,
+                    security: { authenticate: async () => ({ userId: 'u-1' }) },
                 }),
-            ).rejects.toMatchObject({ statusCode: 401 });
+            ).resolves.toEqual({ auth: { userId: 'u-1' } });
         });
 
-        it('accepts null auth for optional access', async () => {
-            const result = await executeAuthenticationStage({
-                req,
-                access: 'optional',
-                security: {
-                    authenticate: async () => null,
-                },
-                errors: undefined,
-            });
-
-            expect(result).toEqual({});
+        it('flows the auth context for optional access', async () => {
+            await expect(
+                executeAuthenticationStage({
+                    req,
+                    access: 'optional',
+                    security: { authenticate: async () => ({ userId: 'u-1' }) },
+                }),
+            ).resolves.toEqual({ auth: { userId: 'u-1' } });
         });
 
-        it('validates auth context against authSchema', async () => {
+        // --- failure (throw) — fail-closed in BOTH access modes ---
+        it('propagates an authenticator failure for protected access', async () => {
+            const failing = async () => {
+                throw new createHttpError.Unauthorized('Invalid or expired token');
+            };
+            await expect(
+                executeAuthenticationStage({ req, access: 'protected', security: { authenticate: failing } }),
+            ).rejects.toMatchObject({ statusCode: 401, message: 'Invalid or expired token' });
+        });
+
+        it('propagates an authenticator failure for OPTIONAL access (fail-closed, not swallowed)', async () => {
+            const failing = async () => {
+                throw new createHttpError.Unauthorized('Invalid or expired token');
+            };
+            await expect(
+                executeAuthenticationStage({ req, access: 'optional', security: { authenticate: failing } }),
+            ).rejects.toMatchObject({ statusCode: 401, message: 'Invalid or expired token' });
+        });
+
+        it('propagates a non-HttpError authenticator throw unchanged', async () => {
+            const failing = async () => {
+                throw new Error('boom');
+            };
+            await expect(
+                executeAuthenticationStage({ req, access: 'optional', security: { authenticate: failing } }),
+            ).rejects.toThrow('boom');
+        });
+
+        // --- authSchema (out of scope; fixed default) ---
+        it('throws the fixed default when authSchema parse fails', async () => {
             await expect(
                 executeAuthenticationStage({
                     req,
@@ -71,24 +126,39 @@ describe('security (runtime)', () => {
                         authenticate: async () => ({ email: 'nope' }),
                         authSchema: z.object({ email: z.string().email() }),
                     },
-                    errors: undefined,
                 }),
             ).rejects.toMatchObject({ statusCode: 401, message: 'Invalid authentication data' });
         });
+    });
 
-        it('uses unauthenticated error mapper when provided', async () => {
-            await expect(
-                executeAuthenticationStage({
-                    req,
-                    access: 'protected',
-                    security: {
-                        authenticate: async () => null,
-                    },
-                    errors: {
-                        unauthenticated: () => new createHttpError.Unauthorized('Custom auth'),
-                    },
-                }),
-            ).rejects.toMatchObject({ statusCode: 401, message: 'Custom auth' });
+    describe('createAuthenticator', () => {
+        const req = { headers: {} } as Request;
+
+        it('returns a callable authenticator that runs the callback', async () => {
+            const auth = createAuthenticator(async () => ({ userId: 'u-1' }));
+            expect(typeof auth).toBe('function');
+            await expect(auth(req)).resolves.toEqual({ userId: 'u-1' });
+        });
+
+        it('attaches onMissingCredentials when provided', () => {
+            const onMissing = () => new createHttpError.Unauthorized('Missing Bearer token');
+            const auth = createAuthenticator(async () => null, { onMissingCredentials: onMissing });
+            expect(auth.onMissingCredentials).toBe(onMissing);
+        });
+
+        it('omits onMissingCredentials when not provided', () => {
+            const auth = createAuthenticator(async () => null);
+            expect(auth.onMissingCredentials).toBeUndefined();
+        });
+
+        it('preserves absence vs failure semantics through the factory', async () => {
+            const auth = createAuthenticator(async (r: Request) => {
+                if (!r.headers.authorization) return null; // absence
+                throw new createHttpError.Unauthorized('bad token'); // failure
+            });
+            await expect(auth(req)).resolves.toBeNull(); // absence → null
+            const reqWithHeader = { ...req, headers: { authorization: 'Bearer x' } } as Request;
+            await expect(auth(reqWithHeader)).rejects.toMatchObject({ statusCode: 401 }); // failure → throw
         });
     });
 
@@ -375,15 +445,12 @@ describe('security (runtime)', () => {
     });
 
     describe('mergeHandlerSecurityDefaults', () => {
-        it('shallow merges access/security/errors', () => {
+        it('shallow merges access/security', () => {
             const merged = mergeHandlerSecurityDefaults(
                 {
                     access: 'protected',
                     security: {
                         authenticate: async () => ({ userId: '1' }),
-                    },
-                    errors: {
-                        unauthenticated: () => new createHttpError.Unauthorized('Auth'),
                     },
                 },
                 {
@@ -397,7 +464,6 @@ describe('security (runtime)', () => {
             expect(merged.access).toBe('optional');
             expect(merged.security?.authenticate).toBeDefined();
             expect(merged.security?.authorize).toBeDefined();
-            expect(merged.errors?.unauthenticated).toBeDefined();
         });
 
         it('inherits a factory authorize bucket the handler omits', () => {

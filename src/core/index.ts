@@ -18,17 +18,16 @@ export { createRequestSchema } from './create-request-schema.core.ts';
 export { buildPaginationMeta, buildSuccessResponsePayload } from './response-builder.core.ts';
 export { sanitizeResponse } from './sanitize-response.core.ts';
 
-export { allOf, anyOf, not } from './security.core.ts';
+export { allOf, anyOf, createAuthenticator, not } from './security.core.ts';
 export type {
     AccessMode,
-    AuthErrorMapper,
     Authenticator,
+    AuthenticatorOptions,
     AuthorizationConfig,
     Authorizer,
     ContractResponse,
     CookieOperation,
     ErrorResponse,
-    HandlerErrorMappers,
     HandlerOptions,
     HandlerSuccessResult,
     MaybePromise,

@@ -1,7 +1,7 @@
 import createHttpError from 'http-errors';
 import z from 'zod';
-import type { Authenticator, Authorizer } from '../core/index.ts';
-import { allOf, anyOf, createHandlerFactory } from '../core/index.ts';
+import type { Authorizer } from '../core/index.ts';
+import { allOf, anyOf, createAuthenticator, createHandlerFactory } from '../core/index.ts';
 import { UserRepository } from '../features/users/users.repository.ts';
 import { JwtUtils } from '../utils/jwt.util.ts';
 
@@ -13,27 +13,30 @@ export const JwtAuthSchema = z.object({
     email: z.string().email(),
 });
 
-export const authenticateJwt: Authenticator<JwtAuthContext> = async (req) => {
-    const authorizationHeader = req.headers.authorization;
-    if (!authorizationHeader?.startsWith('Bearer ')) {
-        return null;
-    }
+export const authenticateJwt = createAuthenticator<JwtAuthContext>(
+    async (req) => {
+        const authorizationHeader = req.headers.authorization;
+        if (!authorizationHeader?.startsWith('Bearer ')) {
+            return null;
+        }
 
-    const token = authorizationHeader.split(' ')[1];
-    if (!token) {
-        return null;
-    }
+        const token = authorizationHeader.split(' ')[1];
+        if (!token) {
+            return null;
+        }
 
-    let payload: ReturnType<typeof JwtUtils.verifyToken>;
-    try {
-        payload = JwtUtils.verifyToken(token);
-    } catch (_e) {
-        throw createHttpError.Unauthorized('Invalid or expired token');
-    }
+        let payload: ReturnType<typeof JwtUtils.verifyToken>;
+        try {
+            payload = JwtUtils.verifyToken(token);
+        } catch {
+            throw createHttpError.Unauthorized('Invalid or expired token');
+        }
 
-    const existingUser = await UserRepository.getUser(payload.email);
-    return existingUser;
-};
+        const existingUser = await UserRepository.getUser(payload.email);
+        return existingUser;
+    },
+    { onMissingCredentials: () => new createHttpError.Unauthorized('Authentication required') },
+);
 
 export const hasRegisteredUser: Authorizer<JwtAuthContext> = async ({ auth }) => {
     const existingUser = await UserRepository.getUser(auth.email);
@@ -121,9 +124,6 @@ export const createJwtAuthHandler = createHandlerFactory<JwtAuthContext>({
         authenticate: authenticateJwt,
         authSchema: JwtAuthSchema,
     },
-    errors: {
-        unauthenticated: () => new createHttpError.Unauthorized('Authentication required'),
-    },
 });
 
 export const createJwtAuthHandler2 = createHandlerFactory({
@@ -133,8 +133,5 @@ export const createJwtAuthHandler2 = createHandlerFactory({
         authSchema: z.object({
             email: z.string().email(),
         }),
-    },
-    errors: {
-        unauthenticated: () => new createHttpError.Unauthorized('Authentication required'),
     },
 });
