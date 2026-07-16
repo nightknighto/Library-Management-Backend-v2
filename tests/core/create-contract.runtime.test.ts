@@ -410,4 +410,112 @@ describe('createContract (runtime)', () => {
         });
         expect(valid.query).toEqual({ verbose: false });
     });
+
+    // ------------------------------------------------------------------
+    // Fragment accessors: .bodySchema / .paramsSchema / .responseDataSchema
+    // ------------------------------------------------------------------
+    describe('fragment accessors', () => {
+        it('exposes body/params/responseData schemas that parse the same as the request field', () => {
+            const contract = createContract({
+                request: {
+                    body: { name: z.string(), age: z.number().int() },
+                    params: { id: z.string().uuid() },
+                },
+                response: z.object({ ok: z.boolean() }),
+            });
+
+            // bodySchema parses the same as the body field the request validates
+            expect(contract.bodySchema.parse({ name: 'Alice', age: 30 })).toEqual({
+                name: 'Alice',
+                age: 30,
+            });
+            // age must be an integer, so a non-integer is invalid
+            expect(() => contract.bodySchema.parse({ name: 'Alice', age: 1.5 })).toThrow();
+
+            // paramsSchema parses the same as the params field
+            expect(
+                contract.paramsSchema.parse({ id: '123e4567-e89b-12d3-a456-426614174000' }),
+            ).toEqual({ id: '123e4567-e89b-12d3-a456-426614174000' });
+            expect(() => contract.paramsSchema.parse({ id: 'nope' })).toThrow();
+
+            // responseDataSchema parses the data, not the envelope
+            expect(contract.responseDataSchema.parse({ ok: true })).toEqual({ ok: true });
+        });
+
+        it('responseDataSchema is the data schema, not the success/error envelope', () => {
+            const contract = createContract({
+                request: {},
+                response: z.object({ id: z.string() }),
+            });
+
+            const envelope = {
+                success: true as const,
+                data: { id: '1' },
+                meta: { timestamp: new Date().toISOString() },
+            };
+
+            // the full envelope validates against .response
+            expect(contract.response.parse(envelope).success).toBe(true);
+
+            // the envelope is NOT data, so it must fail against responseDataSchema
+            expect(() => contract.responseDataSchema.parse(envelope)).toThrow();
+            // ...but the data value alone parses
+            expect(contract.responseDataSchema.parse({ id: '1' })).toEqual({ id: '1' });
+        });
+
+        it('a contract built from another contract accessors produces an identical response envelope', () => {
+            const source = createContract({
+                request: {
+                    body: { title: z.string() },
+                    params: { isbn: z.string() },
+                },
+                response: z.object({ id: z.string(), title: z.string() }),
+            });
+
+            const reused = createContract({
+                request: {
+                    body: source.bodySchema.partial(),
+                    params: source.paramsSchema,
+                },
+                response: source.responseDataSchema,
+            });
+
+            const envelope = {
+                success: true as const,
+                data: { id: '1', title: 'Reused' },
+                meta: { timestamp: new Date().toISOString() },
+            };
+
+            // both contracts accept the same response envelope
+            const sourceParsed = source.response.parse(envelope);
+            const reusedParsed = reused.response.parse(envelope);
+            expect(sourceParsed).toEqual(reusedParsed);
+
+            // and both reject a mismatched data shape
+            expect(() =>
+                source.response.parse({ ...envelope, data: { id: '1' /* missing title */ } }),
+            ).toThrow();
+            expect(() =>
+                reused.response.parse({ ...envelope, data: { id: '1' /* missing title */ } }),
+            ).toThrow();
+        });
+
+        it('exposes accessors for a paginated contract (authored query excluded from the accessors by design)', () => {
+            const contract = createContract({
+                request: {
+                    body: { q: z.string() },
+                },
+                response: z.array(z.object({ isbn: z.string() })),
+                pagination: { response: true },
+            });
+
+            // bodySchema parses the authored body
+            expect(contract.bodySchema.parse({ q: 'test' })).toEqual({ q: 'test' });
+            // responseDataSchema is the data array, not the envelope
+            expect(contract.responseDataSchema.parse([{ isbn: '978-0' }])).toEqual([
+                { isbn: '978-0' },
+            ]);
+            expect(contract.pagination?.response).toBe(true);
+        });
+    });
 });

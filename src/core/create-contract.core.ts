@@ -125,6 +125,35 @@ type BuiltRequestSchema<TRequest extends RequestSchemaInput> = z.ZodObject<
 >;
 
 /**
+ * Extracts the body schema from a built request schema type, for use as the
+ * `.bodySchema` accessor on `Contract`.
+ *
+ * For real contracts, `TRequest` is the `z.ZodObject` built by
+ * `BuiltRequestSchema`, so the body field is extracted directly. When `TRequest`
+ * is opaque (the `AnyContract` base form), the accessor falls back to
+ * `z.ZodTypeAny` — the widest Zod schema type, so every concrete body schema
+ * remains assignable to it.
+ */
+type RequestShapeBody<TRequest extends z.ZodTypeAny> = TRequest extends z.ZodObject<infer Shape>
+    ? Shape extends { body: infer B extends z.ZodType }
+        ? B
+        : z.ZodTypeAny
+    : z.ZodTypeAny;
+
+/**
+ * Extracts the params schema from a built request schema type, for use as the
+ * `.paramsSchema` accessor on `Contract`.
+ *
+ * Same extraction/fallback behavior as {@link RequestShapeBody}, for the params
+ * field.
+ */
+type RequestShapeParams<TRequest extends z.ZodTypeAny> = TRequest extends z.ZodObject<infer Shape>
+    ? Shape extends { params: infer P extends z.ZodType }
+        ? P
+        : z.ZodTypeAny
+    : z.ZodTypeAny;
+
+/**
  * Defaults applied when pagination.request injects page/limit.
  */
 type PaginationRequestDefaults = {
@@ -322,6 +351,60 @@ export type Contract<
      * ```
      */
     response: ContractResponseSchema<TResponseData, TPaginated>;
+
+    /**
+     * Zod schema for the request body fragment, extracted from the built request.
+     *
+     * This is the body schema that is actually validated (the same value
+     * reachable inside `.request`). Exposed so the body fragment of one contract
+     * can be reused when authoring another. Round-trips directly back into
+     * `createContract`'s `request.body` field.
+     *
+     * Compose with Zod methods to build subsets/supersets (e.g. `.partial()`,
+     * `.extend()`, `.pick()`, `.omit()`).
+     *
+     * @example
+     * const UpdateContract = createContract({
+     *   request: {
+     *     body: CreateContract.bodySchema.partial(),
+     *     params: { id: z.string() },
+     *   },
+     *   response: CreateContract.responseDataSchema,
+     * });
+     */
+    bodySchema: RequestShapeBody<TRequest>;
+
+    /**
+     * Zod schema for the route params fragment, extracted from the built request.
+     *
+     * This is the params schema that is actually validated (the same value
+     * reachable inside `.request`). Exposed so the params fragment of one
+     * contract can be reused when authoring another. Round-trips directly back
+     * into `createContract`'s `request.params` field.
+     *
+     * @example
+     * const DeleteContract = createContract({
+     *   request: { params: GetContract.paramsSchema },
+     *   response: z.void(),
+     * });
+     */
+    paramsSchema: RequestShapeParams<TRequest>;
+
+    /**
+     * Zod schema for the response data fragment you authored.
+     *
+     * This is the raw data schema passed to `createContract`'s `response` field —
+     * NOT the full success/error envelope that `.response` holds. Exposed so the
+     * response data shape of one contract can be reused when authoring another.
+     * Round-trips directly back into `createContract`'s `response` field.
+     *
+     * @example
+     * const ImportContract = createContract({
+     *   request: { body: { source: z.string() } },
+     *   response: CreateContract.responseDataSchema,
+     * });
+     */
+    responseDataSchema: TResponseData;
 
     /**
      * Pagination configuration for this contract.
@@ -605,17 +688,31 @@ export function createContract({
     const requestSchema = createRequestSchema(requestShape);
     const responseSchema = createContractResponseSchema(response, responsePaginated);
 
+    // Retain the authored fragments so they can be reused when authoring other
+    // contracts (the .bodySchema / .paramsSchema / .responseDataSchema accessors).
+    // bodySchema/paramsSchema are read from the built request's shape — exactly
+    // what createRequestSchema validates. responseDataSchema is the raw response
+    // data schema, not the built envelope.
+    const bodySchema = requestSchema.shape.body;
+    const paramsSchema = requestSchema.shape.params;
+
     if (pagination) {
         return {
             request: requestSchema,
             response: responseSchema,
             pagination,
+            bodySchema,
+            paramsSchema,
+            responseDataSchema: response,
         };
     }
 
     return {
         request: requestSchema,
         response: responseSchema,
+        bodySchema,
+        paramsSchema,
+        responseDataSchema: response,
     };
 }
 

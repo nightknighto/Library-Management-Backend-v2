@@ -41,11 +41,9 @@ export const CreateBookContract = createContract({
 
 export const UpdateBookContract = createContract({
     request: {
-        body: {
-            title: titleSchema.optional(),
-            shelf: shelfSchema.optional(),
-            total_quantity: totalQuantitySchema.optional(),
-        },
+        // Update body reuses Create's body (isbn is a param here, not a body field),
+        // dropping isbn and making the remaining fields optional.
+        body: CreateBookContract.bodySchema.omit({ isbn: true }).partial(),
         params: {
             isbn: isbnSchema,
         },

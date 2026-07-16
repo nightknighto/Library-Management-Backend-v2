@@ -258,3 +258,104 @@ createContract({
     },
     response: z.string(),
 });
+
+// ============================================================================
+// Fragment accessors: .bodySchema / .paramsSchema / .responseDataSchema
+// ============================================================================
+// These accessors expose the authored fragments of a contract so they can be
+// reused when authoring another contract. They must:
+//  - infer exact types for real contracts (below),
+//  - stay non-`any` for omitted fields,
+//  - round-trip back into createContract (the core reuse capability),
+//  - keep responseDataSchema distinct from the full .response envelope.
+
+// --- Exact accessor data types for a plain-object body/params contract.
+//     Asserted via z.infer (config-agnostic) to match the file's existing style;
+//     the schema-type identity is checked separately against request.shape.body. ---
+type _accessorBodyDataExact = Expect<
+    Equal<z.infer<typeof CreateBookContract.bodySchema>, { title: string; copies: number }>
+>;
+type _accessorParamsDataExact = Expect<
+    Equal<z.infer<typeof CreateBookContract.paramsSchema>, { isbn: string }>
+>;
+type _accessorResponseDataDataExact = Expect<
+    Equal<z.infer<typeof CreateBookContract.responseDataSchema>, { id: string; title: string }>
+>;
+
+// --- bodySchema / paramsSchema are the SAME schema type as the corresponding
+//     field of the built request (the source of truth for "what is validated"). ---
+type _accessorBodyIsRequestBody = Expect<
+    Equal<typeof CreateBookContract.bodySchema, typeof CreateBookContract.request.shape.body>
+>;
+type _accessorParamsIsRequestParams = Expect<
+    Equal<typeof CreateBookContract.paramsSchema, typeof CreateBookContract.request.shape.params>
+>;
+
+// --- ZodObject-body and discriminated-union-body: bodySchema passes the
+//     authored schema through unchanged (the same type the request holds). ---
+type _accessorZodObjBody = Expect<
+    Equal<
+        typeof ZodObjectBodyContract.bodySchema,
+        typeof ZodObjectBodyContract.request.shape.body
+    >
+>;
+type _accessorDuBodyPassthrough = Expect<
+    Equal<
+        typeof DiscriminatedUnionBodyContract.bodySchema,
+        typeof DiscriminatedUnionBodyContract.request.shape.body
+    >
+>;
+
+// --- Omitted fields stay non-`any` ---
+// ListBooksContract defines only a query; body/params are omitted.
+type _accessorOmittedBodyNotAny = ExpectFalse<IsAny<typeof ListBooksContract.bodySchema>>;
+type _accessorOmittedParamsNotAny = ExpectFalse<IsAny<typeof ListBooksContract.paramsSchema>>;
+
+// --- responseDataSchema is the DATA schema, not the full envelope ---
+// Passing it where the envelope (.response) is expected must fail.
+// @ts-expect-error responseDataSchema is data, not the success/error envelope union
+const _envelopeIsNotData: typeof CreateBookContract.response = CreateBookContract.responseDataSchema;
+void _envelopeIsNotData;
+
+// --- Core reuse capability: round-trip ---
+// A contract built from another contract's accessors (passed through
+// untransformed) infers the same request body/params and response data shapes as
+// the source contract. Comparing inferred output types isolates the accessor's
+// contribution from Zod-internal schema-instance differences (strict/strip,
+// coerce) that are irrelevant to reuse.
+const ReusedFromAccessorsContract = createContract({
+    request: {
+        body: CreateBookContract.bodySchema,
+        params: CreateBookContract.paramsSchema,
+    },
+    response: CreateBookContract.responseDataSchema,
+});
+
+type _roundTripBodyEqual = Expect<
+    Equal<
+        z.infer<typeof ReusedFromAccessorsContract.request>['body'],
+        z.infer<typeof CreateBookContract.request>['body']
+    >
+>;
+type _roundTripParamsEqual = Expect<
+    Equal<
+        z.infer<typeof ReusedFromAccessorsContract.request>['params'],
+        z.infer<typeof CreateBookContract.request>['params']
+    >
+>;
+type _roundTripResponseDataEqual = Expect<
+    Equal<
+        z.infer<typeof ReusedFromAccessorsContract.responseDataSchema>,
+        z.infer<typeof CreateBookContract.responseDataSchema>
+    >
+>;
+
+// Composition via Zod methods on the accessor compiles (subset/superset reuse):
+createContract({
+    request: { body: CreateBookContract.bodySchema.partial() },
+    response: CreateBookContract.responseDataSchema,
+});
+createContract({
+    request: { body: CreateBookContract.bodySchema.extend({ author: z.string() }) },
+    response: CreateBookContract.responseDataSchema,
+});
