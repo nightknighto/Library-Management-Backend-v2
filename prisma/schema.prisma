@@ -5,12 +5,11 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["typedSql"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -52,8 +51,8 @@ model Borrow {
   user User @relation(fields: [user_email], references: [email], onDelete: Cascade)
   book Book @relation(fields: [book_isbn], references: [isbn], onDelete: Cascade)
 
-  @@index([user_email], type: Hash)
-  @@index([book_isbn], type: Hash)
+  @@index([user_email])
+  @@index([book_isbn])
   @@index([due_date, return_date])
   @@index([borrow_date])
   @@map("borrows")

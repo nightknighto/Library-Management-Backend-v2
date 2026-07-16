@@ -1,5 +1,4 @@
 import type { Prisma } from '@prisma/client';
-import { getBookAvailableQuantity } from '@prisma/client/sql';
 import { prisma } from '../../lib/prisma.ts';
 
 async function createBook(
@@ -43,10 +42,11 @@ async function getAllBooks({
     author?: string;
     isbn?: string;
 }) {
+    // SQLite's LIKE is ASCII-case-insensitive, so no `mode: 'insensitive'` is needed.
     const where: Prisma.BookWhereInput = {
-        ...(title && { title: { contains: title, mode: 'insensitive' } }),
-        ...(author && { author: { contains: author, mode: 'insensitive' } }),
-        ...(isbn && { isbn: { contains: isbn, mode: 'insensitive' } }),
+        ...(title && { title: { contains: title } }),
+        ...(author && { author: { contains: author } }),
+        ...(isbn && { isbn: { contains: isbn } }),
     };
 
     const skip = page && limit ? (page - 1) * limit : undefined;
@@ -71,9 +71,9 @@ async function countBooks({
     isbn?: string;
 }) {
     const where: Prisma.BookWhereInput = {
-        ...(title && { title: { contains: title, mode: 'insensitive' } }),
-        ...(author && { author: { contains: author, mode: 'insensitive' } }),
-        ...(isbn && { isbn: { contains: isbn, mode: 'insensitive' } }),
+        ...(title && { title: { contains: title } }),
+        ...(author && { author: { contains: author } }),
+        ...(isbn && { isbn: { contains: isbn } }),
     };
 
     const totalCount = await prisma.book.count({
@@ -84,8 +84,17 @@ async function countBooks({
 }
 
 async function getBookByIsbn(isbn: string) {
-    const book = await prisma.$queryRawTyped(getBookAvailableQuantity(isbn));
-    return book[0];
+    const book = await prisma.book.findUnique({ where: { isbn } });
+    if (!book) {
+        return undefined;
+    }
+
+    // Count borrows that are still active (not returned) to derive availability.
+    const activeBorrows = await prisma.borrow.count({
+        where: { book_isbn: isbn, return_date: null },
+    });
+
+    return { ...book, available_quantity: book.total_quantity - activeBorrows };
 }
 
 async function updateBook(

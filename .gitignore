@@ -6,3 +6,9 @@ coverage
 /generated/prisma
 .vscode
 
+# SQLite database files and journals
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+

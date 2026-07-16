@@ -29,9 +29,8 @@ export the borrowing process data in CSV and JSON formats.
 2. Exports all overdue borrows of the last month.
 3. Exports all borrowing processes of the last month.
 4. Implement rate limiting in some endpoints to prevent abuse.
-5. Dockerizing the application using docker-compose.
-6. Implement very basic authentication for the API.
-7. Add unit tests for one module
+5. Implement very basic authentication for the API.
+6. Add unit tests for one module
 
 ## Database Schema
 
@@ -51,23 +50,27 @@ For detailed endpoint documentation, refer to [endpoints.md](./endpoints.md)
 
 ## Development
 
-The project has Docker Compose setup for easy development and testing.
+The project uses a local SQLite database (no external server required).
 
-1. Ensure you have Docker and Docker Compose installed on your machine.
-2. Run the following command to start database only first (very important):
-
-   ```bash
-   docker-compose up -d database
-   ```
-
-3. Run the following command to start the backend service:
+1. Install dependencies:
 
    ```bash
-   docker-compose up -d backend
+   pnpm install
    ```
 
-> Database must be started first and running before backend starts building.
-This is because the backend pushes the schema and seeds the database during build process.
+2. Generate the Prisma client, create the SQLite database, and seed it:
+
+   ```bash
+   pnpm prisma:generate
+   pnpm prisma:push
+   pnpm prisma:seed
+   ```
+
+3. Start the dev server:
+
+   ```bash
+   pnpm dev
+   ```
 
 ### Testing
 

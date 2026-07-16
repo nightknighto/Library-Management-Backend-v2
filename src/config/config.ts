@@ -6,7 +6,6 @@ const reqString = (message: string) =>
             error: (issue) => (issue.input === undefined ? message : undefined),
         })
         .min(1, { message });
-const reqUrl = (message: string) => z.url({ message });
 
 const defaultPort = 3001;
 
@@ -18,12 +17,12 @@ const defaultPort = 3001;
  *
  * @property {string} jwtSecret - Required JWT secret key for token signing and verification
  * @property {number} port - Server port number, defaults to defaultPort if not specified
- * @property {string} databaseURL - Required valid URL for database connection
+ * @property {string} databaseURL - Required database connection string (e.g. a SQLite `file:` path)
  */
 const configSchema = z.object({
     jwtSecret: reqString('JWT_SECRET is required'),
     port: z.coerce.number().prefault(defaultPort),
-    databaseURL: reqUrl('DATABASE_URL must be a valid URL'),
+    databaseURL: reqString('DATABASE_URL is required'),
 });
 
 const rawConfig = {
