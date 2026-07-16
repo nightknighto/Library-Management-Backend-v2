@@ -696,3 +696,74 @@ type _onMissingTyped = Expect<
         (() => createHttpError.HttpError) | undefined
     >
 >;
+
+// =========================================================================
+// Capability: .extend() — factory-extends-factory (single-axis coverage)
+//
+// Multi-axis behavior (chaining, access transitions, TAuth threading across
+// layers) lives in the interaction lane. Here we assert each axis in isolation.
+// =========================================================================
+
+const _protectedBase = createHandlerFactory<AuthContext>({
+    access: 'protected',
+    security: {
+        authenticate: async () => ({ userId: 'u-1', role: 'staff' }),
+    },
+});
+
+// Capability: .extend exists on a secured factory and returns a factory of the
+// same kind (TAuth threaded from the parent, access inherited when omitted).
+const _derivedInheritAccess = _protectedBase.extend();
+// Derived factory is structurally assignable to the parent factory type.
+type _derivedInheritAccessExtendsParent = Expect<Extends<typeof _derivedInheritAccess, typeof _protectedBase>>;
+
+// Capability: a derived factory produces handlers whose `auth` is the parent's
+// AuthContext (authenticate transitively locked → TAuth is inherited, not lost).
+_derivedInheritAccess(
+    UpdateBookContract,
+    async ({ auth }) => {
+        type _authIsInherited = Expect<Equal<typeof auth, AuthContext>>;
+        return { data: { updated: true } };
+    },
+);
+
+// Capability: child may move access between protected and optional.
+const _derivedOptional = _protectedBase.extend({ access: 'optional' });
+const _derivedProtected = _derivedOptional.extend({ access: 'protected' });
+void _derivedOptional;
+void _derivedProtected;
+
+// Capability: authenticate is transitively locked — the extension type does
+// not expose a `security.authenticate` key on a secured factory. The nested
+// directive targets the actual error site (the `authenticate` property).
+_protectedBase.extend({
+    security: {
+        // @ts-expect-error a secured factory's .extend may not (re)declare authenticate
+        authenticate: async () => ({ userId: 'rogue', role: 'staff' as const }),
+    },
+});
+
+// Capability: access may never widen to public (would erase the security pipeline).
+// @ts-expect-error .extend on a secured factory rejects access: 'public'
+_protectedBase.extend({ access: 'public' });
+
+// Capability: public factory .extend is an upgrade — introduces TAuth as the
+// first setter and yields a secured factory.
+const _publicBase = createHandlerFactory<AuthContext>({ access: 'public' });
+const _upgradedFromPublic = _publicBase.extend({
+    access: 'protected',
+    security: {
+        authenticate: async (): Promise<AuthContext> => ({ userId: 'u-upgraded', role: 'staff' }),
+    },
+});
+_upgradedFromPublic(
+    UpdateBookContract,
+    async ({ auth }) => {
+        type _authIntroducedByUpgrade = Expect<Equal<typeof auth, AuthContext>>;
+        return { data: { updated: true } };
+    },
+);
+
+// Capability: public factory .extend requires the upgrade (authenticate + non-public access).
+// @ts-expect-error public factory .extend rejects access: 'public' (no upgrade)
+_publicBase.extend({ access: 'public' });

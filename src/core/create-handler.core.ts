@@ -606,6 +606,51 @@ type HandlerFactoryDefaults<TAuthContext> = {
     security?: SecurityOptions<TAuthContext, Request>;
 };
 
+/**
+ * Options accepted by {@link SecuredFactory.extend} — an already-secured factory's
+ * `authenticate` is transitively locked and may not be re-declared; only
+ * `authorize` buckets may be layered on, and `access` may move between
+ * `protected`/`optional` but never widen to `public` (which would erase the
+ * parent's security pipeline).
+ * @typeParam TAuth - Auth context inherited from the parent factory.
+ */
+type SecuredFactoryExtension<TAuth> = {
+    /**
+     * New default access for the derived factory. Omit to inherit the parent's.
+     * `'public'` is intentionally excluded: a derived factory cannot erase the
+     * parent's security baseline.
+     */
+    access?: Exclude<AccessMode, 'public'>;
+    /**
+     * Authorize buckets to concatenate additively after the parent's buckets.
+     * `authenticate` is inherited from the parent and cannot be set here.
+     */
+    security?: { authorize?: AuthorizationConfig<TAuth, Request> };
+};
+
+/**
+ * Options accepted by {@link PublicFactory.extend} — a public factory has no
+ * authenticator, so extending it is an *upgrade*: the caller supplies the
+ * `authenticate` ("first setter") and may layer `authorize`. After this, the
+ * returned secured factory locks `authenticate` for its own descendants.
+ * @typeParam TAuth - Auth context introduced by this upgrade.
+ */
+type PublicFactoryUpgrade<TAuth> = {
+    /**
+     * New (secured) default access. Required: a public factory must be upgraded
+     * to `protected` or `optional` to gain a security pipeline.
+     */
+    access: Exclude<AccessMode, 'public'>;
+    /**
+     * Authenticator (first setter) plus optional authorize buckets for the
+     * upgraded factory.
+     */
+    security: {
+        authenticate: Authenticator<TAuth>;
+        authorize?: AuthorizationConfig<TAuth, Request>;
+    };
+};
+
 type FactoryProtectedOpts<TAuth, TContract extends AnyContract> = {
     access?: 'protected';
     security?: InheritedSecurity<TAuth, AfterAuthorizationRequest<TContract>>;
@@ -657,6 +702,51 @@ interface SecuredFactory<
         options: FactoryPublicOverrideOpts,
         handler: HandlerFn<TContract, never, 'public', TResult>,
     ): RequestHandler;
+
+    /**
+     * Derives a new factory that layers authorize buckets on top of this
+     * factory's baseline, producing another first-class factory that is itself
+     * extendable and handler-producible.
+     *
+     * Merge semantics:
+     * - **authorize buckets concatenate additively**, parent-first (this
+     *   factory's `beforeValidation`/`afterValidation` run before the child's).
+     *   Re-declaring an authorizer at both layers runs it twice — no dedup.
+     * - **authenticate is transitively locked**: inherited from this factory,
+     *   never overridable by a descendant. Changing identity requires a sibling
+     *   factory built from the root, not a child.
+     * - **access may move between `protected` and `optional`, but never widen to
+     *   `public`** (which would erase the parent's security pipeline). Omit
+     *   `access` to inherit this factory's.
+     *
+     * The result is flattened — indistinguishable from a root factory built with
+     * the same merged defaults — so chains of arbitrary depth are well-defined.
+     *
+     * @param ext - Authorize buckets to concatenate and an optional access
+     *   transition. `authenticate` must not appear (it is locked).
+     * @returns A derived factory with the same `TAuth` and the (possibly
+     *   transitioned) access.
+     *
+     * @example
+     * const jwtFactory = createHandlerFactory({
+     *   access: "protected",
+     *   security: { authenticate: authenticateJwt },
+     * });
+     *
+     * // Every adminFactory handler authenticates via JWT AND passes isAdmin.
+     * const adminFactory = jwtFactory.extend({
+     *   security: { authorize: { afterValidation: [({ auth }) => auth.role === "admin"] } },
+     * });
+     *
+     * @example
+     * // Optional-access child of a protected factory — same pipeline, guests allowed.
+     * const optionalFactory = jwtFactory.extend({ access: "optional" });
+     */
+    extend(ext: { access: 'protected' } & SecuredFactoryExtension<TAuth>): SecuredFactory<TAuth, 'protected'>;
+    /** @inheritdoc */
+    extend(ext: { access: 'optional' } & SecuredFactoryExtension<TAuth>): SecuredFactory<TAuth, 'optional'>;
+    /** @inheritdoc */
+    extend(ext?: SecuredFactoryExtension<TAuth>): SecuredFactory<TAuth, TDefaultAccess>;
 }
 
 /**
@@ -686,6 +776,34 @@ interface PublicFactory {
         options: OptionalOpts<TAuth, TContract>,
         handler: HandlerFn<TContract, TAuth, 'optional', TResult>,
     ): RequestHandler;
+
+    /**
+     * Upgrades this public factory to a secured one by supplying an
+     * authenticator — the "first setter" — plus optional authorize buckets.
+     * The returned factory is a regular {@link SecuredFactory}: its `authenticate`
+     * is now locked for its own descendants.
+     *
+     * Use this when a public baseline should gain a security pipeline without
+     * being rebuilt from `createHandlerFactory`. Once upgraded, the pipeline
+     * cannot be erased by further extensions (no descendant may widen back to
+     * `public`).
+     *
+     * @param upgrade - The secured access to adopt and the authenticator that
+     *   introduces `TAuth`. Optional authorize buckets may be layered on.
+     * @returns A secured factory whose `TAuth` is inferred from `upgrade.security.authenticate`.
+     *
+     * @example
+     * const publicFactory = createHandlerFactory({ access: "public" });
+     *
+     * // Upgrade to a protected, JWT-authenticated factory.
+     * const jwtFactory = publicFactory.extend({
+     *   access: "protected",
+     *   security: { authenticate: authenticateJwt },
+     * });
+     */
+    extend<TAuth>(upgrade: { access: 'protected' } & PublicFactoryUpgrade<TAuth>): SecuredFactory<TAuth, 'protected'>;
+    /** @inheritdoc */
+    extend<TAuth>(upgrade: { access: 'optional' } & PublicFactoryUpgrade<TAuth>): SecuredFactory<TAuth, 'optional'>;
 }
 
 // =========================================================================
@@ -751,6 +869,20 @@ interface PublicFactory {
  * auditedFactory(contract, {
  *   security: { authorize: { afterValidation: [requireOwner] } },
  * }, async ({ req, auth }) => ({ data: { id: auth.userId } }));
+ *
+ * @example
+ * // Factories extend other factories via .extend(). Baseline authenticate is
+ * // transitively locked; authorize buckets concatenate; access can move between
+ * // protected/optional but never widen to public.
+ * const jwtFactory = createHandlerFactory({
+ *   access: "protected",
+ *   security: { authenticate: authenticateJwt },
+ * });
+ *
+ * // adminFactory handlers authenticate via JWT AND pass isAdmin.
+ * const adminFactory = jwtFactory.extend({
+ *   security: { authorize: { afterValidation: [({ auth }) => auth.role === "admin"] } },
+ * });
  */
 export function createHandlerFactory<TAuth>(
     defaults: HandlerFactoryDefaults<TAuth> & {
@@ -812,6 +944,31 @@ export function createHandlerFactory<TAuth>(
 
         return createHandlerInternal<TContract, TAuth>(contract, handler, mergedOptions);
     }
+
+    // Factory-extends-factory: merge child defaults into this factory's defaults
+    // and delegate to createHandlerFactory, which re-attaches .extend (so derived
+    // factories are themselves extendable — "flatten on extend"). The result is
+    // indistinguishable from a root factory built with the same merged defaults.
+    //
+    // Transitive authenticate-lock: mergeHandlerSecurityDefaults still does
+    // scalar-override on `authenticate` (only `authorize` is additive), so an
+    // injected child authenticate would silently replace the parent's. The lock
+    // is "first setter wins": when the parent already defines an authenticator,
+    // the child's authenticate is discarded at runtime (the type-level absence of
+    // the key on extension types is the hint; this strip is the enforcement).
+    // When the parent has none — i.e. extending a public factory — the child's
+    // authenticate is the legitimate first setter and is kept.
+    createConfiguredHandler.extend = ((childOpts: any) => {
+        const parentHasAuthenticate = !!defaults?.security?.authenticate;
+        const childSecurity = childOpts?.security;
+        const { authenticate: _stripped, ...childAuthorizeOnly } = childSecurity ?? {};
+        const safeChild = {
+            ...childOpts,
+            security: parentHasAuthenticate ? childAuthorizeOnly : childSecurity,
+        };
+        const mergedDefaults = mergeHandlerSecurityDefaults(defaults, safeChild);
+        return createHandlerFactory<TAuth>(mergedDefaults as any);
+    }) as any;
 
     if ((defaults?.access ?? 'public') === 'public') {
         return createConfiguredHandler as PublicFactory;

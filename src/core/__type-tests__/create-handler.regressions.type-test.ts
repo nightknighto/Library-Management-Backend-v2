@@ -225,3 +225,52 @@ createHandler(
     },
     async ({ req, auth: _auth }) => ({ data: { updated: true } }),
 );
+
+// =========================================================================
+// Regression: adding the .extend method to factory interfaces must not alter
+// existing factory call-signature inference. Pre-existing factories built via
+// createHandlerFactory continue to typecheck identically (their handlers infer
+// auth/access exactly as before), and the new .extend member is additive only.
+// =========================================================================
+
+const _regressionFactory = createHandlerFactory<AuthContext>({
+    access: 'protected',
+    security: { authenticate: async () => ({ userId: 'r-11', role: 'staff' }) },
+});
+
+// Existing call shape — no options — still infers auth exactly as before.
+_regressionFactory(
+    UpdateBookContract,
+    async ({ auth }) => {
+        type _authStillExact = Expect<Equal<typeof auth, AuthContext>>;
+        return { data: { updated: true } };
+    },
+);
+
+// Existing call shape — options + handler — still infers auth exactly as before.
+_regressionFactory(
+    UpdateBookContract,
+    {
+        security: {
+            authorize: {
+                afterValidation: [
+                    async ({ auth }): Promise<true> => {
+                        if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied');
+                        return true;
+                    },
+                ],
+            },
+        },
+    },
+    async ({ auth }) => {
+        type _authStillExactWithOpts = Expect<Equal<typeof auth, AuthContext>>;
+        return { data: { updated: true } };
+    },
+);
+
+// Existing call shape — access override to public — still typechecks.
+_regressionFactory(
+    UpdateBookContract,
+    { access: 'public' },
+    async ({ req: _req }) => ({ data: { updated: true } }),
+);

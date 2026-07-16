@@ -304,4 +304,166 @@ describe('createHandlerFactory (runtime)', () => {
         expect(sharedPolicy).toHaveBeenCalledTimes(2);
         expect(instanceAfterPolicy).toHaveBeenCalledTimes(1);
     });
+
+    // -------------------------------------------------------------------------
+    // .extend() — factory-extends-factory
+    // -------------------------------------------------------------------------
+
+    it('.extend layers child authorizers additively on top of the parent factory', async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const parentPolicy = vi.fn(async (): Promise<true> => true);
+        const childPolicy = vi.fn(async (): Promise<true> => true);
+
+        const parent = createHandlerFactory({
+            access: 'protected',
+            security: {
+                authenticate: async () => ({ userId: '1' }),
+                authorize: { afterValidation: [parentPolicy] },
+            },
+        });
+
+        const child = parent.extend({
+            security: { authorize: { afterValidation: [childPolicy] } },
+        });
+
+        const handler = child(contract, async () => ({ data: { ok: true } }));
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        expect(response.status).toBe(200);
+        expect(parentPolicy).toHaveBeenCalledTimes(1);
+        expect(childPolicy).toHaveBeenCalledTimes(1);
+    });
+
+    it('.extend strips a child authenticate (transitive lock) and keeps the parent authenticator', async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const parentAuthenticate = vi.fn(async () => ({ userId: 'parent' }));
+        // Simulate a caller bypassing types to inject a rogue authenticator.
+        const rogueAuthenticate = vi.fn(async () => ({ userId: 'rogue' }));
+        // Records which authenticator produced the auth context that the pipeline sees.
+        const seenUserId = vi.fn();
+
+        const parent = createHandlerFactory({
+            access: 'protected',
+            security: { authenticate: parentAuthenticate },
+        });
+
+        const child = parent.extend({
+            security: {
+                authenticate: rogueAuthenticate as any,
+                authorize: { afterValidation: [async ({ auth }): Promise<true> => (seenUserId(auth.userId), true)] },
+            } as any,
+        });
+
+        const handler = child(contract, async () => ({ data: { ok: true } }));
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        expect(response.status).toBe(200);
+        // The pipeline ran the PARENT authenticator (first-setter-wins lock).
+        expect(parentAuthenticate).toHaveBeenCalledTimes(1);
+        expect(rogueAuthenticate).not.toHaveBeenCalled();
+        // The authorizer saw the parent's auth context, not the rogue's.
+        expect(seenUserId).toHaveBeenCalledWith('parent');
+    });
+
+    it('.extend on a public factory upgrades to protected', async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const publicFactory = createHandlerFactory({ access: 'public' });
+
+        const secured = publicFactory.extend({
+            access: 'protected',
+            security: { authenticate: async () => null },
+        });
+
+        const handler = secured(contract, async () => ({ data: { ok: true } }));
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        // Upgraded factory now rejects unauthenticated requests.
+        expect(response.status).toBe(401);
+        expect(response.body).toEqual({ success: false, error: 'Unauthenticated' });
+    });
+
+    it('chained .extend accumulates authorizers across three layers', async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const layer1 = vi.fn(async (): Promise<true> => true);
+        const layer2 = vi.fn(async (): Promise<true> => true);
+        const layer3 = vi.fn(async (): Promise<true> => true);
+
+        const base = createHandlerFactory({
+            access: 'protected',
+            security: {
+                authenticate: async () => ({ userId: '1' }),
+                authorize: { afterValidation: [layer1] },
+            },
+        });
+
+        const derived = base
+            .extend({ security: { authorize: { afterValidation: [layer2] } } })
+            .extend({ security: { authorize: { afterValidation: [layer3] } } });
+
+        const handler = derived(contract, async () => ({ data: { ok: true } }));
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        expect(response.status).toBe(200);
+        expect(layer1).toHaveBeenCalledTimes(1);
+        expect(layer2).toHaveBeenCalledTimes(1);
+        expect(layer3).toHaveBeenCalledTimes(1);
+    });
+
+    it('.extend with no access inherits the parent access', async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const parent = createHandlerFactory({
+            access: 'protected',
+            security: { authenticate: async () => ({ userId: '1' }) },
+        });
+
+        const child = parent.extend({
+            security: { authorize: { afterValidation: [async () => true] } },
+        });
+
+        // No access override → protected. Missing creds still 401.
+        const childWithNoAuth = createHandlerFactory({
+            access: 'protected',
+            security: { authenticate: async () => null },
+        }).extend({});
+
+        const handler = childWithNoAuth(contract, async () => ({ data: { ok: true } }));
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        expect(response.status).toBe(401);
+        // child (with valid auth) still works — sanity that inheritance keeps the pipeline.
+        const okHandler = child(contract, async () => ({ data: { ok: true } }));
+        const okApp = createTestApp(okHandler);
+        const okResponse = await request(okApp.app).get(okApp.route);
+        expect(okResponse.status).toBe(200);
+    });
 });

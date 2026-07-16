@@ -1,5 +1,5 @@
 import createHttpError from 'http-errors';
-import { anyOf, createHandler, not } from '../../core/index.ts';
+import { anyOf, createHandler, createHandlerFactory, not } from '../../core/index.ts';
 import {
     authenticateJwt,
     canEditBook,
@@ -156,24 +156,101 @@ export const BookController = {
     deleteBook,
 };
 
-createHandler(BookDTOs.UpdateBookContract,
-    {
-        access: 'optional',
-        security: {
-            authenticate: authenticateJwt
-        }
+// =============================================================================
+// `.extend()` — factory-extends-factory examples (books proving ground)
+//
+// `createJwtAuthHandler` is a SecuredFactory<JwtAuthContext, 'protected'>: it
+// baselines JWT authentication but no baseline authorization. `.extend()`
+// layers `authorize` buckets on top, producing a new first-class factory whose
+// every handler runs the baseline authenticate AND the extended policy. The
+// authenticator is transitively locked (a child can never swap it), and access
+// may move between protected/optional but never widen to public.
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// Example 1: baseline a repeated policy into a factory.
+// `deleteBook` above hand-repeats [hasRegisteredUser, isLibraryStaff] as its
+// beforeValidation bucket. Any staff-only endpoint must redeclare them. Extend
+// the JWT factory once and every derived handler inherits the staff baseline.
+// ---------------------------------------------------------------------------
+const libraryStaffFactory = createJwtAuthHandler.extend({
+    security: {
+        // After this, every libraryStaffFactory handler authenticates via JWT
+        // (inherited, locked) AND passes hasRegisteredUser + isLibraryStaff
+        // before validation runs.
+        authorize: { beforeValidation: [hasRegisteredUser, isLibraryStaff] },
     },
-    async ({ req, auth }) => ({ data: { isbn: 'x', title: 'x', author: 'x', shelf: 'x', total_quantity: 1 } })
-)
+});
 
-// createHandler(BookDTOs.UpdateBookContract,
-//     {
-//         access: 'public',
-//     },
-//     ({ req }) => {
-//         return {
-//             data: 1 as any
-//         }
-//     }
+// A staff-only delete that additionally blocks system-reserved books. The
+// factory supplies the staff baseline; the call site supplies only what's
+// specific to this endpoint.
+const deleteBookV2 = libraryStaffFactory(
+    BookDTOs.DeleteBookContract,
+    {
+        security: {
+            authorize: { afterValidation: [not<JwtAuthContext>(isSystemReservedBook)] },
+        },
+    },
+    async ({ req, auth }) => {
+        const { isbn } = req.params;
+        await BookService.deleteBook(isbn, auth.email);
+        return { data: undefined };
+    },
+);
+void deleteBookV2;
 
-// )
+// ---------------------------------------------------------------------------
+// Example 2: chained extension — policies accumulate across layers.
+// Each .extend concatenates its authorize buckets after the parent's, so a
+// chain is a baseline stack: jwt → +staff → +registered. The terminal factory's
+// handlers run all of them, in order.
+// ---------------------------------------------------------------------------
+const staffAndRegisteredFactory = libraryStaffFactory
+    // hasRegisteredUser is already in the parent's bucket; re-declaring it runs
+    // it again (no dedup) — harmless here, illustrative of the additive model.
+    .extend({
+        security: {
+            authorize: { beforeValidation: [hasRegisteredUser] },
+        },
+    });
+void staffAndRegisteredFactory;
+
+// ---------------------------------------------------------------------------
+// Example 3: public-factory upgrade.
+// A public factory has no authenticator. `.extend()` upgrades it to a secured
+// one by supplying the "first setter" authenticator; after that, descendants
+// are locked. Useful when a public baseline should gain a pipeline without
+// being rebuilt from createHandlerFactory.
+// ---------------------------------------------------------------------------
+const publicFactory = createHandlerFactory({ access: 'public' });
+const jwtFromPublic = publicFactory.extend({
+    access: 'protected',
+    security: {
+        authenticate: authenticateJwt,
+    },
+});
+void jwtFromPublic;
+
+// ---------------------------------------------------------------------------
+// Example 4: access transition (protected → optional).
+// A protected factory can move to optional without losing its pipeline: same
+// authenticate, same authorize baseline. Note the `optional` semantics: when a
+// guest (no/invalid token) hits the endpoint, authentication returns null and
+// the authorize buckets are SKIPPED for that request — so the inherited staff
+// baseline does not enforce anything for guests, it only applies to callers who
+// present a valid token. `auth` is `JwtAuthContext | undefined` in the handler.
+// ---------------------------------------------------------------------------
+const optionalStaffFactory = libraryStaffFactory.extend({ access: 'optional' });
+const _optionalStaffExample = optionalStaffFactory(
+    BookDTOs.GetBookContract,
+    async ({ req, auth }) => {
+        // auth is JwtAuthContext | undefined under optional access.
+        void auth;
+        const { isbn } = req.params;
+        const { fields } = req.query;
+        const book = await BookService.getBookByISBN(isbn, fields);
+        return { data: book };
+    },
+);
+void _optionalStaffExample;

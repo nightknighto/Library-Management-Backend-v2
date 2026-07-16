@@ -1,7 +1,7 @@
 # Factory Authorizer Additive Merge
 
 **Date:** 2026-07-16
-**Status:** Design — deferred (a related change will be planned first; both will be implemented together)
+**Status:** Implemented — validated via `tsc` + runtime suite (107/107 pass, lint clean)
 **Surfaces:** `src/core` (framework primitive), `tests/core` (runtime)
 
 ## Summary
@@ -17,7 +17,7 @@ Authorizers are AND-composed monotonic policies, not scalar settings. The natura
 operation on a baseline policy stack is *"also require this,"* the same way Express
 middleware or a policy engine accumulates rules.
 
-Today's per-bucket **replace** semantics are a security footgun: a developer writing
+The previous per-bucket **replace** semantics were a security footgun: a developer writing
 
 ```ts
 factory(contract, fn, {
@@ -25,11 +25,11 @@ factory(contract, fn, {
 });
 ```
 
-**silently erases** every baseline check the factory placed in `afterValidation`.
-The failure mode points the wrong way — it weakens security, invisibly, at the call
+**silently erased** every baseline check the factory placed in `afterValidation`.
+The failure mode pointed the wrong way — it weakened security, invisibly, at the call
 site furthest from where the baseline was defined. The runtime test at
-`tests/core/create-handler-factory.runtime.test.ts:173` currently locks this
-behavior in as a feature.
+`tests/core/create-handler-factory.runtime.test.ts` (the `additive semantics` case)
+previously locked this behavior in as a feature.
 
 If an endpoint needs a genuinely different security profile (e.g. it must drop a
 baseline check), that is a different security posture and should be declared
@@ -59,38 +59,56 @@ final.afterValidation  = [...factory.afterValidation,  ...instance.afterValidati
 
 ### Framework level (`src/core`)
 
-1. **`src/core/security.core.ts` — `mergeHandlerSecurityDefaults` (lines 366-394).**
-   Rewrite the `authorize` merge so buckets concatenate instead of spread-replace.
-   When neither side defines a bucket, it stays `undefined`. When only one side
-   defines a bucket, that side wins as-is (concat with an empty array is a no-op).
+1. **`src/core/security.core.ts` — `mergeHandlerSecurityDefaults`** (function
+   defined around line 369). The `authorize` merge now concatenates buckets instead
+   of spread-replacing them. When neither side defines a bucket, it stays
+   `undefined`. When only one side defines a bucket, that side wins as-is (concat
+   with an empty array is a no-op).
 
-2. **`src/core/security.core.ts` JSDoc (lines 353-365).** Replace the
-   *"per bucket replaces / never concatenated"* wording with the additive
-   contract: buckets concatenate factory-first; no dedup; scalars override.
-   State explicitly that re-declaring a baseline authorizer at the call site runs
-   it twice.
+2. **`src/core/security.core.ts` JSDoc** (the block preceding
+   `mergeHandlerSecurityDefaults`, around lines 353-368). The previous
+   *"per bucket replaces / never concatenated"* wording has been replaced with the
+   additive contract: buckets concatenate factory-first; no dedup; scalars
+   override. It states explicitly that re-declaring a baseline authorizer at the
+   call site runs it twice.
 
 3. **`src/core/create-handler.core.ts` JSDoc — `createHandlerFactory` "Merge rules"
-   block (lines 701-704).** Update to match: `access` overrides; `authenticate`
-   overrides; `authorize` buckets concatenate (additive). Add a JSDoc `@example`
-   showing a factory-baseline authorizer and an instance authorizer both running.
+   block** (around lines 695-709, preceding the `createHandlerFactory` overloads).
+   Updated to match: `access` overrides; `authenticate` overrides; `authorize`
+   buckets concatenate (additive). A JSDoc `@example` shows a factory-baseline
+   authorizer and an instance authorizer both running.
 
 ### Tests (`tests/core`)
 
-4. **`tests/core/create-handler-factory.runtime.test.ts:173`** — currently named
-   *"handler authorize bucket replaces the factory default bucket (replace
-   semantics)"*. This asserts the **opposite** of the new behavior. Rewrite it as
-   *"handler authorize bucket concatenates with the factory default bucket
-   (additive semantics)"* and assert that **both** the factory's `denyPolicy` AND
-   the instance's `allowPolicy` are reached — so the factory's deny now correctly
-   short-circuits to 403, demonstrating that baselines can no longer be silently
-   erased. The companion tests at `:141` (inherit) and `:215` (cross-bucket
-   coexistence) stay green unchanged.
+4. **`tests/core/create-handler-factory.runtime.test.ts` — the `additive semantics`
+   case** (previously the `replace semantics` test). Formerly named *"handler
+   authorize bucket replaces the factory default bucket (replace semantics)"*, which
+   asserted the **opposite** of the new behavior. It is now named *"handler
+   authorize bucket concatenates with the factory default bucket (additive
+   semantics)"*. The factory defines a `denyPolicy` in `afterValidation` that always
+   denies; the instance defines its own `allowPolicy` in `afterValidation`. Under
+   additive concatenation the bucket runs factory-first, so:
+    - `denyPolicy` runs first and short-circuits to HTTP 403 with body
+      `{ success: false, error: 'factory-deny' }`.
+    - The instance's `allowPolicy` is **never called** (the factory deny already
+      short-circuited).
 
-5. **Add one new runtime test:** factory defines a baseline authorizer in
-   `beforeValidation`, instance adds one in `afterValidation` — assert both run;
-   and assert that the *same* authorizer reference re-declared at both layers runs
-   twice (locks in no-dedup).
+   The test asserts: status `403`, body `{ success: false, error: 'factory-deny' }`,
+   `denyPolicy` called exactly once, and `allowPolicy` **not** called. This is the
+   security improvement being demonstrated: under the **old** replace semantics the
+   instance's `allowPolicy` bucket would have **erased** the factory's `denyPolicy`,
+   so the request would have wrongly succeeded; under the **new** additive semantics
+   the factory's `denyPolicy` still runs (factory-first) and short-circuits to 403 —
+   so the baseline deny can no longer be silently erased by an instance that merely
+   supplies its own `afterValidation` bucket. The companion `inherits` test and the
+   cross-bucket coexistence test stay green unchanged.
+
+5. **New runtime test** — *"concatenates factory and instance authorizers across
+   buckets with no dedup"*. A `sharedPolicy` (the same authorizer reference) is
+   declared in the factory's `beforeValidation` **and** in the instance's
+   `afterValidation`. Because buckets concatenate and there is no dedup, the same
+   reference runs once per bucket it appears in — the test asserts
+   `sharedPolicy` is called **twice**, locking in no-dedup.
 
 ## Inference / Type-Test Policy
 
@@ -99,14 +117,15 @@ behavior only** — no handler / contract / security *typing* surface changes. T
 `AuthorizationConfig` and `SecurityOptions` types are untouched. Therefore **no new
 type-test is required**, and existing type-tests stay green.
 
-## Validation Plan
+## Validation
 
-- `pnpm check` — type safety across core + touched inference tests.
-- `pnpm test tests/core/create-handler-factory.runtime.test.ts` — the flipped + new tests.
+- `tsc` / `pnpm check` — type safety across core + touched inference tests.
+- `pnpm test tests/core/create-handler-factory.runtime.test.ts` — the flipped + new
+  tests. Full suite passes 107/107; lint is clean for the changes.
 - **Books proving ground:** `src/features/books/books.controller.ts` uses
   `createJwtAuthHandler` (factory sets only `authenticate`; instance sets `authorize`).
   Since the factory defines no baseline authorizer, concat is a no-op there — books
-  behavior is unchanged. Confirm via the books test suite.
+  behavior is unchanged, confirmed via the books test suite.
 
 ## Out of Scope (Intentionally Not Touched)
 
@@ -118,22 +137,23 @@ type-test is required**, and existing type-tests stay green.
 ## Breaking-Change Note
 
 This is a behavior change to a security primitive. Factories that define baseline
-`authorize` buckets will now see those baselines **kept and run** when an instance
-also supplies the same bucket, instead of being replaced.
+`authorize` buckets now see those baselines **kept and run** when an instance also
+supplies the same bucket, instead of being replaced.
 
 **Blast-radius check performed:** no existing call site in this codebase is
 affected. Both real factories (`createJwtAuthHandler` in `src/shared/auth-stuff.ts`,
 `createProtectedHandler` in `src/features/borrows/borrows.controller.ts`) set only
 `authenticate`, never `authorize`. All authorizers in the codebase live at the
-instance call site, so there is nothing to replace today.
+instance call site, so there was nothing to replace.
 
-The change must still be called out explicitly in the implementing commit / report
-because it alters a documented security contract (the JSDoc on
-`mergeHandlerSecurityDefaults` and the runtime test at `:173`).
+The change is called out explicitly here and in the implementing commit because it
+alters a documented security contract (the JSDoc on
+`mergeHandlerSecurityDefaults` and the runtime `additive semantics` test).
 
-## Implementation Sequencing
+## Implementation Status
 
-This spec is intentionally **deferred**. A related change will be planned first,
-and the two will be implemented together (their edits to
-`mergeHandlerSecurityDefaults`, its JSDoc, and the factory runtime tests may
-overlap and should be coordinated in a single implementation pass).
+This change has been implemented as specified above:
+`mergeHandlerSecurityDefaults` was rewritten to additive concatenation, the JSDoc on
+that function and on `createHandlerFactory` in `src/core/create-handler.core.ts` was
+updated, and the runtime tests were rewritten/added accordingly. Validated via `tsc`
+(green), the full runtime suite (107/107 pass), and clean lint for the changes.

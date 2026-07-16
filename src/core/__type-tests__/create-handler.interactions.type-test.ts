@@ -291,3 +291,56 @@ createHandler(
         return { data: { ok: true } };
     },
 );
+
+// =========================================================================
+// Interaction: .extend() chains compose — TAuth threads across layers, access
+// transitions propagate, and authorizers accumulate. Combines the extension
+// surface with the access/auth axes in a single end-to-end chain.
+// =========================================================================
+
+const _scopedFactory = createHandlerFactory<ScopedAuthContext>({
+    access: 'protected',
+    security: {
+        authenticate: async () => ({ userId: 'u-1', role: 'staff', scopes: ['books:write'] }),
+    },
+});
+
+// Three-layer chain: base → derived (adds authorize) → re-derived (adds more).
+const _derived = _scopedFactory.extend({
+    security: {
+        authorize: {
+            afterValidation: [
+                async ({ auth }): Promise<true> => {
+                    if (!auth.scopes.includes('books:write')) throw new createHttpError.Forbidden('denied');
+                    return true;
+                },
+            ],
+        },
+    },
+});
+const _rederived = _derived.extend({
+    access: 'optional',
+    security: {
+        authorize: {
+            beforeValidation: [
+                async ({ auth }): Promise<true> => {
+                    if (!auth?.userId) throw new createHttpError.Unauthorized('denied');
+                    return true;
+                },
+            ],
+        },
+    },
+});
+
+// Interaction: the terminal factory still produces handlers, with TAuth
+// threaded intact across both extension hops (authenticate transitive lock
+// preserved the ScopedAuthContext identity). The terminal factory is `optional`,
+// so `auth` is `ScopedAuthContext | undefined` — we assert the threaded context
+// is present (ScopedAuthContext extends the auth type), proving TAuth survived.
+_rederived(
+    UpdateBookContract,
+    async ({ auth }) => {
+        type _authThreadedThroughTwoExtends = Expect<Extends<ScopedAuthContext, typeof auth>>;
+        return { data: { updated: true } };
+    },
+);
