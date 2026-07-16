@@ -351,17 +351,20 @@ export function not(
 // =========================================================================
 
 /**
- * Shallow-merges handler defaults with call-site overrides.
+ * Merges handler factory defaults with call-site overrides.
  *
- * Security and error mapper objects are merged by key so that callers can
- * override or extend defaults without replacing the entire object.
+ * Scalars override: `access` and `security.authenticate` use the call-site value
+ * when provided, otherwise inherit the factory default.
  *
- * `security.authorize` is merged per bucket: each authorization bucket
- * (`beforeValidation` / `afterValidation`) provided by the override replaces the
- * matching default bucket; buckets the override omits are inherited from the
- * defaults. Buckets are never concatenated.
+ * `security.authorize` buckets concatenate additively: the factory's
+ * `beforeValidation`/`afterValidation` arrays run first, followed by the
+ * call-site arrays for the same bucket. Each bucket is independent — supplying
+ * `afterValidation` at the call site does not affect the factory's
+ * `beforeValidation`, and vice versa. Re-declaring the same authorizer at both
+ * layers runs it twice (no deduplication); the author owns that responsibility.
+ * Buckets the call site omits are inherited from the defaults unchanged.
  *
- * Call-site values win over defaults when the same key is provided.
+ * Call-site scalars win over defaults; authorizer arrays are layered on top.
  */
 export function mergeHandlerSecurityDefaults<TAuthContext, TRequest extends Request = Request>(
     defaults:
@@ -380,15 +383,32 @@ export function mergeHandlerSecurityDefaults<TAuthContext, TRequest extends Requ
     access?: AccessMode;
     security?: SecurityOptions<TAuthContext, TRequest>;
 } {
+    const defaultAuthorize = defaults?.security?.authorize;
+    const overrideAuthorize = overrides?.security?.authorize;
+
+    const beforeValidation = [
+        ...(defaultAuthorize?.beforeValidation ?? []),
+        ...(overrideAuthorize?.beforeValidation ?? []),
+    ];
+    const afterValidation = [
+        ...(defaultAuthorize?.afterValidation ?? []),
+        ...(overrideAuthorize?.afterValidation ?? []),
+    ];
+
+    const mergedAuthorize =
+        beforeValidation.length || afterValidation.length
+            ? {
+                  beforeValidation: beforeValidation.length ? beforeValidation : undefined,
+                  afterValidation: afterValidation.length ? afterValidation : undefined,
+              }
+            : undefined;
+
     return {
         access: overrides?.access ?? defaults?.access,
         security: {
             ...defaults?.security,
             ...overrides?.security,
-            authorize: {
-                ...defaults?.security?.authorize,
-                ...overrides?.security?.authorize,
-            },
+            authorize: mergedAuthorize,
         },
     };
 }

@@ -470,7 +470,7 @@ describe('security (runtime)', () => {
             expect(merged.security?.authorize?.afterValidation).toHaveLength(1);
         });
 
-        it('replaces a factory authorize bucket when the handler specifies the same bucket', () => {
+        it('concatenates a factory authorize bucket with the handler bucket (additive)', () => {
             const defaultPolicy = async (): Promise<true> => true;
             const handlerPolicy = async (): Promise<true> => true;
             const merged = mergeHandlerSecurityDefaults(
@@ -486,8 +486,11 @@ describe('security (runtime)', () => {
                 },
             );
 
-            // replace semantics, not concatenation
-            expect(merged.security?.authorize?.beforeValidation).toEqual([handlerPolicy]);
+            // additive semantics, factory-first: no replace, no dedup
+            expect(merged.security?.authorize?.beforeValidation).toEqual([
+                defaultPolicy,
+                handlerPolicy,
+            ]);
         });
     });
 });

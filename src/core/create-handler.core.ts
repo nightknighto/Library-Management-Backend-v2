@@ -700,7 +700,11 @@ interface PublicFactory {
  *
  * Merge rules:
  * - `access` is overridden by per-handler options when provided.
- * - `security` is merged by key (callers can override specific fields).
+ * - `security.authenticate` is overridden by per-handler options when provided.
+ * - `security.authorize` buckets concatenate additively: the factory's
+ *   `beforeValidation`/`afterValidation` arrays run first, then the per-handler
+ *   arrays for the same bucket. Re-declaring an authorizer at both layers runs it
+ *   twice (no deduplication). Each bucket is independent.
  * - Public access cannot define or accept security options.
  *
  * @param defaults - Default access and security settings.
@@ -732,6 +736,21 @@ interface PublicFactory {
  * });
  *
  * strictFactory(contract, async ({ req, auth }) => ({ data: { id: auth.userId } }));
+ *
+ * @example
+ * // Factory baseline authorizers concatenate with per-handler authorizers.
+ * const auditedFactory = createHandlerFactory({
+ *   access: "protected",
+ *   security: {
+ *     authenticate: async () => ({ userId: "u-1" }),
+ *     authorize: { afterValidation: [auditAccess] }, // baseline: applies to every handler
+ *   },
+ * });
+ *
+ * // auditAccess (factory) runs first, then requireOwner (per-handler) — both run.
+ * auditedFactory(contract, {
+ *   security: { authorize: { afterValidation: [requireOwner] } },
+ * }, async ({ req, auth }) => ({ data: { id: auth.userId } }));
  */
 export function createHandlerFactory<TAuth>(
     defaults: HandlerFactoryDefaults<TAuth> & {

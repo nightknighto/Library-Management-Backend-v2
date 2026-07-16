@@ -170,7 +170,7 @@ describe('createHandlerFactory (runtime)', () => {
         expect(authorize).toHaveBeenCalledTimes(1);
     });
 
-    it('handler authorize bucket replaces the factory default bucket (replace semantics)', async () => {
+    it('handler authorize bucket concatenates with the factory default bucket (additive semantics)', async () => {
         const contract = createContract({
             request: {
                 query: {
@@ -206,10 +206,12 @@ describe('createHandlerFactory (runtime)', () => {
         const { app, route } = createTestApp(handler);
         const response = await request(app).get(route).query({ page: '2' });
 
-        // handler's allowPolicy replaced factory's denyPolicy (not concatenated)
-        expect(response.status).toBe(200);
-        expect(denyPolicy).not.toHaveBeenCalled();
-        expect(allowPolicy).toHaveBeenCalledTimes(1);
+        // factory's denyPolicy is NO LONGER erased by the instance's allowPolicy:
+        // buckets concatenate (factory-first), so denyPolicy runs and short-circuits to 403.
+        expect(response.status).toBe(403);
+        expect(response.body).toEqual({ success: false, error: 'factory-deny' });
+        expect(denyPolicy).toHaveBeenCalledTimes(1);
+        expect(allowPolicy).not.toHaveBeenCalled();
     });
 
     it('inherits the factory beforeValidation bucket while the handler adds an afterValidation bucket', async () => {
@@ -252,5 +254,54 @@ describe('createHandlerFactory (runtime)', () => {
         expect(response.status).toBe(200);
         expect(beforePolicy).toHaveBeenCalledTimes(1);
         expect(afterPolicy).toHaveBeenCalledTimes(1);
+    });
+
+    it('concatenates factory and instance authorizers across buckets with no dedup', async () => {
+        const contract = createContract({
+            request: {
+                query: {
+                    page: z.coerce.number(),
+                },
+            },
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const sharedPolicy = vi.fn(async (): Promise<true> => true);
+        const instanceAfterPolicy = vi.fn(async ({ req }): Promise<true> => {
+            if (typeof req.query.page !== 'number') throw new createHttpError.Forbidden('denied');
+            return true;
+        });
+
+        const factory = createHandlerFactory({
+            access: 'protected',
+            security: {
+                authenticate: async () => ({ userId: '1' }),
+                authorize: { beforeValidation: [sharedPolicy] },
+            },
+        });
+
+        const handler = factory(
+            contract,
+            {
+                security: {
+                    // sharedPolicy is re-declared here in a different bucket. Because buckets
+                    // concatenate and there is no dedup, this is a different bucket entirely,
+                    // so it runs once here too — total twice across the request.
+                    authorize: {
+                        afterValidation: [sharedPolicy, instanceAfterPolicy],
+                    },
+                },
+            },
+            async () => ({ data: { ok: true } }),
+        );
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route).query({ page: '2' });
+
+        expect(response.status).toBe(200);
+        // Cross-bucket coexistence: factory beforeValidation + instance afterValidation both run.
+        // No dedup: the same sharedPolicy reference runs once per bucket it appears in (twice total).
+        expect(sharedPolicy).toHaveBeenCalledTimes(2);
+        expect(instanceAfterPolicy).toHaveBeenCalledTimes(1);
     });
 });
