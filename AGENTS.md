@@ -113,6 +113,13 @@ Ask for confirmation before:
 - Introducing broad refactors that are not required for the requested outcome.
 - Performing infrastructure-level changes (tooling, dependency strategy, migration strategy) beyond task scope.
 
+## Changelog Maintenance
+- When a commit changes files under `src/core`, append one entry to `CHANGELOG.md` in the same commit. This is a defined completion step, not a separate chore.
+- Scope is `src/core` only. Consumer-side updates (`src/shared`, `src/lib`, `src/utils`, `src/features`) and pure infrastructure (configs, tooling, dependency bumps) do NOT generate entries, even when co-located in a commit that also touches `src/core`. **Consumer/app changes never appear in the changelog at all — not as bullets, not as examples, not as "demonstrated in X".** This is a bright-line rule, not a judgment call: even when a consumer change illustrates the framework delta (e.g. the books proving ground adopting the new API), it stays out. Bullets cover the framework API delta only; that the capability is usable on real code is conveyed by the API surface itself, not by consumer adoption notes.
+- One entry per commit. No consolidation across commits.
+- Entry shape: `### <Title>` headline (append ` · BREAKING` for breaking changes). Headlines carry NO commit hash. Entries are anchored by their subject + the `## YYYY-MM-DD` date heading above them; traceability to a commit is via `git log --grep="<subject>"`. Then a `>` blockquote stating the **problem/reason** the change solves (present by default — nearly every change solves a stated problem; optionally add decision rationale when alternatives were weighed), then bullets covering the API delta. Link the relevant `docs/specs/*.md` when one exists; use a `**Deferred:**` bullet when work is deferred.
+- New dates and entries go at the top. See `CHANGELOG.md` preamble and the spec at `docs/specs/2026-07-17-changelog.md` for the full format and worked examples.
+
 ## Definition of Done
 - Framework-level abstraction is improved or extended for reuse.
 - Type inference remains strong end-to-end across contract and handler usage.
@@ -120,6 +127,7 @@ Ask for confirmation before:
 - Runtime tests cover new behavior and edge cases for any framework or feature changes.
 - Books proving-ground behavior is validated for the change.
 - Unrelated features are left untouched except minimal breakage fixes.
+- If `src/core` changed, a `CHANGELOG.md` entry was appended in the same commit (see Changelog Maintenance).
 - Final report clearly states what was validated and what was intentionally not validated.
 
 ## Decision Rule
