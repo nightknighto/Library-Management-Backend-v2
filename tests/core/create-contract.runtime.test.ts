@@ -518,4 +518,283 @@ describe('createContract (runtime)', () => {
             expect(contract.pagination?.response).toBe(true);
         });
     });
+
+    // ------------------------------------------------------------------
+    // Query widening: z.ZodObject query input + pagination merge
+    // ------------------------------------------------------------------
+    describe('query widening (z.ZodObject query input + pagination merge)', () => {
+        it('accepts a z.ZodObject query and validates it (no pagination)', () => {
+            const contract = createContract({
+                request: {
+                    query: z.object({ search: z.string(), sort: z.string() }),
+                },
+                response: z.boolean(),
+            });
+
+            const parsed = contract.request.parse({
+                body: undefined,
+                query: { search: 'hello', sort: 'asc' },
+                params: undefined,
+            });
+            expect(parsed.query).toEqual({ search: 'hello', sort: 'asc' });
+
+            expect(() =>
+                contract.request.parse({
+                    body: undefined,
+                    query: { search: 'hello' /* missing sort */ },
+                    params: undefined,
+                }),
+            ).toThrow();
+        });
+
+        it('injects page/limit into a z.ZodObject query when pagination.request is on', () => {
+            const contract = createContract({
+                request: {
+                    query: z.object({ search: z.string().optional() }),
+                },
+                response: z.array(z.string()),
+                pagination: {
+                    request: { defaults: { page: 2, limit: 5 }, maxLimit: 10 },
+                },
+            });
+
+            const parsed = contract.request.parse({
+                body: undefined,
+                query: { search: 'test' },
+                params: undefined,
+            });
+            expect(parsed.query).toEqual({ search: 'test', page: 2, limit: 5 });
+
+            // coerce: string page/limit become numbers
+            const coerced = contract.request.parse({
+                body: undefined,
+                query: { search: 'test', page: '3', limit: '7' },
+                params: undefined,
+            });
+            expect(coerced.query).toEqual({ search: 'test', page: 3, limit: 7 });
+        });
+
+        it('keeps user-defined page/limit in a z.ZodObject query (user precedence)', () => {
+            const contract = createContract({
+                request: {
+                    query: z.object({
+                        search: z.string().optional(),
+                        page: z.coerce.number().default(9),
+                        limit: z.coerce.number().default(77),
+                    }),
+                },
+                response: z.array(z.string()),
+                pagination: {
+                    request: { defaults: { page: 1, limit: 10 }, maxLimit: 100 },
+                },
+            });
+
+            const parsed = contract.request.parse({
+                body: undefined,
+                query: {},
+                params: undefined,
+            });
+            expect(parsed.query).toEqual({ search: undefined, page: 9, limit: 77 });
+        });
+
+        it('keeps partial user override (page only) and injects limit', () => {
+            const contract = createContract({
+                request: {
+                    query: z.object({
+                        search: z.string().optional(),
+                        page: z.coerce.number().default(5),
+                    }),
+                },
+                response: z.array(z.string()),
+                pagination: { request: true },
+            });
+
+            const parsed = contract.request.parse({
+                body: undefined,
+                query: {},
+                params: undefined,
+            });
+            expect(parsed.query).toEqual({ search: undefined, page: 5, limit: 10 });
+        });
+
+        it('preserves strictObject config after pagination merge (unknown keys rejected)', () => {
+            const contract = createContract({
+                request: {
+                    query: z.strictObject({ search: z.string() }),
+                },
+                response: z.array(z.string()),
+                pagination: { request: true },
+            });
+
+            // valid: only authored + injected keys
+            const parsed = contract.request.parse({
+                body: undefined,
+                query: { search: 'x', page: 2, limit: 3 },
+                params: undefined,
+            });
+            expect(parsed.query).toEqual({ search: 'x', page: 2, limit: 3 });
+
+            // strict: unknown key 'extra' is rejected (config preserved through merge)
+            expect(() =>
+                contract.request.parse({
+                    body: undefined,
+                    query: { search: 'x', extra: 'no', page: 2, limit: 3 },
+                    params: undefined,
+                }),
+            ).toThrow();
+        });
+
+        it('preserves loose config after pagination merge (unknown keys kept)', () => {
+            const contract = createContract({
+                request: {
+                    query: z.object({ search: z.string() }).loose(),
+                },
+                response: z.array(z.string()),
+                pagination: { request: true },
+            });
+
+            const parsed = contract.request.parse({
+                body: undefined,
+                query: { search: 'x', extra: 'kept', page: 2, limit: 3 },
+                params: undefined,
+            });
+            expect(parsed.query).toEqual({ search: 'x', extra: 'kept', page: 2, limit: 3 });
+        });
+
+        it('preserves .refine() behavior after pagination merge (refinement still rejects)', () => {
+            const contract = createContract({
+                request: {
+                    query: z
+                        .object({ search: z.string() })
+                        .refine((d) => d.search !== 'forbidden', 'search is forbidden'),
+                },
+                response: z.array(z.string()),
+                pagination: { request: true },
+            });
+
+            // valid
+            const ok = contract.request.parse({
+                body: undefined,
+                query: { search: 'hello', page: 1, limit: 10 },
+                params: undefined,
+            });
+            expect(ok.query).toEqual({ search: 'hello', page: 1, limit: 10 });
+
+            // the refinement survives the merge: 'forbidden' is rejected
+            expect(() =>
+                contract.request.parse({
+                    body: undefined,
+                    query: { search: 'forbidden', page: 1, limit: 10 },
+                    params: undefined,
+                }),
+            ).toThrow();
+        });
+
+        it('preserves a cross-field invariant refine after pagination merge', () => {
+            const contract = createContract({
+                request: {
+                    query: z
+                        .object({ min: z.coerce.number(), max: z.coerce.number() })
+                        .refine((d) => d.min < d.max, 'min must be < max'),
+                },
+                response: z.array(z.string()),
+                pagination: { request: true },
+            });
+
+            // valid: min < max
+            expect(
+                contract.request.parse({
+                    body: undefined,
+                    query: { min: 1, max: 10, page: 1, limit: 10 },
+                    params: undefined,
+                }).query,
+            ).toEqual({ min: 1, max: 10, page: 1, limit: 10 });
+
+            // refinement survives: min > max rejected
+            expect(() =>
+                contract.request.parse({
+                    body: undefined,
+                    query: { min: 10, max: 5, page: 1, limit: 10 },
+                    params: undefined,
+                }),
+            ).toThrow();
+        });
+
+        it('.querySchema returns the AUTHORED query (excludes injected page/limit)', () => {
+            const contract = createContract({
+                request: {
+                    query: z.object({ search: z.string().optional(), sort: z.string() }),
+                },
+                response: z.array(z.string()),
+                pagination: { request: true },
+            });
+
+            // querySchema is the authored shape only — no page/limit
+            expect(contract.querySchema.parse({ search: 'x', sort: 'asc' })).toEqual({
+                search: 'x',
+                sort: 'asc',
+            });
+            // page/limit are NOT part of the authored query
+            expect(() => contract.querySchema.parse({ page: 1, limit: 10 } as never)).toThrow();
+        });
+
+        it('.querySchema keeps user-authored page/limit when present', () => {
+            const contract = createContract({
+                request: {
+                    query: z.object({
+                        search: z.string().optional(),
+                        page: z.coerce.number().default(9),
+                    }),
+                },
+                response: z.array(z.string()),
+                pagination: { request: true },
+            });
+
+            // user's page is kept in querySchema; limit (not authored) is excluded
+            expect(contract.querySchema.parse({ page: 3 })).toEqual({ page: 3 });
+        });
+
+        it('a contract built from another querySchema round-trips the authored query', () => {
+            const source = createContract({
+                request: {
+                    query: z.object({ search: z.string().optional(), sort: z.string() }),
+                },
+                response: z.array(z.string()),
+                pagination: { request: true },
+            });
+
+            const reused = createContract({
+                request: { query: source.querySchema },
+                response: z.array(z.string()),
+                pagination: { request: true },
+            });
+
+            // both contracts parse the same valid request identically
+            const payload = {
+                body: undefined,
+                query: { search: 'hello', sort: 'asc', page: 2, limit: 5 },
+                params: undefined,
+            };
+            expect(source.request.parse(payload).query).toEqual(reused.request.parse(payload).query);
+        });
+
+        it('plain-map query still works exactly as before (no regression)', () => {
+            const contract = createContract({
+                request: {
+                    query: { q: z.string().optional() },
+                },
+                response: z.array(z.string()),
+                pagination: {
+                    request: { defaults: { page: 1, limit: 10 }, maxLimit: 100 },
+                },
+            });
+
+            const parsed = contract.request.parse({
+                body: undefined,
+                query: { q: 'test' },
+                params: undefined,
+            });
+            expect(parsed.query).toEqual({ q: 'test', page: 1, limit: 10 });
+        });
+    });
 });

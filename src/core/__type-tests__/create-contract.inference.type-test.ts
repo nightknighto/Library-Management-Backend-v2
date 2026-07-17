@@ -359,3 +359,339 @@ createContract({
     request: { body: CreateBookContract.bodySchema.extend({ author: z.string() }) },
     response: CreateBookContract.responseDataSchema,
 });
+
+// ============================================================================
+// Query widening: request.query now accepts z.ZodObject in addition to plain maps
+// ============================================================================
+// Covers: ZodObject/plain × pagination on/off × user page/limit precedence,
+// special operators (refine/superRefine/strict/loose/nested/optional/brand),
+// Config preservation, no-`any` guards (inline IsAny — never wrapped), the
+// opaque fallback, rejected forms, and the .querySchema accessor round-trip.
+//
+// Test-writing rule (discovered during investigation): IsAny mis-evaluates when
+// wrapped in a generic helper. Every not-`any` assert below uses ExpectFalse<
+// IsAny<X>> inline. Config preservation is asserted via Equal against the source
+// schema's Config (never via `extends Record<...>` — $strict's {} extends Record).
+
+// --- Scenario 1: plain query + pagination ON ---
+const PlainQueryPaginated = createContract({
+    request: { query: { search: z.string() } },
+    response: z.array(z.string()),
+    pagination: { request: true },
+});
+type _s1NotAny = ExpectFalse<IsAny<z.infer<(typeof PlainQueryPaginated)['request']>['query']>>;
+type _s1Exact = Expect<
+    Equal<
+        z.infer<(typeof PlainQueryPaginated)['request']>['query'],
+        { search: string; page: number; limit: number }
+    >
+>;
+
+// --- Scenario 2: ZodObject query + pagination ON ---
+const ZodObjQueryPaginated = createContract({
+    request: { query: z.object({ search: z.string().optional(), sort: z.string() }) },
+    response: z.array(z.string()),
+    pagination: { request: true },
+});
+type _s2NotAny = ExpectFalse<IsAny<z.infer<(typeof ZodObjQueryPaginated)['request']>['query']>>;
+type _s2Exact = Expect<
+    Equal<
+        z.infer<(typeof ZodObjQueryPaginated)['request']>['query'],
+        { search?: string | undefined; sort: string; page: number; limit: number }
+    >
+>;
+
+// --- Scenario 3: ZodObject query + pagination OFF (no page/limit) ---
+const ZodObjQueryNoPagi = createContract({
+    request: { query: z.object({ search: z.string() }) },
+    response: z.string(),
+});
+type _s3NotAny = ExpectFalse<IsAny<z.infer<(typeof ZodObjQueryNoPagi)['request']>['query']>>;
+type _s3Exact = Expect<Equal<z.infer<(typeof ZodObjQueryNoPagi)['request']>['query'], { search: string }>>;
+
+// --- Scenario 4: plain query + pagination OFF ---
+const PlainQueryNoPagi = createContract({
+    request: { query: { filter: z.string() } },
+    response: z.string(),
+});
+type _s4NotAny = ExpectFalse<IsAny<z.infer<(typeof PlainQueryNoPagi)['request']>['query']>>;
+type _s4Exact = Expect<Equal<z.infer<(typeof PlainQueryNoPagi)['request']>['query'], { filter: string }>>;
+
+// --- Scenario 5: no query + pagination ON → only page/limit ---
+const NoQueryPagi = createContract({
+    request: {},
+    response: z.array(z.string()),
+    pagination: { request: true },
+});
+type _s5NotAny = ExpectFalse<IsAny<z.infer<(typeof NoQueryPagi)['request']>['query']>>;
+type _s5Exact = Expect<
+    Equal<z.infer<(typeof NoQueryPagi)['request']>['query'], { page: number; limit: number }>
+>;
+
+// --- Scenario 6: ZodObject query WITH user page/limit + pagination ON → user wins ---
+const ZodObjUserPage = createContract({
+    request: {
+        query: z.object({ search: z.string(), page: z.string(), limit: z.string() }),
+    },
+    response: z.array(z.string()),
+    pagination: { request: true },
+});
+type _s6NotAny = ExpectFalse<IsAny<z.infer<(typeof ZodObjUserPage)['request']>['query']>>;
+type _s6Exact = Expect<
+    Equal<
+        z.infer<(typeof ZodObjUserPage)['request']>['query'],
+        { search: string; page: string; limit: string }
+    >
+>;
+
+// --- Scenario 7: plain query WITH user page + pagination ON → user page wins, limit injected ---
+const PlainUserPage = createContract({
+    request: { query: { search: z.string(), page: z.string() } },
+    response: z.array(z.string()),
+    pagination: { request: true },
+});
+type _s7NotAny = ExpectFalse<IsAny<z.infer<(typeof PlainUserPage)['request']>['query']>>;
+type _s7Exact = Expect<
+    Equal<
+        z.infer<(typeof PlainUserPage)['request']>['query'],
+        { search: string; page: string; limit: number }
+    >
+>;
+
+// --- Scenario 8: .extend()-composed ZodObject query + pagination ---
+const ComposedQueryBase = z.object({ search: z.string().optional() });
+const ComposedQuery = ComposedQueryBase.extend({ status: z.string() });
+const ComposedQueryContract = createContract({
+    request: { query: ComposedQuery },
+    response: z.array(z.string()),
+    pagination: { request: true },
+});
+type _s8NotAny = ExpectFalse<IsAny<z.infer<(typeof ComposedQueryContract)['request']>['query']>>;
+type _s8Exact = Expect<
+    Equal<
+        z.infer<(typeof ComposedQueryContract)['request']>['query'],
+        { search?: string | undefined; status: string; page: number; limit: number }
+    >
+>;
+
+// --- Scenario 9: strictObject query + pagination → merged, config preserved ---
+const StrictQueryContract = createContract({
+    request: { query: z.strictObject({ a: z.string() }) },
+    response: z.string(),
+    pagination: { request: true },
+});
+type _s9NotAny = ExpectFalse<IsAny<z.infer<(typeof StrictQueryContract)['request']>['query']>>;
+type _s9Exact = Expect<
+    Equal<z.infer<(typeof StrictQueryContract)['request']>['query'], { a: string; page: number; limit: number }>
+>;
+
+// --- Operator coverage: refined query + pagination — exact, not any ---
+const RefinedQueryContract = createContract({
+    request: {
+        query: z.object({ search: z.string() }).refine((d) => d.search !== 'bad'),
+    },
+    response: z.string(),
+    pagination: { request: true },
+});
+type _refNotAny = ExpectFalse<IsAny<z.infer<(typeof RefinedQueryContract)['request']>['query']>>;
+type _refExact = Expect<
+    Equal<
+        z.infer<(typeof RefinedQueryContract)['request']>['query'],
+        { search: string; page: number; limit: number }
+    >
+>;
+
+// --- Operator coverage: multi-refine + superRefine ---
+const MultiRefineQueryContract = createContract({
+    request: {
+        query: z
+            .object({ search: z.string() })
+            .refine((d) => d.search.length >= 2)
+            .refine((d) => d.search.length <= 5),
+    },
+    response: z.string(),
+    pagination: { request: true },
+});
+type _mrNotAny = ExpectFalse<IsAny<z.infer<(typeof MultiRefineQueryContract)['request']>['query']>>;
+type _mrExact = Expect<
+    Equal<
+        z.infer<(typeof MultiRefineQueryContract)['request']>['query'],
+        { search: string; page: number; limit: number }
+    >
+>;
+
+// --- Operator coverage: nested object field — nested shape exact, not any ---
+const NestedQueryContract = createContract({
+    request: {
+        query: z.object({ filter: z.object({ field: z.string(), op: z.string() }) }),
+    },
+    response: z.string(),
+    pagination: { request: true },
+});
+type _nqNotAny = ExpectFalse<IsAny<z.infer<(typeof NestedQueryContract)['request']>['query']>>;
+type _nqNestedNotAny = ExpectFalse<
+    IsAny<z.infer<(typeof NestedQueryContract)['request']>['query']['filter']>
+>;
+type _nqExact = Expect<
+    Equal<
+        z.infer<(typeof NestedQueryContract)['request']>['query'],
+        { filter: { field: string; op: string }; page: number; limit: number }
+    >
+>;
+
+// --- Operator coverage: optional / nullable fields ---
+const OptQueryContract = createContract({
+    request: {
+        query: z.object({ search: z.string().optional(), count: z.number().nullable() }),
+    },
+    response: z.string(),
+    pagination: { request: true },
+});
+type _oqNotAny = ExpectFalse<IsAny<z.infer<(typeof OptQueryContract)['request']>['query']>>;
+type _oqExact = Expect<
+    Equal<
+        z.infer<(typeof OptQueryContract)['request']>['query'],
+        { search?: string | undefined; count: number | null; page: number; limit: number }
+    >
+>;
+
+// --- Operator coverage: branded query — exact, not any ---
+const BrandedQueryContract = createContract({
+    request: { query: z.object({ search: z.string() }).brand<'MyQuery'>() },
+    response: z.string(),
+    pagination: { request: true },
+});
+type _bqNotAny = ExpectFalse<IsAny<z.infer<(typeof BrandedQueryContract)['request']>['query']>>;
+type _bqExact = Expect<
+    Equal<
+        z.infer<(typeof BrandedQueryContract)['request']>['query'],
+        { search: string; page: number; limit: number }
+    >
+>;
+
+// --- Operator coverage: cross-field invariant refine ---
+const RangeQueryContract = createContract({
+    request: {
+        query: z.object({ min: z.number(), max: z.number() }).refine((d) => d.min < d.max),
+    },
+    response: z.string(),
+    pagination: { request: true },
+});
+type _rqNotAny = ExpectFalse<IsAny<z.infer<(typeof RangeQueryContract)['request']>['query']>>;
+type _rqExact = Expect<
+    Equal<
+        z.infer<(typeof RangeQueryContract)['request']>['query'],
+        { min: number; max: number; page: number; limit: number }
+    >
+>;
+
+// --- Config preservation: merged query keeps the source schema's Config ---
+// Helper to read a query field's Config out of a built request.
+type QueryConfigOf<TRequest> = TRequest extends z.ZodObject<{ query: infer Q extends z.ZodObject<any, any> }>
+    ? Q extends z.ZodObject<any, infer C>
+        ? C
+        : never
+    : never;
+type StrictConfig = QueryConfigOf<(typeof StrictQueryContract)['request']>;
+type StrictSourceConfig = (typeof StrictQueryContract)['request'] extends z.ZodObject<{
+    query: infer Q extends z.ZodObject<any, any>;
+}>
+    ? Q extends z.ZodObject<any, infer C>
+        ? C
+        : never
+    : never;
+// Merged strict query Config EQUALS a strictObject's Config (both $strict).
+type _strictConfigPreserved = Expect<Equal<StrictConfig, StrictSourceConfig>>;
+
+const LooseQueryContract = createContract({
+    request: { query: z.object({ a: z.string() }).loose() },
+    response: z.string(),
+    pagination: { request: true },
+});
+type LooseConfig = QueryConfigOf<(typeof LooseQueryContract)['request']>;
+type LooseSourceConfig = (typeof LooseQueryContract)['request'] extends z.ZodObject<{
+    query: infer Q extends z.ZodObject<any, any>;
+}>
+    ? Q extends z.ZodObject<any, infer C>
+        ? C
+        : never
+    : never;
+type _looseConfigPreserved = Expect<Equal<LooseConfig, LooseSourceConfig>>;
+// Sanity: strict ≠ loose (so the preservation assert is non-trivial).
+type _strictNeqLoose = ExpectFalse<Equal<StrictConfig, LooseConfig>>;
+
+// --- Rejected forms: .transform(), discriminatedUnion, union-of-objects ---
+createContract({
+    request: {
+        // @ts-expect-error .transform() produces a ZodPipe, not a ZodObject — query rejects it
+        query: z.object({ search: z.string() }).transform((d) => ({ ...d })),
+    },
+    response: z.string(),
+});
+createContract({
+    request: {
+        // @ts-expect-error discriminatedUnion is not a ZodObject — query rejects it
+        query: z.discriminatedUnion('type', [
+            z.object({ type: z.literal('a') }),
+            z.object({ type: z.literal('b') }),
+        ]),
+    },
+    response: z.string(),
+});
+createContract({
+    request: {
+        // @ts-expect-error union of objects is not a ZodObject — query rejects it
+        query: z.union([z.object({ a: z.string() }), z.object({ b: z.number() })]),
+    },
+    response: z.string(),
+});
+
+// --- .querySchema accessor: returns the AUTHORED query (page/limit excluded) ---
+type _qsAuthoredNotAny = ExpectFalse<IsAny<typeof ZodObjQueryPaginated.querySchema>>;
+type _qsAuthoredExact = Expect<
+    Equal<
+        z.infer<typeof ZodObjQueryPaginated.querySchema>,
+        { search?: string | undefined; sort: string }
+    >
+>;
+// user-authored page/limit are KEPT in .querySchema
+type _qsUserPageExact = Expect<
+    Equal<z.infer<typeof ZodObjUserPage.querySchema>, { search: string; page: string; limit: string }>
+>;
+// plain-map query: .querySchema is the wrapped z.object
+type _qsPlainExact = Expect<
+    Equal<z.infer<typeof PlainQueryPaginated.querySchema>, { search: string }>
+>;
+// no-query contract: .querySchema is an empty object schema
+type _qsEmptyExact = Expect<Equal<z.infer<typeof NoQueryPagi.querySchema>, Record<string, never>>>;
+
+// --- .querySchema is itself not any for the opaque AnyContract base form ---
+// (AnyContract widens TQueryAuthored to z.ZodTypeAny; confirm the accessor
+//  field type stays non-any when read off a concrete contract.)
+type _qsFieldNotAny = ExpectFalse<IsAny<typeof ZodObjQueryPaginated['querySchema']>>;
+
+// --- Round-trip: .querySchema into a new contract reproduces the authored query ---
+const ReusedQueryContract = createContract({
+    request: { query: ZodObjQueryPaginated.querySchema },
+    response: z.array(z.string()),
+    pagination: { request: true },
+});
+type _rtNotAny = ExpectFalse<IsAny<z.infer<(typeof ReusedQueryContract)['request']>['query']>>;
+type _rtExact = Expect<
+    Equal<
+        z.infer<(typeof ReusedQueryContract)['request']>['query'],
+        { search?: string | undefined; sort: string; page: number; limit: number }
+    >
+>;
+// And .querySchema of the reused contract equals the original's authored query
+type _rtAccessorEqual = Expect<
+    Equal<
+        z.infer<typeof ReusedQueryContract.querySchema>,
+        z.infer<typeof ZodObjQueryPaginated.querySchema>
+    >
+>;
+
+// --- Edge: plain map with NO page/limit + pagination — every field not any ---
+type _pmPageNotAny = ExpectFalse<IsAny<z.infer<(typeof PlainQueryPaginated)['request']>['query']['page']>>;
+type _pmLimitNotAny = ExpectFalse<IsAny<z.infer<(typeof PlainQueryPaginated)['request']>['query']['limit']>>;
+type _pmSearchNotAny = ExpectFalse<IsAny<z.infer<(typeof PlainQueryPaginated)['request']>['query']['search']>>;

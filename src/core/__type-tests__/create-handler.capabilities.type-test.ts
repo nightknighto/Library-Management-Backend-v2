@@ -634,6 +634,36 @@ createHandler(
 );
 
 /**
+ * Capability: ZodObject query + pagination merges page/limit and flows the
+ * merged shape (including injected page/limit) into the handler's req.query.
+ */
+const ZodObjectQueryContract = createContract({
+    request: {
+        query: z.object({ search: z.string().optional(), sort: z.string() }),
+    },
+    response: z.array(z.string()),
+    pagination: { request: true },
+});
+
+createHandler(
+    ZodObjectQueryContract,
+    async ({ req }) => {
+        type HandlerQuery = typeof req.query;
+        type _handlerQueryNotAny = ExpectFalse<IsAny<HandlerQuery>>;
+        type _handlerQueryExact = Expect<
+            Equal<HandlerQuery, { search?: string | undefined; sort: string; page: number; limit: number }>
+        >;
+
+        void req.query.search;
+        void req.query.sort;
+        void req.query.page;
+        void req.query.limit;
+
+        return { data: [req.query.sort] };
+    },
+);
+
+/**
  * Capability: strict authorizer return contract.
  *
  * An authorizer MUST return the literal `true` to allow and throw an HttpError

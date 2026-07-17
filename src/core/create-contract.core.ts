@@ -154,6 +154,23 @@ type RequestShapeParams<TRequest extends z.ZodTypeAny> = TRequest extends z.ZodO
     : z.ZodTypeAny;
 
 /**
+ * Normalizes an authored query input (the raw `request.query` value) to the
+ * Zod schema it becomes inside `.querySchema`.
+ *
+ * - A plain field map is wrapped as `z.ZodObject<T>` (strip mode).
+ * - A `z.ZodObject` is kept verbatim (preserving its config and refinements).
+ * - An omitted/undefined query becomes an empty `z.ZodObject`.
+ *
+ * This captures the query exactly as authored (before pagination injection),
+ * so `.querySchema` round-trips back into another contract's `request.query`.
+ */
+type AuthoredQuerySchema<TQuery> = TQuery extends z.ZodObject<infer S>
+    ? z.ZodObject<S>
+    : TQuery extends Record<string, z.ZodType>
+      ? z.ZodObject<TQuery>
+      : z.ZodObject<Record<string, never>>;
+
+/**
  * Defaults applied when pagination.request injects page/limit.
  */
 type PaginationRequestDefaults = {
@@ -231,14 +248,41 @@ type PaginationRequestQueryInput = {
     limit: z.ZodType<number>;
 };
 
-type MergePaginationQuery<TQuery extends Record<string, z.ZodType> | undefined> =
-    TQuery extends Record<string, z.ZodType>
-    ? TQuery &
-    ('page' extends keyof TQuery ? {} : { page: PaginationRequestQueryInput['page'] }) &
-    ('limit' extends keyof TQuery
-        ? {}
-        : { limit: PaginationRequestQueryInput['limit'] })
-    : PaginationRequestQueryInput;
+/**
+ * Injects `page`/`limit` into a raw object shape only when absent.
+ *
+ * User-defined keys always win (kept verbatim from `S`); only missing pagination
+ * keys are added. This is the shape-level analogue of Zod's `util.Extend<A, B>`
+ * with the inject-or-skip rule baked in.
+ */
+type MergeShapeWithPagination<S extends z.ZodRawShape> = {
+    [K in keyof S | 'page' | 'limit']: K extends keyof S
+        ? S[K]
+        : K extends 'page'
+          ? PaginationRequestQueryInput['page']
+          : K extends 'limit'
+            ? PaginationRequestQueryInput['limit']
+            : never;
+};
+
+/**
+ * Merges pagination `page`/`limit` into a query input of any accepted form.
+ *
+ * Handles all three query shapes the request input permits:
+ * - A `z.ZodObject` — extracts its raw shape and Config, merges, and re-wraps
+ *   as `z.ZodObject<MergedShape, C>` so the schema's mode (strict/loose/catchall)
+ *   is preserved.
+ * - A plain field map (`Record<string, z.ZodType>`) — merges and re-wraps as a
+ *   `z.ZodObject` (strip mode).
+ * - Undefined/omitted — produces a `z.ZodObject` containing only `page`/`limit`.
+ *
+ * User-defined `page`/`limit` are always kept; only missing ones are injected.
+ */
+type MergePaginationQuery<TQuery> = TQuery extends z.ZodObject<infer S, infer C>
+    ? z.ZodObject<MergeShapeWithPagination<S>, C>
+    : TQuery extends infer S extends z.ZodRawShape
+      ? z.ZodObject<MergeShapeWithPagination<S>>
+      : z.ZodObject<MergeShapeWithPagination<{}>>;
 
 type ApplyPaginationRequest<TRequest extends RequestSchemaInput> = Omit<TRequest, 'query'> & {
     query: MergePaginationQuery<TRequest['query']>;
@@ -301,6 +345,7 @@ export type Contract<
     TRequest extends z.ZodTypeAny = z.ZodTypeAny,
     TResponseData extends z.ZodTypeAny = z.ZodTypeAny,
     TPaginated extends boolean = boolean,
+    TQueryAuthored extends z.ZodTypeAny = z.ZodTypeAny,
 > = {
     /**
      * Zod schema that validates incoming HTTP requests.
@@ -407,6 +452,29 @@ export type Contract<
     responseDataSchema: TResponseData;
 
     /**
+     * Zod schema for the request query fragment you authored.
+     *
+     * This is the query schema as you wrote it in `createContract`'s
+     * `request.query` field — **not** the pagination-merged query held inside
+     * `.request`. When `pagination.request` is enabled, the `page`/`limit` that
+     * the framework injects are excluded here (unless you authored your own, in
+     * which case yours are kept). Exposed so the query fragment of one contract
+     * can be reused when authoring another. Round-trips directly back into
+     * `createContract`'s `request.query` field.
+     *
+     * Compose with Zod methods to build subsets/supersets (e.g. `.partial()`,
+     * `.extend()`, `.pick()`, `.omit()`).
+     *
+     * @example
+     * const SearchAuthorsContract = createContract({
+     *   request: { query: SearchBooksContract.querySchema },
+     *   response: z.array(authorSchema),
+     *   pagination: { request: true, response: true },
+     * });
+     */
+    querySchema: TQueryAuthored;
+
+    /**
      * Pagination configuration for this contract.
      *
       * When `pagination.request` is true (or configured), page/limit are injected into
@@ -436,8 +504,11 @@ type CreateContractBaseParams<
      *   `z.discriminatedUnion()`, `.refine()`, `.transform()`). Primitives like
      *   `z.string()` are rejected at compile time.
      * - **query**: Validate URL query string parameters.
-     *   Only accepts a plain object of Zod schemas (pagination merging needs
-     *   the raw shape).
+     *   Accepts a plain object of Zod schemas or a `z.ZodObject` (`z.object()`,
+     *   `z.strictObject()`, an `.extend()`-composed object, or a refined
+     *   object). Other object-producing schemas (`z.discriminatedUnion`,
+     *   `z.union`, `.transform()` → `ZodPipe`) are rejected because pagination
+     *   merging needs the raw object shape.
      * - **params**: Validate dynamic route path parameters (from Express router).
      *   Accepts a plain object of Zod schemas or a full `z.ZodType` whose output
      *   is a plain object.
@@ -662,7 +733,12 @@ export function createContract<
     TPagination extends PaginationConfigInput & { response: true },
 >(
     params: CreatePaginatedResponseContractParams<TRequest, TResponseData, TPagination>,
-): Contract<BuiltRequestSchema<WithPaginationRequest<TRequest, TPagination>>, TResponseData, true>;
+): Contract<
+    BuiltRequestSchema<WithPaginationRequest<TRequest, TPagination>>,
+    TResponseData,
+    true,
+    AuthoredQuerySchema<TRequest['query']>
+>;
 
 export function createContract<
     TRequest extends RequestSchemaInput,
@@ -672,7 +748,12 @@ export function createContract<
     | undefined,
 >(
     params: CreateNonPaginatedContractParams<TRequest, TResponseData, TPagination>,
-): Contract<BuiltRequestSchema<WithPaginationRequest<TRequest, TPagination>>, TResponseData, false>;
+): Contract<
+    BuiltRequestSchema<WithPaginationRequest<TRequest, TPagination>>,
+    TResponseData,
+    false,
+    AuthoredQuerySchema<TRequest['query']>
+>;
 
 export function createContract({
     request,
@@ -684,15 +765,21 @@ export function createContract({
     pagination?: PaginationConfigInput;
 }): unknown {
     const responsePaginated = pagination?.response === true;
+
+    // Capture the authored query (pre-merge) for the .querySchema accessor.
+    // This is exactly what the caller passed — page/limit excluded unless they
+    // authored their own. Must be captured BEFORE buildPaginationRequestShape.
+    const querySchema = normalizeAuthoredQuery(request.query);
+
     const requestShape = buildPaginationRequestShape(request, pagination?.request);
     const requestSchema = createRequestSchema(requestShape);
     const responseSchema = createContractResponseSchema(response, responsePaginated);
 
     // Retain the authored fragments so they can be reused when authoring other
-    // contracts (the .bodySchema / .paramsSchema / .responseDataSchema accessors).
-    // bodySchema/paramsSchema are read from the built request's shape — exactly
-    // what createRequestSchema validates. responseDataSchema is the raw response
-    // data schema, not the built envelope.
+    // contracts (the .bodySchema / .paramsSchema / .responseDataSchema /
+    // .querySchema accessors). bodySchema/paramsSchema are read from the built
+    // request's shape — exactly what createRequestSchema validates.
+    // responseDataSchema is the raw response data schema, not the built envelope.
     const bodySchema = requestSchema.shape.body;
     const paramsSchema = requestSchema.shape.params;
 
@@ -704,6 +791,7 @@ export function createContract({
             bodySchema,
             paramsSchema,
             responseDataSchema: response,
+            querySchema,
         };
     }
 
@@ -713,7 +801,27 @@ export function createContract({
         bodySchema,
         paramsSchema,
         responseDataSchema: response,
+        querySchema,
     };
+}
+
+/**
+ * Normalizes the authored query input to the Zod schema held by `.querySchema`.
+ *
+ * Mirrors {@link AuthoredQuerySchema} at the type level: a plain field map is
+ * wrapped as `z.object(...)` (strip mode); a ZodObject is kept as-is (preserving
+ * config and refinements); an omitted query becomes an empty `z.object({})`.
+ * Captured before pagination injection so the accessor reflects exactly what
+ * was authored (page/limit excluded unless the caller defined their own).
+ */
+function normalizeAuthoredQuery(query: RequestSchemaInput['query']): z.ZodObject {
+    if (query instanceof z.ZodObject) {
+        return query;
+    }
+    if (query && typeof query === 'object') {
+        return z.object(query);
+    }
+    return z.object({});
 }
 
 const DEFAULT_PAGE = 1;
@@ -744,14 +852,34 @@ function buildPaginationRequestShape(
         .max(maxLimit, `Limit must be between 1 and ${maxLimit}`)
         .default(defaultLimit);
 
-    const existingQuery = request.query ?? {};
-    const mergedQuery: Record<string, z.ZodType> = { ...existingQuery };
+    const existingQuery = request.query;
 
-    if (!Object.prototype.hasOwnProperty.call(existingQuery, 'page')) {
+    // ZodObject query: merge via .extend() so the schema's config (strict/loose/
+    // catchall) and refinements are preserved. Only the missing keys are passed,
+    // so user-defined page/limit take precedence for free.
+    if (existingQuery instanceof z.ZodObject) {
+        const missing: Record<string, z.ZodType> = {};
+        if (!('page' in existingQuery.shape)) {
+            missing.page = pageSchema;
+        }
+        if (!('limit' in existingQuery.shape)) {
+            missing.limit = limitSchema;
+        }
+        return {
+            ...request,
+            query: existingQuery.extend(missing),
+        };
+    }
+
+    // Plain field-map query: spread + assign missing keys.
+    const queryMap = existingQuery ?? {};
+    const mergedQuery: Record<string, z.ZodType> = { ...queryMap };
+
+    if (!Object.prototype.hasOwnProperty.call(queryMap, 'page')) {
         mergedQuery.page = pageSchema;
     }
 
-    if (!Object.prototype.hasOwnProperty.call(existingQuery, 'limit')) {
+    if (!Object.prototype.hasOwnProperty.call(queryMap, 'limit')) {
         mergedQuery.limit = limitSchema;
     }
 

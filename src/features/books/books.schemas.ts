@@ -53,13 +53,34 @@ export const UpdateBookContract = createContract({
 
 export const ListBooksContract = createContract({
     request: {
-        query: {
+        // The query is authored as a z.ZodObject (a first-class Zod schema)
+        // rather than a plain field map. When pagination.request is on, the
+        // framework merges `page`/`limit` into this object via Zod's `.extend()`,
+        // preserving its config and any refinements. See
+        // docs/specs/2026-07-17-query-widening-and-accessor.md.
+        query: z.object({
             title: titleSchema.optional(),
             author: authorSchema.optional(),
             isbn: isbnSchema.optional(),
-        },
+        }),
     },
     response: z.array(bookOutputSchema),
+    pagination: {
+        request: {
+            defaults: { page: 1, limit: 10 },
+            maxLimit: 100,
+        },
+        response: true,
+    },
+});
+
+// Reuse the authored book-filter query (page/limit excluded) for a sibling
+// resource that shares the same filter shape but a different response.
+export const ListBookIsbnsContract = createContract({
+    request: {
+        query: ListBooksContract.querySchema,
+    },
+    response: z.array(z.object({ isbn: isbnSchema })),
     pagination: {
         request: {
             defaults: { page: 1, limit: 10 },
@@ -98,11 +119,13 @@ export const DeleteBookContract = createContract({
 export type CreateBookRequest = z.infer<(typeof CreateBookContract)['request']>;
 export type UpdateBookRequest = z.infer<(typeof UpdateBookContract)['request']>;
 export type ListBooksRequest = z.infer<(typeof ListBooksContract)['request']>;
+export type ListBookIsbnsRequest = z.infer<(typeof ListBookIsbnsContract)['request']>;
 export type GetBookRequest = z.infer<(typeof GetBookContract)['request']>;
 export type DeleteBookRequest = z.infer<(typeof DeleteBookContract)['request']>;
 
 export type CreateBookResponse = z.infer<(typeof CreateBookContract)['response']>;
 export type UpdateBookResponse = z.infer<(typeof UpdateBookContract)['response']>;
 export type ListBooksResponse = z.infer<(typeof ListBooksContract)['response']>;
+export type ListBookIsbnsResponse = z.infer<(typeof ListBookIsbnsContract)['response']>;
 export type GetBookResponse = z.infer<(typeof GetBookContract)['response']>;
 export type DeleteBookResponse = z.infer<(typeof DeleteBookContract)['response']>;

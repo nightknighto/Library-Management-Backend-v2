@@ -10,6 +10,53 @@ point, then read upward to trace each evolution.
 
 ---
 
+## 2026-07-17
+
+### Query widening + `.querySchema` accessor
+
+> `request.query` was the only request field that rejected a `z.ZodObject` —
+> `body` and `params` had been widened in `7e4a1f4`, but query was left as a plain
+> field map, and the matching `.querySchema` accessor (the fourth symmetric
+> accessor) was deferred. The blocker was `MergePaginationQuery`: it merged via a
+> keyof-gated plain-object intersection, which both checked the wrong keys
+> (`keyof z.ZodObject` is schema members, not user fields) and produced a
+> nonsensical `z.ZodObject & {page;limit}` intersection.
+>
+> Query's Zod-schema form is constrained to `z.ZodObject<z.ZodRawShape>` —
+> tighter than body/params' loose `z.ZodType<Record<string, any>>` supertype —
+> because the pagination merge needs an extractable shape. The merge was rewritten
+> to operate at the shape level: extract the raw shape, inject `page`/`limit`
+> only when absent (user precedence), and re-wrap as
+> `z.ZodObject<MergedShape, C>` so the schema's Config (`$strict`/`$loose`/
+> `$catchall`) is preserved. At runtime the same merge is done via `.extend()`
+> with only the missing keys, which preserves both Config and refinements. The
+> `.querySchema` accessor threads a non-breaking 4th generic (`TQueryAuthored`,
+> defaulting to `z.ZodTypeAny`) rather than stripping page/limit off the built
+> shape — the authored query is unrecoverable from the post-merge shape when the
+> user defined their own page/limit.
+
+- `RequestSchemaInput.query` widened to accept `z.ZodObject<z.ZodRawShape>`
+  alongside the plain `Record<string, z.ZodType>` map. Plain-map behavior is
+  unchanged (strip mode, `page`/`limit` injection identical to before).
+- `MergePaginationQuery` rewritten shape-level; Zod Config (strict/loose/catchall)
+  and refinements survive the pagination merge — a `z.strictObject(...)` query
+  stays strict, a `.refine()` on the query still rejects, after `page`/`limit`
+  are injected.
+- `.querySchema` accessor added — the fourth symmetric accessor. Returns the
+  **authored** query (page/limit excluded unless the caller defined their own),
+  and round-trips directly back into another contract's `request.query`.
+- `Contract` gains a 4th generic `TQueryAuthored` (defaults to `z.ZodTypeAny`,
+  non-breaking) to capture the authored query pre-merge. `AnyContract` and
+  `ContractHandlerSuccessResult` compile unchanged via the default.
+- `.transform()` (→ `ZodPipe`), `z.discriminatedUnion`, and `z.union`-of-objects
+  remain rejected as a top-level query schema (not `z.ZodObject`). Note: in Zod
+  v4 `.refine()` on an object *stays* a `ZodObject` (refinements are checks, not
+  `ZodEffects`), so refined query objects are legitimately accepted.
+- **Resolves** the deferral recorded under "Contract fragment accessors"
+  (2026-07-16). Spec:
+  `docs/specs/2026-07-17-query-widening-and-accessor.md`;
+  deferral record: `docs/specs/2026-07-16-query-accessor-deferral.md`.
+
 ## 2026-07-16
 
 ### Factory `.extend()` — factory-extends-factory
@@ -37,18 +84,17 @@ point, then read upward to trace each evolution.
 
 ### Contract fragment accessors
 
-> Building one contract from another's fragments (e.g. `UpdateBook` from
-> `CreateBook`) required reaching into `otherContract.response` / `.body`, which
-> failed because those weren't the authored fragments — they were the built
-> envelopes. Exposing the authored schemas makes cross-contract reuse first-class.
+> Building one contract from another's fragments (e.g. an "update" contract built
+> from a "create" contract's fields) required reaching into
+> `otherContract.response` / `.body`, which failed because those weren't the
+> authored fragments — they were the built envelopes. Exposing the authored
+> schemas makes cross-contract reuse first-class.
 
 - `.bodySchema`, `.paramsSchema`, `.responseDataSchema` accessors on every
   `Contract`.
 - All three round-trip back into `createContract` with no input-type changes.
 - `responseDataSchema` is the raw data schema, not the built envelope;
   `bodySchema`/`paramsSchema` are read from the built request's shape.
-- Demonstrated in books: `UpdateBookContract.body` now derived from
-  `CreateBookContract.bodySchema` via `.partial()`.
 - **Deferred:** `.querySchema` — `MergePaginationQuery`'s keyof-gated
   intersection breaks for `z.ZodObject`. Candidate `z.ZodObject<z.ZodRawShape>`
   solution + inference risk documented in

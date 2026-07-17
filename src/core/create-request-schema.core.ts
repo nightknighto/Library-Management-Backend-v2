@@ -14,14 +14,21 @@ import z from 'zod';
 /**
  * The shape of fields that can be passed to createRequestSchema.
  *
- * `body` and `params` accept either a plain object of Zod schemas or a full
- * `z.ZodType` whose output is a plain object (e.g. `z.object()`,
- * `z.discriminatedUnion()`, `z.union()` of objects, or refined/transformed
- * object schemas). Schemas that produce non-object types (e.g. `z.string()`,
- * `z.number()`) are rejected at compile time.
+ * `body`, `query`, and `params` each accept either a plain object of Zod
+ * schemas or a full Zod schema. `body` and `params` take any `z.ZodType` whose
+ * output is a plain object (e.g. `z.object()`, `z.discriminatedUnion()`,
+ * `z.union()` of objects, or refined object schemas). Schemas that produce
+ * non-object types (e.g. `z.string()`, `z.number()`) are rejected at compile
+ * time.
  *
- * `query` only accepts a plain object of Zod schemas because pagination
- * merging operates on the plain shape at the type level.
+ * `query` accepts a plain object of Zod schemas or a `z.ZodObject`
+ * (`z.object()`, `z.strictObject()`, `.loose()`, `.refine()` on an object,
+ * `.extend()`-composed objects). Other object-producing schemas
+ * (`z.discriminatedUnion`, `z.union`, `.transform()` which become `ZodPipe`)
+ * are rejected because the pagination merge needs the raw object shape. When
+ * `pagination.request` is enabled, `page` and `limit` are merged into the
+ * query via Zod's `.extend()`, preserving the schema's config (strict/loose)
+ * and refinements.
  *
  * @example
  * const schemaInput: RequestSchemaInput = {
@@ -34,6 +41,11 @@ import z from 'zod';
  *   body: z.object({ name: z.string(), age: z.number() }),
  *   params: z.object({ id: z.string().uuid() }),
  *   query: { include: z.coerce.boolean().default(false) },
+ * };
+ *
+ * @example
+ * const schemaInputWithQueryZodObject: RequestSchemaInput = {
+ *   query: z.object({ search: z.string().optional() }),
  * };
  *
  * @example
@@ -82,15 +94,34 @@ export type RequestSchemaInput = {
     /**
      * Query string schema for URL parameters.
      *
-     * Query validation is lenient (unknown keys are stripped).
-     * When used via createContract with pagination.request enabled, the framework
-        * injects `page` and `limit` if they are missing; your own `page`/`limit`
-        * definitions take precedence.
-        *
-        * Injected `page`/`limit` fields are numeric (via z.coerce.number()) with
-        * defaults (page=1, limit=10) and maxLimit=100 unless overridden.
+     * Accepts either a plain object of Zod schemas (wrapped in strip mode at
+     * runtime, unknown keys removed) or a full `z.ZodObject` (e.g. `z.object()`,
+     * `z.strictObject()`, an object built via `.extend()`/`.loose()`, or an
+     * object with `.refine()`). When a Zod schema is provided, it is used
+     * directly so you control the validation mode and can attach refinements.
+     *
+     * When used via createContract with `pagination.request` enabled, the
+     * framework injects `page` and `limit` (numeric, via `z.coerce.number()`,
+     * with defaults page=1, limit=10 and maxLimit=100 unless overridden) when
+     * your query does not already define them. Your own `page`/`limit`
+     * definitions take precedence. The injection merges via Zod's `.extend()`,
+     * so your schema's config (strict/loose) and refinements are preserved.
+     *
+     * Schemas that are not a `z.ZodObject` (e.g. `z.discriminatedUnion()`,
+     * `z.union()`, or an object passed through `.transform()` which becomes a
+     * `ZodPipe`) are rejected at compile time because the pagination merge
+     * needs the raw object shape.
+     *
+     * @example
+     * query: { page: z.coerce.number().optional(), search: z.string().optional() }
+     *
+     * @example
+     * query: z.object({ search: z.string().optional(), sort: z.enum(['asc', 'desc']) })
+     *
+     * @example
+     * query: z.strictObject({ search: z.string() }).refine((d) => d.search !== 'bad')
      */
-    query?: Record<string, z.ZodType>;
+    query?: Record<string, z.ZodType> | z.ZodObject<z.ZodRawShape>;
     /**
      * Route params schema for dynamic path segments.
      *
@@ -146,9 +177,19 @@ export type RequestSchemaOutput<T extends RequestSchemaInput> = {
     ? z.ZodObject<T['body']>
     : z.ZodObject<Record<string, never>>;
     /**
-     * Zod object schema for query (unknown keys stripped).
+     * Zod object schema for query.
+     *
+     * When a plain object is provided, this is `z.ZodObject` (strip mode,
+     * unknown keys removed). When a `z.ZodObject` is provided (e.g.
+     * `z.object()`, `z.strictObject()`, an `.extend()`-composed object, or a
+     * refined object), the schema is passed through directly, preserving its
+     * shape and config (strict/loose/catchall).
      */
-    query: T['query'] extends Record<string, z.ZodType>
+    query: T['query'] extends z.ZodObject<infer S, infer C>
+    ? z.ZodObject<S, C>
+    : T['query'] extends z.ZodObject<infer S>
+    ? z.ZodObject<S>
+    : T['query'] extends Record<string, z.ZodType>
     ? z.ZodObject<T['query']>
     : z.ZodObject<Record<string, never>>;
     /**
@@ -199,8 +240,11 @@ const emptySchema = z
  *   properties). When a Zod schema is provided (e.g. `z.object()`,
  *   `z.discriminatedUnion()`, `.refine()`, `.transform()`), the schema is used
  *   as-is so you control the validation mode.
- * - `query`: Strips unknown properties (lenient for framework-added params).
- *   Only accepts plain objects because pagination merging needs the raw shape.
+ * - `query`: When a plain object is provided, wraps it in `z.object()` (strip
+ *   mode, unknown keys removed). When a `z.ZodObject` is provided (e.g.
+ *   `z.object()`, `z.strictObject()`, an `.extend()`-composed object, or a
+ *   refined object), the schema is used as-is so you control the validation
+ *   mode and can attach refinements.
  * - `params`: When a plain object is provided, strips unknown properties. When
  *   a Zod schema is provided, it is used as-is.
  * - Omitted fields default to empty object `{}` (matching Express convention)
@@ -209,6 +253,8 @@ const emptySchema = z
  * - Only allows `body`, `query`, `params` keys (typos like `boby` cause compile error)
  * - `body` and `params` reject schemas producing non-object types (`z.string()`,
  *   `z.number()`, etc.) at compile time
+ * - `query` accepts plain objects or `z.ZodObject` schemas; other object-producing
+ *   schemas (`z.discriminatedUnion`, `z.union`, `.transform()`) are rejected
  * - Infers exact types for use with `ValidatedRequest<T>` in controllers
  *
  * @example
@@ -230,7 +276,7 @@ const emptySchema = z
  * @example
  * export const GetBookRequestSchema = createRequestSchema({
  *   params: z.object({ id: z.string().uuid() }),
- *   query: { includeDetails: z.coerce.boolean().default(false) },
+ *   query: z.object({ includeDetails: z.coerce.boolean().default(false) }),
  * });
  *
  * @example
@@ -262,7 +308,11 @@ export function createRequestSchema<
             : isPlainRecord(shape.body)
               ? z.strictObject(shape.body)
               : emptySchema,
-        query: isPlainRecord(shape.query) ? z.object(shape.query) : emptySchema,
+        query: isZodSchema(shape.query)
+            ? shape.query
+            : isPlainRecord(shape.query)
+              ? z.object(shape.query)
+              : emptySchema,
         params: isZodSchema(shape.params)
             ? shape.params
             : isPlainRecord(shape.params)

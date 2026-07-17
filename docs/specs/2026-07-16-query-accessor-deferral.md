@@ -1,7 +1,13 @@
 # Query Accessor & `query:` Widening — Decision Deferral
 
 - **Date:** 2026-07-16
-- **Status:** Deferred (no implementation; blocked on a type-level obstacle documented here)
+- **Status:** ✅ **Resolved (2026-07-17)** — implemented per
+  [`2026-07-17-query-widening-and-accessor.md`](./2026-07-17-query-widening-and-accessor.md).
+  The type-level obstacle documented below turned out to be fully solvable: query
+  now accepts `z.ZodObject`, the pagination merge preserves Zod Config (strict/loose/
+  catchall) and refinements through `.extend()`, and the fourth accessor (`.querySchema`)
+  ships, returning the authored query and round-tripping into `query:`. The doc below is
+  preserved as the historical record of the blocker.
 - **Relationship:** Companion to `2026-07-16-contract-fragment-reuse.md`. That spec
   ships `.bodySchema`, `.paramsSchema`, and `.responseDataSchema` — the three
   accessors that fully round-trip. This doc records the **unresolved** question of
