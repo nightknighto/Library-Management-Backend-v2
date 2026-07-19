@@ -36,6 +36,7 @@ import type {
     AccessMode,
     Authenticator,
     AuthorizationConfig,
+    Authorizer,
     ContractResponse,
     HandlerOptions,
     HandlerSuccessResult,
@@ -595,15 +596,90 @@ function createHandlerInternal<TContract extends AnyContract, TAuth>(
 // SECTION 5: HANDLER FACTORY TYPES
 // =========================================================================
 
-type HandlerFactoryDefaults<TAuthContext> = {
+// Factory authorizer shape propagation.
+//
+// A factory produces handlers for many contracts, so an authorizer installed
+// at factory or .extend() time cannot be checked against a single contract.
+// Instead its required request shape is CAPTURED into a TReq type parameter
+// and enforced at each invocation, where the contract's AfterAuthorizationRequest
+// is known.
+//
+// Only afterValidation authorizers contribute: beforeValidation policies run
+// against a plain Request before validation and therefore impose no
+// contract-bound requirement.
+
+/** Extracts the required Request shape from an afterValidation authorizer array. */
+type ExtractAfterReq<T> =
+    T extends ReadonlyArray<infer A>
+        ? A extends Authorizer<any, infer R> ? R : never
+        : never;
+
+/** Extracts the required Request shape from an `authorize` config. */
+type ExtractAuthorizeReq<TAuthorize> = TAuthorize extends {
+    afterValidation?: infer B;
+}
+    ? ExtractAfterReq<B>
+    : Request;
+
+/**
+ * Widened `AuthorizationConfig` constraint for authorizer shape inference.
+ *
+ * Authorizers are contravariant in their `TRequest`: an authorizer typed
+ * `Authorizer<Auth, Request<{isbn:string},...>>` is NOT assignable to
+ * `Authorizer<Auth, Request>` (plain Request.params is `ParamsDictionary`, an
+ * index signature with no named `isbn`). Using plain `Request` as the
+ * constraint would therefore reject the very shape-bound authorizers this
+ * feature exists to support.
+ *
+ * Using `Request<any, any, any, any>` widens the constraint so contravariance
+ * is satisfied for any `Request` specialization (because `any` is assignable to
+ * everything), while inference still captures the concrete authorizer shape
+ * into `TAuthorize` for {@link ExtractAuthorizeReq} to read.
+ */
+type AnyReqAuthorizeConfig<TAuth> = AuthorizationConfig<TAuth, Request<any, any, any, any>>;
+
+/**
+ * Enforces that a contract satisfies an accumulated authorizer requirement.
+ *
+ * Returns `TContract` unchanged when its {@link AfterAuthorizationRequest} is
+ * assignable to `TReq`; otherwise yields an incompatible type so the contract
+ * is rejected at the call site. Wrapping the contract parameter in this
+ * conditional preserves `TContract` inference (call-site generics still infer
+ * the original contract type) — verified by inference tests.
+ *
+ * The `false` branch adds a REQUIRED property whose NAME is a self-contained,
+ * human-readable explanation of the failure. A real contract object never
+ * carries it, so the assignment fails and TypeScript echoes the property name
+ * verbatim in the diagnostic — the developer reads the explanation directly in
+ * the error message. (An optional marker would silently satisfy every object,
+ * so the property must be required. The message carries no links: a consuming
+ * project's tooling surfaces only the literal text, never this repo's docs.)
+ */
+type Checked<TContract extends AnyContract, TReq extends Request> =
+    AfterAuthorizationRequest<TContract> extends TReq
+        ? TContract
+        : TContract & {
+              readonly '[ERROR] Contract rejected: this factory has an afterValidation authorizer that requires a request field (e.g. a params/body/query field) the contract does not provide. Make the contract define the field(s) the authorizer reads.': unique symbol;
+          };
+
+type HandlerFactoryDefaults<
+    TAuthContext,
+    TAuthorize extends AnyReqAuthorizeConfig<TAuthContext> = AnyReqAuthorizeConfig<TAuthContext>,
+> = {
     /**
      * Default access mode applied to handlers created by this factory.
      */
     access?: AccessMode;
     /**
      * Default security configuration merged into each handler's options.
+     * `authenticate` carries `TAuthContext`; `authorize` is generic in
+     * `TAuthorize` so the caller's passed authorizer shape can be captured and
+     * propagated onto the factory's accumulated requirement.
      */
-    security?: SecurityOptions<TAuthContext, Request>;
+    security?: {
+        authenticate?: Authenticator<TAuthContext>;
+        authorize?: TAuthorize;
+    };
 };
 
 /**
@@ -612,9 +688,16 @@ type HandlerFactoryDefaults<TAuthContext> = {
  * `authorize` buckets may be layered on, and `access` may move between
  * `protected`/`optional` but never widen to `public` (which would erase the
  * parent's security pipeline).
+ *
+ * The `authorize` field is generic in `TAuthorize` so the caller's passed
+ * authorizer shape can be captured and propagated onto the derived factory's
+ * accumulated requirement (see the {@link Checked} helper). The constraint is
+ * widened via {@link AnyReqAuthorizeConfig} so shape-bound authorizers fit
+ * while their concrete shape is preserved for inference.
  * @typeParam TAuth - Auth context inherited from the parent factory.
+ * @typeParam TAuthorize - Inferred shape of the passed `authorize` config.
  */
-type SecuredFactoryExtension<TAuth> = {
+type SecuredFactoryExtension<TAuth, TAuthorize extends AnyReqAuthorizeConfig<TAuth> = AnyReqAuthorizeConfig<TAuth>> = {
     /**
      * New default access for the derived factory. Omit to inherit the parent's.
      * `'public'` is intentionally excluded: a derived factory cannot erase the
@@ -625,7 +708,7 @@ type SecuredFactoryExtension<TAuth> = {
      * Authorize buckets to concatenate additively after the parent's buckets.
      * `authenticate` is inherited from the parent and cannot be set here.
      */
-    security?: { authorize?: AuthorizationConfig<TAuth, Request> };
+    security?: { authorize?: TAuthorize };
 };
 
 /**
@@ -633,9 +716,17 @@ type SecuredFactoryExtension<TAuth> = {
  * authenticator, so extending it is an *upgrade*: the caller supplies the
  * `authenticate` ("first setter") and may layer `authorize`. After this, the
  * returned secured factory locks `authenticate` for its own descendants.
+ *
+ * Like {@link SecuredFactoryExtension}, `authorize` is generic in `TAuthorize`
+ * so the passed authorizer shape can be captured onto the resulting secured
+ * factory's requirement.
  * @typeParam TAuth - Auth context introduced by this upgrade.
+ * @typeParam TAuthorize - Inferred shape of the passed `authorize` config.
  */
-type PublicFactoryUpgrade<TAuth> = {
+type PublicFactoryUpgrade<
+    TAuth,
+    TAuthorize extends AnyReqAuthorizeConfig<TAuth> = AnyReqAuthorizeConfig<TAuth>,
+> = {
     /**
      * New (secured) default access. Required: a public factory must be upgraded
      * to `protected` or `optional` to gain a security pipeline.
@@ -647,7 +738,7 @@ type PublicFactoryUpgrade<TAuth> = {
      */
     security: {
         authenticate: Authenticator<TAuth>;
-        authorize?: AuthorizationConfig<TAuth, Request>;
+        authorize?: TAuthorize;
     };
 };
 
@@ -675,24 +766,30 @@ type FactoryPublicOverrideOpts = {
  *
  * @typeParam TAuth - Auth context type from the factory's `authenticate` default.
  * @typeParam TDefaultAccess - Default access mode (protected or optional).
+ * @typeParam TReq - Accumulated request shape required by the factory's
+ *   baseline `afterValidation` authorizers (and by every ancestor's, via
+ *   `.extend()`). A contract passed to this factory must produce an
+ *   {@link AfterAuthorizationRequest} assignable to `TReq`. Defaults to plain
+ *   `Request` (no requirement) for factories without shape-bound authorizers.
  */
 interface SecuredFactory<
     TAuth,
     TDefaultAccess extends Exclude<AccessMode, 'public'>,
+    TReq extends Request = Request,
 > {
     <TContract extends AnyContract, TResult extends ContractHandlerSuccessResult<TContract>>(
-        contract: TContract,
+        contract: Checked<TContract, TReq>,
         handler: HandlerFn<TContract, TAuth, TDefaultAccess, TResult>,
     ): RequestHandler;
 
     <TContract extends AnyContract, TResult extends ContractHandlerSuccessResult<TContract>>(
-        contract: TContract,
+        contract: Checked<TContract, TReq>,
         options: FactoryProtectedOpts<TAuth, TContract>,
         handler: HandlerFn<TContract, TAuth, 'protected', TResult>,
     ): RequestHandler;
 
     <TContract extends AnyContract, TResult extends ContractHandlerSuccessResult<TContract>>(
-        contract: TContract,
+        contract: Checked<TContract, TReq>,
         options: FactoryOptionalOpts<TAuth, TContract>,
         handler: HandlerFn<TContract, TAuth, 'optional', TResult>,
     ): RequestHandler;
@@ -718,14 +815,19 @@ interface SecuredFactory<
      * - **access may move between `protected` and `optional`, but never widen to
      *   `public`** (which would erase the parent's security pipeline). Omit
      *   `access` to inherit this factory's.
+     * - **afterValidation authorizer shapes accumulate**: each authorizer's
+     *   required request shape is intersected onto the parent's accumulated
+     *   `TReq`, so every contract passed to the derived factory must satisfy
+     *   every baseline requirement (parent + child). `beforeValidation`
+     *   authorizers impose no requirement (they run on a plain `Request`).
      *
      * The result is flattened — indistinguishable from a root factory built with
      * the same merged defaults — so chains of arbitrary depth are well-defined.
      *
      * @param ext - Authorize buckets to concatenate and an optional access
      *   transition. `authenticate` must not appear (it is locked).
-     * @returns A derived factory with the same `TAuth` and the (possibly
-     *   transitioned) access.
+     * @returns A derived factory with the same `TAuth`, the (possibly
+     *   transitioned) access, and the accumulated authorizer requirement.
      *
      * @example
      * const jwtFactory = createHandlerFactory({
@@ -739,14 +841,28 @@ interface SecuredFactory<
      * });
      *
      * @example
+     * // A shape-bound authorizer requires params.isbn on every contract.
+     * const requireIsbn: Authorizer<Auth, Request<{ isbn: string }, any, unknown, any>> =
+     *   async ({ req }) => { if (!req.params.isbn) throw new createHttpError.Forbidden(); return true; };
+     * const ownerFactory = jwtFactory.extend({
+     *   security: { authorize: { afterValidation: [requireIsbn] } },
+     * });
+     *
+     * @example
      * // Optional-access child of a protected factory — same pipeline, guests allowed.
      * const optionalFactory = jwtFactory.extend({ access: "optional" });
      */
-    extend(ext: { access: 'protected' } & SecuredFactoryExtension<TAuth>): SecuredFactory<TAuth, 'protected'>;
+    extend<TAuthorize extends AnyReqAuthorizeConfig<TAuth> = AnyReqAuthorizeConfig<TAuth>>(
+        ext: { access: 'protected' } & SecuredFactoryExtension<TAuth, TAuthorize>,
+    ): SecuredFactory<TAuth, 'protected', TReq & ExtractAuthorizeReq<TAuthorize>>;
     /** @inheritdoc */
-    extend(ext: { access: 'optional' } & SecuredFactoryExtension<TAuth>): SecuredFactory<TAuth, 'optional'>;
+    extend<TAuthorize extends AnyReqAuthorizeConfig<TAuth> = AnyReqAuthorizeConfig<TAuth>>(
+        ext: { access: 'optional' } & SecuredFactoryExtension<TAuth, TAuthorize>,
+    ): SecuredFactory<TAuth, 'optional', TReq & ExtractAuthorizeReq<TAuthorize>>;
     /** @inheritdoc */
-    extend(ext?: SecuredFactoryExtension<TAuth>): SecuredFactory<TAuth, TDefaultAccess>;
+    extend<TAuthorize extends AnyReqAuthorizeConfig<TAuth> = AnyReqAuthorizeConfig<TAuth>>(
+        ext?: SecuredFactoryExtension<TAuth, TAuthorize>,
+    ): SecuredFactory<TAuth, TDefaultAccess, TReq & ExtractAuthorizeReq<TAuthorize>>;
 }
 
 /**
@@ -788,9 +904,15 @@ interface PublicFactory {
      * cannot be erased by further extensions (no descendant may widen back to
      * `public`).
      *
+     * Any shape requirement expressed by `upgrade.security.authorize`'s
+     * `afterValidation` authorizers becomes the baseline `TReq` of the resulting
+     * secured factory — every contract passed to it must satisfy that shape.
+     *
      * @param upgrade - The secured access to adopt and the authenticator that
      *   introduces `TAuth`. Optional authorize buckets may be layered on.
-     * @returns A secured factory whose `TAuth` is inferred from `upgrade.security.authenticate`.
+     * @returns A secured factory whose `TAuth` is inferred from
+     *   `upgrade.security.authenticate` and whose `TReq` is inferred from any
+     *   `afterValidation` authorizers.
      *
      * @example
      * const publicFactory = createHandlerFactory({ access: "public" });
@@ -801,9 +923,13 @@ interface PublicFactory {
      *   security: { authenticate: authenticateJwt },
      * });
      */
-    extend<TAuth>(upgrade: { access: 'protected' } & PublicFactoryUpgrade<TAuth>): SecuredFactory<TAuth, 'protected'>;
+    extend<TAuth, TAuthorize extends AnyReqAuthorizeConfig<TAuth> = AnyReqAuthorizeConfig<TAuth>>(
+        upgrade: { access: 'protected' } & PublicFactoryUpgrade<TAuth, TAuthorize>,
+    ): SecuredFactory<TAuth, 'protected', ExtractAuthorizeReq<TAuthorize>>;
     /** @inheritdoc */
-    extend<TAuth>(upgrade: { access: 'optional' } & PublicFactoryUpgrade<TAuth>): SecuredFactory<TAuth, 'optional'>;
+    extend<TAuth, TAuthorize extends AnyReqAuthorizeConfig<TAuth> = AnyReqAuthorizeConfig<TAuth>>(
+        upgrade: { access: 'optional' } & PublicFactoryUpgrade<TAuth, TAuthorize>,
+    ): SecuredFactory<TAuth, 'optional', ExtractAuthorizeReq<TAuthorize>>;
 }
 
 // =========================================================================
@@ -884,17 +1010,17 @@ interface PublicFactory {
  *   security: { authorize: { afterValidation: [({ auth }) => auth.role === "admin"] } },
  * });
  */
-export function createHandlerFactory<TAuth>(
-    defaults: HandlerFactoryDefaults<TAuth> & {
+export function createHandlerFactory<TAuth, TAuthorize extends AnyReqAuthorizeConfig<TAuth> = AnyReqAuthorizeConfig<TAuth>>(
+    defaults: HandlerFactoryDefaults<TAuth, TAuthorize> & {
         access: 'protected';
     },
-): SecuredFactory<TAuth, 'protected'>;
+): SecuredFactory<TAuth, 'protected', ExtractAuthorizeReq<TAuthorize>>;
 
-export function createHandlerFactory<TAuth>(
-    defaults: HandlerFactoryDefaults<TAuth> & {
+export function createHandlerFactory<TAuth, TAuthorize extends AnyReqAuthorizeConfig<TAuth> = AnyReqAuthorizeConfig<TAuth>>(
+    defaults: HandlerFactoryDefaults<TAuth, TAuthorize> & {
         access: 'optional';
     },
-): SecuredFactory<TAuth, 'optional'>;
+): SecuredFactory<TAuth, 'optional', ExtractAuthorizeReq<TAuthorize>>;
 
 export function createHandlerFactory<TAuth>(
     defaults: { access: 'public'; security?: never },

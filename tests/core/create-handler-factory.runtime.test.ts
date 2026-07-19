@@ -466,4 +466,44 @@ describe('createHandlerFactory (runtime)', () => {
         const okResponse = await request(okApp.app).get(okApp.route);
         expect(okResponse.status).toBe(200);
     });
+
+    it('.extend runs a shape-bound child authorizer against the validated request at runtime', async () => {
+        // A child authorizer that depends on contract-validated request data
+        // (params.isbn). Runtime guard: the type-level requirement that the
+        // contract provides params.isbn must be matched by runtime behavior —
+        // the authorizer actually receives the validated param.
+        const contract = createContract({
+            request: { params: { isbn: z.string() } },
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const seenIsbn = vi.fn((_: string) => {});
+
+        const parent = createHandlerFactory({
+            access: 'protected',
+            security: { authenticate: async () => ({ userId: '1' }) },
+        });
+
+        const child = parent.extend({
+            security: {
+                authorize: {
+                    afterValidation: [
+                        async ({ req }): Promise<true> => {
+                            seenIsbn(req.params.isbn);
+                            return true;
+                        },
+                    ],
+                },
+            },
+        });
+
+        const handler = child(contract, async () => ({ data: { ok: true } }));
+
+        const { app } = createTestApp(handler, { route: '/books/:isbn' });
+        const response = await request(app).get('/books/9780000000001');
+
+        expect(response.status).toBe(200);
+        expect(seenIsbn).toHaveBeenCalledTimes(1);
+        expect(seenIsbn).toHaveBeenCalledWith('9780000000001');
+    });
 });

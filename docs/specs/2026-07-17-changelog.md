@@ -109,6 +109,41 @@ The deliberate asymmetry: the *why* (problem/reason) lives in the blockquote
 (API deltas) lives in the bullets. Headlines alone give a 5-second scan; bullets
 give recall without opening specs; the blockquote restores the reason you forgot.
 
+### Audience & language (hard rule)
+
+**The changelog is written for framework users, not for the author or the next
+maintainer.** A reader of this file is deciding whether to upgrade, or
+remembering what a release did — they know the public API (`createHandlerFactory`,
+`Authorizer`, contracts) but they do **not** know the internals (`TReq`,
+`AnyReqAuthorizeConfig`, `Checked<TContract, TReq>`, `mergeHandlerSecurityDefaults`,
+contravariance mechanics, conditional-type tricks).
+
+Concretely:
+
+- **Lead with the user-facing payoff.** The headline and the first sentence of
+  the blockquote must answer "what can I now do, or what no longer breaks?" in
+  plain terms. The problem statement (what was wrong before) comes next.
+- **Internal type names, helper utilities, and inference mechanics do not appear
+  in headlines, blockquotes, or user-facing bullets.** Put them in the linked
+  spec. The changelog is a scan path; the spec is the deep dive.
+- **One concrete code shape is allowed** — a minimal snippet of the user-facing
+  API showing what now compiles or what is now rejected. Internal generic
+  signatures (`SecuredFactory<TAuth, TDefaultAccess, TReq extends Request =
+  Request>`) are **not** a user-facing shape and stay out of bullets.
+- **Bullets describe observable behavior**, not implementation: "factories that
+  have such an authorizer reject contracts missing the required field" (good),
+  not "the contract parameter is wrapped in a `Checked<TContract, TReq>`
+  conditional" (bad — that is the mechanism, not the behavior).
+- **A user reading the headline alone should know whether the change affects
+  them.** If the headline only makes sense after reading the bullets (or worse,
+  the spec), it is wrong.
+
+This rule was added after a repeated failure mode: technically-correct entries
+that named internal generics and inference mechanics in every bullet, leaving a
+user unable to tell what the change let them do. **Jargon is not precision — it
+is a readability regression.** Precision lives in the spec; the changelog
+translates the spec into user impact.
+
 ### Example entry (typical — problem + decision rationale)
 
 ```md
@@ -161,6 +196,87 @@ give recall without opening specs; the blockquote restores the reason you forgot
 - **Deferred:** candidate solution + inference risk documented in
   `docs/specs/2026-07-16-query-accessor-deferral.md`.
 ```
+
+### Example entry (BAD vs GOOD — the recurring failure mode)
+
+The same change, written two ways. The **BAD** version is technically accurate
+but unreadable to a user; the **GOOD** version says the same thing in user
+terms and moves the internals to the spec. This is the single most common
+changelog mistake — verify your draft against it before finishing.
+
+**BAD** — implementation jargon as the headline and in every bullet; a user
+cannot tell what they can now do:
+
+```md
+### Factory authorizer shape propagation
+
+> An authorizer typed against a partial request shape (e.g.
+> `Authorizer<Auth, Request<{ isbn: string }, ...>>`) declares a requirement the
+> contract must satisfy. Installing such an authorizer via `.extend()` or
+> `createHandlerFactory` defaults produced a TypeScript error **at extension
+> time**, because the authorizer-bucket types were constrained to plain `Request`
+> and contravariance rejected the shape-bound authorizer.
+>
+> A factory does not have *a* contract — it produces handlers for many — so the
+> requirement cannot be checked against a single contract at creation time. The
+> fix captures the requirement into a new `TReq` type parameter and enforces it
+> at each invocation, where the contract's `AfterAuthorizationRequest` is known.
+> The constraint is widened to `Request<any, any, any, any>` (via
+> `AnyReqAuthorizeConfig`) so contravariance is satisfied for any Request
+> specialization while inference still captures the concrete shape.
+
+- `SecuredFactory<TAuth, TDefaultAccess, TReq extends Request = Request>` — new
+  third generic (defaults to plain `Request`, non-breaking) carrying the
+  accumulated authorizer requirement. The contract parameter of the no-options,
+  protected, and optional call overloads is wrapped in a `Checked<TContract, TReq>`
+  conditional that rejects contracts whose `AfterAuthorizationRequest` does not
+  satisfy `TReq` (while preserving `TContract` inference at the call site).
+- `SecuredFactory.extend` and `PublicFactory.extend` overloads are now generic
+  in the passed `authorize` config; each `afterValidation` authorizer's required
+  shape is intersected onto the parent's accumulated `TReq`.
+- New internal helpers: `ExtractAfterReq`, `ExtractAuthorizeReq`,
+  `AnyReqAuthorizeConfig`, `Checked`. No runtime change.
+```
+
+**GOOD** — same change, user-facing payoff first, internals moved to the spec:
+
+```md
+### Factory authorizers can now require a request shape
+
+> A reusable authorizer often needs a specific request field — e.g. an
+> ownership check that reads `req.params.isbn`. You could install such an
+> authorizer on a single handler, and TypeScript would check the contract had
+> the field. But the moment you tried to install it as a **factory baseline** —
+> via `createHandlerFactory` defaults or `.extend()` — TypeScript rejected the
+> authorizer at the factory definition itself, even though it was perfectly
+> valid. You had to either widen the authorizer to a plain `Request` (losing the
+> typing) or repeat it on every handler.
+>
+> Factories now remember the request shape their `afterValidation` authorizers
+> need, and enforce it on every contract you pass to the factory. So a factory
+> that requires `params.isbn` will refuse a contract without it — and a contract
+> that has it compiles cleanly. Requirements accumulate across `.extend()`
+> chains, so a derived factory enforces its own authorizers plus every
+> ancestor's.
+
+- `createHandlerFactory` defaults and `.extend()` accept authorizers typed
+  against a specific request shape (e.g.
+  `Authorizer<Auth, Request<{ isbn: string }, ...>>`). Previously these were
+  rejected at the factory definition; they now compile.
+- A factory that has such an authorizer rejects contracts missing the required
+  field, at the call site where the contract is known.
+- `.extend()` chains accumulate requirements: each layer's `afterValidation`
+  authorizers add to the parent's. A contract must satisfy every layer's
+  requirement.
+- No runtime change. Existing factories and handlers are unaffected — the new
+  behavior only activates when you install a shape-bound authorizer.
+- Spec: `docs/specs/2026-07-19-factory-authorizer-shape-propagation.md`.
+```
+
+The GOOD version keeps **one** concrete shape — the user-facing authorizer type
+`Authorizer<Auth, Request<{ isbn: string }, ...>>` — because that is a thing the
+user actually writes. Everything else (`TReq`, `Checked`, `AnyReqAuthorizeConfig`,
+contravariance) is gone from the entry and lives in the spec.
 
 ## Why no commit hashes
 

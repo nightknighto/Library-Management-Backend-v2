@@ -15,12 +15,14 @@
  * This file is compile-only and validated by `pnpm check`.
  */
 
+import type { Request } from 'express';
 import createHttpError from 'http-errors';
 import { z } from 'zod';
 import {
     type AfterAuthorizationRequest,
     allOf,
     anyOf,
+    type Authorizer,
     createAuthenticator,
     createContract,
     createHandler,
@@ -344,3 +346,64 @@ _rederived(
         return { data: { updated: true } };
     },
 );
+
+// =========================================================================
+// Interaction: authorizer shape requirement ACCUMULATES across .extend() chains
+//
+// Each .extend() layer that adds an afterValidation authorizer with a required
+// request shape intersects its requirement onto the parent's accumulated TReq.
+// A contract passed to any derived factory must therefore satisfy EVERY
+// accumulated requirement, not just the most recent one.
+// =========================================================================
+
+const _needsParamsIsbn: Authorizer<ScopedAuthContext, Request<{ isbn: string }, any, unknown, any>> = async ({
+    req,
+}) => {
+    if (req.params.isbn.length === 0) throw new createHttpError.Forbidden('denied');
+    return true;
+};
+const _needsParamsSlug: Authorizer<ScopedAuthContext, Request<{ slug: string }, any, unknown, any>> = async ({
+    req,
+}) => {
+    if (req.params.slug.length === 0) throw new createHttpError.Forbidden('denied');
+    return true;
+};
+
+const _hasBothParams = createContract({
+    request: { params: { isbn: z.string(), slug: z.string() } },
+    response: z.object({ ok: z.boolean() }),
+});
+const _hasIsbnOnly = createContract({
+    request: { params: { isbn: z.string() } },
+    response: z.object({ ok: z.boolean() }),
+});
+const _hasSlugOnly = createContract({
+    request: { params: { slug: z.string() } },
+    response: z.object({ ok: z.boolean() }),
+});
+
+const _chainBase = createHandlerFactory<ScopedAuthContext>({
+    access: 'protected',
+    security: { authenticate: async () => ({ userId: 'c-1', role: 'staff', scopes: [] }) },
+});
+
+// Layer 1: requires params.isbn.
+const _chainIsbn = _chainBase.extend({
+    security: { authorize: { afterValidation: [_needsParamsIsbn] } },
+});
+// Layer 2: requires params.slug (parent's isbn requirement is preserved).
+const _chainIsbnAndSlug = _chainIsbn.extend({
+    security: { authorize: { afterValidation: [_needsParamsSlug] } },
+});
+
+// Contract satisfying BOTH accumulated requirements compiles.
+_chainIsbnAndSlug(_hasBothParams, async () => ({ data: { ok: true } }));
+
+// Contract satisfying only the parent's requirement (isbn) but missing the
+// child's (slug) is rejected — proves intersection accumulation.
+// @ts-expect-error accumulated TReq requires params.slug; contract has only isbn
+_chainIsbnAndSlug(_hasIsbnOnly, async () => ({ data: { ok: true } }));
+
+// Symmetric: contract satisfying only the child's requirement is also rejected.
+// @ts-expect-error accumulated TReq requires params.isbn; contract has only slug
+_chainIsbnAndSlug(_hasSlugOnly, async () => ({ data: { ok: true } }));

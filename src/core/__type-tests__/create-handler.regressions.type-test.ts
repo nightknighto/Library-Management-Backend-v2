@@ -274,3 +274,43 @@ _regressionFactory(
     { access: 'public' },
     async ({ req: _req }) => ({ data: { updated: true } }),
 );
+
+// =========================================================================
+// Regression: adding TReq (authorizer shape propagation) to factory types
+// must not alter existing factory behavior. A factory built WITHOUT any
+// shape-bound authorizer accepts every contract exactly as before — TReq
+// defaults to plain Request and imposes no requirement. This guards against
+// accidentally tightening factory contracts when authorizer shape inference
+// was added.
+// =========================================================================
+
+const _plainFactory = createHandlerFactory<AuthContext>({
+    access: 'protected',
+    security: { authenticate: async () => ({ userId: 'r-12', role: 'staff' }) },
+});
+
+const _unrelatedContract = createContract({
+    request: { body: { anything: z.string() } },
+    response: z.object({ ok: z.boolean() }),
+});
+
+// A plain factory (no shape-bound authorizer) accepts an arbitrary contract
+// — no requirement to satisfy, exactly as before TReq was introduced.
+_plainFactory(_unrelatedContract, async () => ({ data: { ok: true } }));
+
+// The same holds after a no-op .extend() that adds no shape-bound authorizer:
+// the derived factory stays assignable to its parent (no tightened TReq).
+const _plainDerived = _plainFactory.extend({
+    security: {
+        authorize: {
+            beforeValidation: [
+                async ({ auth }): Promise<true> => {
+                    if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied');
+                    return true;
+                },
+            ],
+        },
+    },
+});
+type _plainDerivedAssignsToParent = Expect<Extends<typeof _plainDerived, typeof _plainFactory>>;
+_plainDerived(_unrelatedContract, async () => ({ data: { ok: true } }));

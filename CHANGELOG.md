@@ -5,10 +5,62 @@ touches `src/core`; consumer-side updates (`src/shared`, `src/lib`, `src/utils`,
 `src/features`) never appear in the changelog, not even as bullets, and never
 generate their own entry. New dates and entries are added at the top.
 
+**Entries are written for framework users, not the author.** The headline and the
+first sentence of the blockquote state what users can now do (or what no longer
+breaks) in plain terms. Internal type names, helper utilities, and inference
+mechanics do NOT appear in entries — they live in the linked spec. See
+`docs/specs/2026-07-17-changelog.md` (especially the BAD-vs-GOOD contrast
+example) for the full format and the audience/language rule.
+
 Read the **Baseline** section at the bottom first for the pre-changelog starting
 point, then read upward to trace each evolution.
 
 ---
+
+## 2026-07-19
+
+### Factory authorizers can now require a request shape
+
+> A reusable authorizer often needs a specific request field — e.g. an
+> ownership check that reads `req.params.isbn`. You could install such an
+> authorizer on a single handler, and TypeScript would check the contract had
+> the field. But the moment you tried to install it as a **factory baseline** —
+> via `createHandlerFactory` defaults or `.extend()` — TypeScript rejected the
+> authorizer at the factory definition itself, even though it was perfectly
+> valid. You had to either widen the authorizer to a plain `Request` (losing the
+> typing) or repeat it on every handler.
+>
+> Factories now remember the request shape their `afterValidation` authorizers
+> need, and enforce it on every contract you pass to the factory. So a factory
+> that requires `params.isbn` will refuse a contract without it — and a contract
+> that has it compiles cleanly. Requirements accumulate across `.extend()`
+> chains, so a derived factory enforces its own authorizers plus every
+> ancestor's.
+
+- `createHandlerFactory` defaults and `.extend()` accept authorizers typed
+  against a specific request shape (e.g.
+  `Authorizer<Auth, Request<{ isbn: string }, ...>>`). Previously these were
+  rejected at the factory definition; they now compile.
+- A factory that has such an authorizer rejects contracts missing the required
+  field, at the call site where the contract is known.
+- `.extend()` chains accumulate requirements: each layer's `afterValidation`
+  authorizers add to the parent's. A contract must satisfy every layer's
+  requirement.
+- `beforeValidation` authorizers impose no requirement (they run before the
+  request is validated, on a plain `Request`).
+- No runtime change. Existing factories and handlers are unaffected — the new
+  behavior only activates when you install a shape-bound authorizer.
+- **Limitation:** when you pass an explicit type argument
+  (`createHandlerFactory<AuthContext>(...)`), TypeScript can't also infer the
+  authorizer shape, so baseline enforcement via `createHandlerFactory` is lost
+  in that form. Install shape-bound authorizers via `.extend()` instead, which
+  needs no type argument. Baseline enforcement via `createHandlerFactory` works
+  when `TAuth` is inferred from an inline authenticator.
+- **Deferred:** query-field requirements (e.g. `req.query.dryRun`) are still
+  not enforced — a pre-existing gap separate from this change. Params and body
+  requirements are enforced. See
+  `docs/specs/2026-07-19-query-channel-authorizer-leak.md`.
+- Spec: `docs/specs/2026-07-19-factory-authorizer-shape-propagation.md`.
 
 ## 2026-07-17
 

@@ -797,3 +797,154 @@ _upgradedFromPublic(
 // Capability: public factory .extend requires the upgrade (authenticate + non-public access).
 // @ts-expect-error public factory .extend rejects access: 'public' (no upgrade)
 _publicBase.extend({ access: 'public' });
+
+// =========================================================================
+// Capability: authorizer shape propagation through factory + .extend()
+//
+// An authorizer typed against a partial request shape (e.g.
+// `Authorizer<Auth, Request<{ isbn: string }, ...>>`) declares a requirement
+// the contract passed to the factory must satisfy. This requirement is
+// captured at factory-creation / .extend() time and enforced at the
+// invocation call site, where the contract's AfterAuthorizationRequest is
+// known. Single-axis here; accumulation across chains lives in the
+// interaction lane.
+// =========================================================================
+
+// Shared reusable authorizer: requires params.isbn (and typed body, matching
+// the AuthorizerBaseRequest defaults so the requirement is on params only).
+const _needsParamsIsbn: Authorizer<
+    AuthContext,
+    Request<{ isbn: string }, any, unknown, any>
+> = async ({ req }) => {
+    if (req.params.isbn.length === 0) throw new createHttpError.Forbidden('denied');
+    return true;
+};
+
+// Contracts that either satisfy or fail the isbn requirement.
+const _hasParamsIsbn = createContract({
+    request: { params: { isbn: z.string() } },
+    response: z.object({ ok: z.boolean() }),
+});
+const _noParamsIsbn = createContract({
+    request: { body: { title: z.string() } },
+    response: z.object({ ok: z.boolean() }),
+});
+
+// Capability: .extend() with a shape-bound authorizer COMPILES (the bug fix).
+// Before the fix, plain `Request`-typed extension buckets rejected this via
+// contravariance. The requirement is now captured into TReq and enforced at
+// invocation, not at .extend() time.
+const _derivedWithReq = _protectedBase.extend({
+    security: { authorize: { afterValidation: [_needsParamsIsbn] } },
+});
+
+// Capability: invoking the derived factory with a SATISFYING contract compiles.
+_derivedWithReq(_hasParamsIsbn, async () => ({ data: { ok: true } }));
+
+// Capability: invoking the derived factory with an UNSATISFYING contract fails
+// (the contract's AfterAuthorizationRequest lacks params.isbn).
+// @ts-expect-error contract missing params.isbn required by the derived authorizer
+_derivedWithReq(_noParamsIsbn, async () => ({ data: { ok: true } }));
+
+// Capability: a factory BASELINE authorizer (not via .extend) carrying a
+// required shape is captured and enforced at every invocation. TAuth and the
+// authorizer shape are both INFERRED (no explicit type argument) — when the
+// authenticator is inline. When the caller passes an explicit type argument
+// (e.g. createHandlerFactory<AuthContext>(...)), TS cannot also infer the
+// authorizer shape and the requirement is not captured; the idiomatic path in
+// that case is .extend() on a base factory (covered above).
+const _baselineReqFactory = createHandlerFactory({
+    access: 'protected',
+    security: {
+        authenticate: async (): Promise<AuthContext> => ({ userId: 'u-base', role: 'staff' }),
+        authorize: { afterValidation: [_needsParamsIsbn] },
+    },
+});
+
+_baselineReqFactory(_hasParamsIsbn, async () => ({ data: { ok: true } }));
+// @ts-expect-error baseline authorizer requires params.isbn; contract lacks it
+_baselineReqFactory(_noParamsIsbn, async () => ({ data: { ok: true } }));
+
+// Capability: public factory .extend() (upgrade) carrying a shape-bound
+// authorizer propagates the requirement onto the resulting secured factory.
+const _publicBaseForReq = createHandlerFactory<AuthContext>({ access: 'public' });
+const _upgradedWithReq = _publicBaseForReq.extend({
+    access: 'protected',
+    security: {
+        authenticate: async (): Promise<AuthContext> => ({ userId: 'u-up', role: 'staff' }),
+        authorize: { afterValidation: [_needsParamsIsbn] },
+    },
+});
+
+_upgradedWithReq(_hasParamsIsbn, async () => ({ data: { ok: true } }));
+// @ts-expect-error upgrade authorizer requires params.isbn; contract lacks it
+_upgradedWithReq(_noParamsIsbn, async () => ({ data: { ok: true } }));
+
+// Capability: beforeValidation-only authorizers do NOT add to TReq — they run
+// against a plain Request before the contract is validated, so they cannot
+// impose a contract-bound shape requirement. The derived factory therefore
+// accepts a contract without params.isbn.
+const _derivedBeforeOnly = _protectedBase.extend({
+    security: {
+        authorize: {
+            beforeValidation: [
+                async ({ auth }) => {
+                    if (auth.role !== 'staff') throw new createHttpError.Forbidden('staff only');
+                    return true;
+                },
+            ],
+        },
+    },
+});
+_derivedBeforeOnly(_noParamsIsbn, async () => ({ data: { ok: true } }));
+
+// =========================================================================
+// Capability: descriptive rejection message on factory authorizer mismatch.
+//
+// When a contract fails a factory's accumulated authorizer requirement, the
+// rejection MUST surface a self-contained, human-readable explanation — not a
+// cryptic branded name like `__unsatisfiedAuthorizerReq`. The message is the
+// branded property's NAME (echoed verbatim by TS in the diagnostic), so it
+// must not carry links (the consuming project never sees this repo's docs).
+//
+// Direct createHandler (Path A) produces a structural error naturally (the
+// authorizer bucket is checked inline via contravariance); this guard targets
+// the factory paths (B: factory invocation, C: extended factory invocation)
+// where rejection goes through the Checked wrapper.
+// =========================================================================
+
+// Capture the first call signature's contract parameter — the Checked-wrapped
+// form. Only the first overload is read; the public-override (last overload)
+// bypasses Checked. For a contract type whose AfterAuthorizationRequest lacks
+// the required isbn, Checked evaluates to its false branch carrying the message.
+type _FirstSigContract<T> = T extends {
+    (contract: infer C, ...rest: any[]): any;
+    (...args: any[]): any;
+}
+    ? C
+    : never;
+
+// Path C: extended factory — TReq carries the isbn requirement.
+type _DerivedContractParam = _FirstSigContract<typeof _derivedWithReq>;
+type _derivedCarriesMessage = Expect<
+    Extends<
+        '[ERROR] Contract rejected: this factory has an afterValidation authorizer that requires a request field (e.g. a params/body/query field) the contract does not provide. Make the contract define the field(s) the authorizer reads.',
+        keyof _DerivedContractParam
+    >
+>;
+
+// Path B: factory baseline — same message via the same Checked wrapper.
+type _BaselineContractParam = _FirstSigContract<typeof _baselineReqFactory>;
+type _baselineCarriesMessage = Expect<
+    Extends<
+        '[ERROR] Contract rejected: this factory has an afterValidation authorizer that requires a request field (e.g. a params/body/query field) the contract does not provide. Make the contract define the field(s) the authorizer reads.',
+        keyof _BaselineContractParam
+    >
+>;
+
+// Guard: a cryptic name would NOT be present. If someone reverts the branded
+// property to `__unsatisfiedAuthorizerReq`, this assertion fails (its key set
+// would lack the descriptive sentence).
+type _derivedRejectsCrypticName = ExpectFalse<
+    Extends<'__unsatisfiedAuthorizerReq', keyof _DerivedContractParam>
+>;
