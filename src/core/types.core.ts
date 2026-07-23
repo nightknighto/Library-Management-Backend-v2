@@ -12,6 +12,7 @@
 
 import type { CookieOptions, Request } from 'express';
 import type createHttpError from 'http-errors';
+import type { OutgoingHttpHeaders } from 'http';
 import type { input as Input, ZodTypeAny } from 'zod';
 
 // ============================================================================
@@ -221,6 +222,69 @@ export type CookieOperation =
         options?: CookieOptions;
     };
 
+// Strips a string/number index signature from a type, keeping only its named
+// keys. Used to derive the literal union of header names from `OutgoingHttpHeaders`.
+type RemoveIndex<T> = {
+    [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K];
+};
+
+/**
+ * The set of standard HTTP response header names, derived from `@types/node`'s
+ * `OutgoingHttpHeaders` (see `node:http`). Never hand-maintained: it tracks
+ * whatever `@types/node` enumerates. Drives autocompletion for `ResponseHeaders`.
+ */
+type KnownResponseHeaderName = keyof RemoveIndex<OutgoingHttpHeaders>;
+
+/**
+ * A single response header value.
+ *
+ * `number` and `boolean` are coerced to strings when applied (matching how
+ * cookie values are handled). Arrays join into a comma-separated multi-value
+ * header (e.g. `Link`), which is how Express serializes `string[]`.
+ *
+ * @example
+ * const v1: HeaderValue = "no-store";
+ * const v2: HeaderValue = 42;
+ * const v3: HeaderValue = ['</p/1>; rel="next"', '</p/2>; rel="last"'];
+ */
+export type HeaderValue = string | number | boolean | readonly string[];
+
+/**
+ * Declarative response headers returned by `createHandler`.
+ *
+ * Standard HTTP header names (e.g. `location`, `cache-control`, `etag`,
+ * `link`) are suggested as you type. Arbitrary custom names (e.g.
+ * `X-Request-Id`, vendor headers) are also accepted via the string index.
+ *
+ * Header names are case-insensitive; the lowercase canonical form is what
+ * `@types/node` enumerates, so lowercase keys get autocompletion while any
+ * casing is still allowed. Multi-value headers are expressed as an array value
+ * (joined with `, ` when applied).
+ *
+ * Headers are applied after the response payload is validated and before the
+ * JSON body is sent, and only for successful handler responses (errors skip
+ * them). They are applied before cookies, so a `Set-Cookie` issued via the
+ * `cookies` field is never overwritten.
+ *
+ * @example
+ * return {
+ *   data: book,
+ *   statusCode: 201,
+ *   headers: {
+ *     location: `/books/${book.id}`,
+ *     "cache-control": "no-store",
+ *     etag: `"${book.id}"`,
+ *     link: ['</books?page=2>; rel="next"', '</books?page=5>; rel="last"'],
+ *     "X-Resource-Id": book.id, // custom header, accepted via the index
+ *   },
+ * };
+ */
+export type ResponseHeaders = {
+    [K in KnownResponseHeaderName]?: HeaderValue;
+} & {
+    [header: string]: HeaderValue;
+};
+
 /**
  * Successful handler result shape required by createHandler.
  *
@@ -228,7 +292,8 @@ export type CookieOperation =
  * response pagination, `pagination` must be omitted.
  *
  * Optional `cookies` allow declarative response cookies to be set or cleared
- * when the handler succeeds.
+ * when the handler succeeds. Optional `headers` allow declarative response
+ * headers (with autocompletion on standard names) to be set on success.
  *
  * @example
  * const result: HandlerSuccessResult<typeof BookSchema, true> = {
@@ -249,6 +314,11 @@ export type HandlerSuccessResult<TResponseSchema extends ZodTypeAny, TPaginated 
      * Optional cookie operations applied after successful response validation.
      */
     cookies?: CookieOperation[];
+    /**
+     * Optional response headers applied after successful response validation,
+     * before cookies. Standard names autcomplete; custom names are accepted too.
+     */
+    headers?: ResponseHeaders;
 } & (TPaginated extends true
     ? {
         /**

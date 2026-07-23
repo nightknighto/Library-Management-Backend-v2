@@ -40,6 +40,10 @@ const createBook = createJwtAuthHandler(
         return {
             statusCode: 201,
             data: 'Book created successfully',
+            headers: {
+                location: `/books/${req.body.isbn}`,
+                'cache-control': 'no-store',
+            },
         };
     },
 );

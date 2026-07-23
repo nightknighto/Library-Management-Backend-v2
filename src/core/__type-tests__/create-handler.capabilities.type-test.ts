@@ -132,6 +132,19 @@ createHandler(UpdateBookContract, async ({ req }) => ({
     ],
 }));
 
+createHandler(UpdateBookContract, async ({ req }) => ({
+    data: { updated: true },
+    headers: {
+        location: '/books/1', // standard name (autocomplete path)
+        etag: '"v1"',
+        'cache-control': 'no-store',
+        'retry-after': 60, // number coerced to string
+        'x-frame-options': true, // boolean coerced to string
+        link: ['</books?page=2>; rel="next"', '</books?page=5>; rel="last"'], // array multi-value
+        'X-Resource-Id': 'b-1', // arbitrary custom name via the string index
+    },
+}));
+
 createHandler(
     UpdateBookContract,
     {

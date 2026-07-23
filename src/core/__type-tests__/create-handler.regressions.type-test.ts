@@ -168,6 +168,16 @@ createHandler(UpdateBookContract, async ({ req }) => ({
 }));
 
 /**
+ * Regression-010: headers must not weaken top-level key validation.
+ */
+// @ts-expect-error unknown top-level keys must still be rejected with headers
+createHandler(UpdateBookContract, async ({ req }) => ({
+    data: { updated: true },
+    headers: { location: '/books/1' },
+    metax: { traceId: 'trace-10' },
+}));
+
+/**
  * Regression-007: public access must reject security options in handler calls.
  */
 // @ts-expect-error public handlers must not accept security options

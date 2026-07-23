@@ -17,6 +17,27 @@ point, then read upward to trace each evolution.
 
 ---
 
+## 2026-07-23
+
+### Handlers can now set response headers
+
+> Handlers could already set cookies declaratively on a successful response, but
+> had no way to set HTTP headers — so any endpoint needing a `Location`,
+> `Cache-Control`, `ETag`, or `Link` header had to escape the contract pipeline
+> and call `res.set` itself. You can now return a `headers` object next to
+> `data`, `statusCode`, and `cookies`, and the framework applies it on success.
+
+- Handlers accept an optional `headers` map on their success return, applied
+  after response validation and before cookies (so a `Set-Cookie` from the
+  `cookies` field is never overwritten).
+- Standard HTTP header names (e.g. `location`, `cache-control`, `etag`, `link`)
+  are suggested as you type; arbitrary custom names (e.g. `X-Request-Id`,
+  vendor headers) are also accepted.
+- Values may be strings, numbers, booleans, or string arrays. Numbers and
+  booleans are coerced to strings; arrays become a comma-separated multi-value
+  header.
+- New exported types `HeaderValue` and `ResponseHeaders` describe the shape.
+
 ## 2026-07-19
 
 ### Factory authorizers can now require a request shape

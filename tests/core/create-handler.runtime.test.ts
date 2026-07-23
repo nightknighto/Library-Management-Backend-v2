@@ -397,6 +397,149 @@ describe('createHandler (runtime)', () => {
         );
     });
 
+    it('sets response headers on success', async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const handler = createHandler(contract, async () => ({
+            data: { ok: true },
+            headers: {
+                location: '/books/1',
+                'cache-control': 'no-store',
+            },
+        }));
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        expect(response.status).toBe(200);
+        expect(response.headers.location).toBe('/books/1');
+        expect(response.headers['cache-control']).toBe('no-store');
+    });
+
+    it('coerces number and boolean header values to strings', async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const handler = createHandler(contract, async () => ({
+            data: { ok: true },
+            headers: {
+                'retry-after': 120,
+                'x-feature-flag': true,
+            },
+        }));
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        expect(response.headers['retry-after']).toBe('120');
+        expect(response.headers['x-feature-flag']).toBe('true');
+    });
+
+    it('joins array header values into a comma-separated multi-value header', async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const handler = createHandler(contract, async () => ({
+            data: { ok: true },
+            headers: {
+                link: ['</books?page=2>; rel="next"', '</books?page=5>; rel="last"'],
+            },
+        }));
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        expect(response.headers.link).toBe('</books?page=2>; rel="next", </books?page=5>; rel="last"');
+    });
+
+    it('accepts arbitrary custom header names via the string index', async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const handler = createHandler(contract, async () => ({
+            data: { ok: true },
+            headers: {
+                'X-Request-Id': 'abc-123',
+                'X-Vendor-Token': 'tok',
+            },
+        }));
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        // Express normalizes header names to lowercase.
+        expect(response.headers['x-request-id']).toBe('abc-123');
+        expect(response.headers['x-vendor-token']).toBe('tok');
+    });
+
+    it('applies headers before cookies so Set-Cookie is not clobbered', async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const handler = createHandler(contract, async () => ({
+            data: { ok: true },
+            headers: {
+                'cache-control': 'no-store',
+            },
+            cookies: [{ action: 'set', name: 'session', value: 'token' }],
+        }));
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        // Both the header and the Set-Cookie survive (neither clobbers the other).
+        expect(response.headers['cache-control']).toBe('no-store');
+        const cookies = response.headers['set-cookie'] as string[] | undefined;
+        expect(cookies).toEqual([expect.stringContaining('session=token')]);
+    });
+
+    it('sets no extra headers when headers are omitted', async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ ok: z.boolean() }),
+        });
+
+        const handler = createHandler(contract, async () => ({ data: { ok: true } }));
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        expect(response.status).toBe(200);
+        expect(response.headers.location).toBeUndefined();
+        expect(response.headers['x-request-id']).toBeUndefined();
+    });
+
+    it('returns 500 when response validation fails and skips headers', async () => {
+        const contract = createContract({
+            request: {},
+            response: z.object({ count: z.number() }),
+        });
+
+        const handler = createHandler(contract, async () => ({
+            data: { count: 'nope' },
+            headers: { location: '/books/1' },
+        }));
+
+        const { app, route } = createTestApp(handler);
+        const response = await request(app).get(route);
+
+        expect(response.status).toBe(500);
+        expect(response.body).toEqual({ success: false, error: 'Internal Server Error' });
+        // Headers are only applied after successful response validation.
+        expect(response.headers.location).toBeUndefined();
+    });
+
     it('requires pagination data for paginated contracts', async () => {
         const contract = createContract({
             request: {},

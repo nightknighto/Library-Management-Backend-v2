@@ -112,6 +112,11 @@ createHandler(SearchBooksContract, async ({ req }) => ({
         page: 1,
         limit: 10,
     },
+    headers: {
+        'cache-control': 'no-store',
+        'content-range': 'items 0-9/1',
+        'X-Result-Token': 'partial',
+    },
     cookies: [
         {
             action: 'set',

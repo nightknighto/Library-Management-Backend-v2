@@ -13,7 +13,8 @@
  * 6. Execute handler.
  * 7. Build success payload + pagination metadata.
  * 8. Validate/sanitize response envelope.
- * 9. Send response or error.
+ * 9. Apply response headers (before cookies), then cookies.
+ * 10. Send response or error.
  */
 
 import type { Request, RequestHandler, Response } from 'express';
@@ -423,6 +424,16 @@ function createHandlerRuntime<TContract extends AnyContract, TAuth>(
             const output = sanitizeResponseOrRespond(contract, successPayload, res);
             if (!output) {
                 return;
+            }
+
+            // Apply headers before cookies so a Set-Cookie from the cookies block
+            // is never overwritten by a blanket header write. Express's res.set
+            // accepts string | string[]; HeaderValue widens that with number/boolean,
+            // which are coerced to strings here (matching cookie value handling).
+            if (result.headers) {
+                for (const [name, value] of Object.entries(result.headers)) {
+                    res.set(name, Array.isArray(value) ? value : String(value));
+                }
             }
 
             if (result.cookies?.length) {
