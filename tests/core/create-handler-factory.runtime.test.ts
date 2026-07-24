@@ -1,4 +1,4 @@
-import createHttpError from 'http-errors';
+import { HttpError } from '../../src/core/http-error.core';
 import request from 'supertest';
 import { z } from 'zod';
 import { createContract } from '../../src/core/create-contract.core';
@@ -47,7 +47,7 @@ describe('createHandlerFactory (runtime)', () => {
         });
 
         const authenticate = createAuthenticator(async () => null, {
-            onMissingCredentials: () => new createHttpError.Unauthorized('Missing Bearer token'),
+            onMissingCredentials: () => new HttpError.Unauthorized('Missing Bearer token'),
         });
 
         const factory = createHandlerFactory({
@@ -149,7 +149,7 @@ describe('createHandlerFactory (runtime)', () => {
         });
 
         const authorize = vi.fn(async ({ req }): Promise<true> => {
-            if (typeof req.query.page !== 'number') throw new createHttpError.Forbidden('denied');
+            if (typeof req.query.page !== 'number') throw new HttpError.Forbidden('denied');
             return true;
         });
 
@@ -181,7 +181,7 @@ describe('createHandlerFactory (runtime)', () => {
         });
 
         const denyPolicy = vi.fn(async () => {
-            throw new createHttpError.Forbidden('factory-deny');
+            throw new HttpError.Forbidden('factory-deny');
         });
         const allowPolicy = vi.fn(async (): Promise<true> => true);
 
@@ -226,7 +226,7 @@ describe('createHandlerFactory (runtime)', () => {
 
         const beforePolicy = vi.fn(async (): Promise<true> => true);
         const afterPolicy = vi.fn(async ({ req }): Promise<true> => {
-            if (typeof req.query.page !== 'number') throw new createHttpError.Forbidden('denied');
+            if (typeof req.query.page !== 'number') throw new HttpError.Forbidden('denied');
             return true;
         });
 
@@ -268,7 +268,7 @@ describe('createHandlerFactory (runtime)', () => {
 
         const sharedPolicy = vi.fn(async (): Promise<true> => true);
         const instanceAfterPolicy = vi.fn(async ({ req }): Promise<true> => {
-            if (typeof req.query.page !== 'number') throw new createHttpError.Forbidden('denied');
+            if (typeof req.query.page !== 'number') throw new HttpError.Forbidden('denied');
             return true;
         });
 

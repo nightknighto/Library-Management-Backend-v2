@@ -1,4 +1,4 @@
-import createHttpError from 'http-errors';
+import { HttpError } from '../../src/core/http-error.core';
 import request from 'supertest';
 import { z } from 'zod';
 import { createContract } from '../../src/core/create-contract.core';
@@ -104,7 +104,7 @@ describe('createHandler (runtime)', () => {
                     authenticate: async () => {
                         const parsed = z.object({ email: z.string().email() }).safeParse({ email: 'nope' });
                         if (!parsed.success) {
-                            throw new createHttpError.Unauthorized('Invalid authentication data');
+                            throw new HttpError.Unauthorized('Invalid authentication data');
                         }
                         return parsed.data;
                     },
@@ -135,7 +135,7 @@ describe('createHandler (runtime)', () => {
                 access: 'optional',
                 security: {
                     authenticate: async () => {
-                        throw new createHttpError.Unauthorized('Invalid or expired token');
+                        throw new HttpError.Unauthorized('Invalid or expired token');
                     },
                 },
             },
@@ -159,7 +159,7 @@ describe('createHandler (runtime)', () => {
         });
 
         const authenticate = createAuthenticator(async () => null, {
-            onMissingCredentials: () => new createHttpError.Unauthorized('Missing Bearer token'),
+            onMissingCredentials: () => new HttpError.Unauthorized('Missing Bearer token'),
         });
 
         const handler = createHandler(
@@ -187,7 +187,7 @@ describe('createHandler (runtime)', () => {
 
         // raw req.query.page is the string '2' before coercion
         const authorize = vi.fn(async ({ req }): Promise<true> => {
-            if (typeof req.query.page !== 'number') throw new createHttpError.Forbidden('denied');
+            if (typeof req.query.page !== 'number') throw new HttpError.Forbidden('denied');
             return true;
         });
         const handlerFn = vi.fn(async () => ({ data: { ok: true } }));
@@ -224,7 +224,7 @@ describe('createHandler (runtime)', () => {
 
         // validated req.query.page is the number 2 after coercion
         const authorize = vi.fn(async ({ req }): Promise<true> => {
-            if (typeof req.query.page !== 'number') throw new createHttpError.Forbidden('denied');
+            if (typeof req.query.page !== 'number') throw new HttpError.Forbidden('denied');
             return true;
         });
 
@@ -258,7 +258,7 @@ describe('createHandler (runtime)', () => {
         });
 
         const beforePolicy = vi.fn(async () => {
-            throw new createHttpError.Forbidden('before-deny');
+            throw new HttpError.Forbidden('before-deny');
         });
         const afterPolicy = vi.fn(async (): Promise<true> => true);
         const handlerFn = vi.fn(async () => ({ data: { ok: true } }));
@@ -302,7 +302,7 @@ describe('createHandler (runtime)', () => {
         const beforePolicy = vi.fn(async (): Promise<true> => true);
         // validated req.query.page is the number 2
         const afterPolicy = vi.fn(async ({ req }): Promise<true> => {
-            if (typeof req.query.page !== 'number') throw new createHttpError.Forbidden('denied');
+            if (typeof req.query.page !== 'number') throw new HttpError.Forbidden('denied');
             return true;
         });
 
@@ -616,7 +616,7 @@ describe('createHandler (runtime)', () => {
         });
 
         const handler = createHandler(contract, async () => {
-            throw new createHttpError.BadRequest('Bad input');
+            throw new HttpError.BadRequest('Bad input');
         });
 
         const { app, route } = createTestApp(handler);

@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import createHttpError from 'http-errors';
+import { HttpError } from '../../src/core/http-error.core';
 import {
     allOf,
     anyOf,
@@ -42,7 +42,7 @@ describe('security (runtime)', () => {
 
         it('uses the authenticator onMissingCredentials default when it returns null for protected', async () => {
             const auth = createAuthenticator(async () => null, {
-                onMissingCredentials: () => new createHttpError.Unauthorized('Missing Bearer token'),
+                onMissingCredentials: () => new HttpError.Unauthorized('Missing Bearer token'),
             });
             await expect(
                 executeAuthenticationStage({ req, access: 'protected', security: { authenticate: auth } }),
@@ -90,7 +90,7 @@ describe('security (runtime)', () => {
         // --- failure (throw) — fail-closed in BOTH access modes ---
         it('propagates an authenticator failure for protected access', async () => {
             const failing = async () => {
-                throw new createHttpError.Unauthorized('Invalid or expired token');
+                throw new HttpError.Unauthorized('Invalid or expired token');
             };
             await expect(
                 executeAuthenticationStage({ req, access: 'protected', security: { authenticate: failing } }),
@@ -99,7 +99,7 @@ describe('security (runtime)', () => {
 
         it('propagates an authenticator failure for OPTIONAL access (fail-closed, not swallowed)', async () => {
             const failing = async () => {
-                throw new createHttpError.Unauthorized('Invalid or expired token');
+                throw new HttpError.Unauthorized('Invalid or expired token');
             };
             await expect(
                 executeAuthenticationStage({ req, access: 'optional', security: { authenticate: failing } }),
@@ -126,7 +126,7 @@ describe('security (runtime)', () => {
         });
 
         it('attaches onMissingCredentials when provided', () => {
-            const onMissing = () => new createHttpError.Unauthorized('Missing Bearer token');
+            const onMissing = () => new HttpError.Unauthorized('Missing Bearer token');
             const auth = createAuthenticator(async () => null, { onMissingCredentials: onMissing });
             expect(auth.onMissingCredentials).toBe(onMissing);
         });
@@ -139,7 +139,7 @@ describe('security (runtime)', () => {
         it('preserves absence vs failure semantics through the factory', async () => {
             const auth = createAuthenticator(async (r: Request) => {
                 if (!r.headers.authorization) return null; // absence
-                throw new createHttpError.Unauthorized('bad token'); // failure
+                throw new HttpError.Unauthorized('bad token'); // failure
             });
             await expect(auth(req)).resolves.toBeNull(); // absence → null
             const reqWithHeader = { ...req, headers: { authorization: 'Bearer x' } } as Request;
@@ -187,7 +187,7 @@ describe('security (runtime)', () => {
                     auth: { userId: '1' },
                     authorizers: [
                         async () => {
-                            throw new createHttpError.Forbidden('not allowed');
+                            throw new HttpError.Forbidden('not allowed');
                         },
                     ],
                 }),
@@ -201,7 +201,7 @@ describe('security (runtime)', () => {
                     auth: { userId: '1' },
                     authorizers: [
                         async () => {
-                            throw new createHttpError.NotFound('resource missing');
+                            throw new HttpError.NotFound('resource missing');
                         },
                     ],
                 }),
@@ -210,7 +210,7 @@ describe('security (runtime)', () => {
 
         it('short-circuits: a denying authorizer skips the remaining ones', async () => {
             const first = vi.fn(async () => {
-                throw new createHttpError.Forbidden('nope');
+                throw new HttpError.Forbidden('nope');
             });
             const second = vi.fn(async (): Promise<true> => true);
 
@@ -247,10 +247,10 @@ describe('security (runtime)', () => {
 
         const allow = vi.fn(async (): Promise<true> => true);
         const denyForbidden = vi.fn(async () => {
-            throw new createHttpError.Forbidden('branch-deny');
+            throw new HttpError.Forbidden('branch-deny');
         });
         const denyNotFound = vi.fn(async () => {
-            throw new createHttpError.NotFound('branch-missing');
+            throw new HttpError.NotFound('branch-missing');
         });
         const boom = vi.fn(async () => {
             throw new Error('unexpected');
@@ -325,12 +325,12 @@ describe('security (runtime)', () => {
                     () => undefined,
                     (e: unknown) => e,
                 );
-                expect(error).toBeInstanceOf(createHttpError.Forbidden);
-                expect(error).not.toBeInstanceOf(createHttpError.NotFound);
+                expect(error).toBeInstanceOf(HttpError.Forbidden);
+                expect(error).not.toBeInstanceOf(HttpError.NotFound);
             });
 
             it('throws the provided custom denialError when every policy denies', async () => {
-                const denial = new createHttpError.PaymentRequired('pay up');
+                const denial = new HttpError.PaymentRequired('pay up');
                 const policy = anyOf<Ctx>([denyForbidden], denial);
                 await expect(policy({ req, auth: ctx })).rejects.toMatchObject({
                     statusCode: 402,
@@ -339,7 +339,7 @@ describe('security (runtime)', () => {
             });
 
             it('throws exactly the provided denialError instance', async () => {
-                const denial = new createHttpError.Forbidden('custom');
+                const denial = new HttpError.Forbidden('custom');
                 const policy = anyOf<Ctx>([denyForbidden], denial);
                 await expect(policy({ req, auth: ctx })).rejects.toBe(denial);
             });
@@ -376,7 +376,7 @@ describe('security (runtime)', () => {
             });
 
             it('throws the provided custom denialError when the wrapped policy allows', async () => {
-                const denial = new createHttpError.PaymentRequired('pay up');
+                const denial = new HttpError.PaymentRequired('pay up');
                 const policy = not<Ctx>(async () => true, denial);
                 await expect(policy({ req, auth: ctx })).rejects.toMatchObject({
                     statusCode: 402,
@@ -385,7 +385,7 @@ describe('security (runtime)', () => {
             });
 
             it('throws exactly the provided denialError instance', async () => {
-                const denial = new createHttpError.Forbidden('custom');
+                const denial = new HttpError.Forbidden('custom');
                 const policy = not<Ctx>(async () => true, denial);
                 await expect(policy({ req, auth: ctx })).rejects.toBe(denial);
             });
@@ -419,7 +419,7 @@ describe('security (runtime)', () => {
             });
 
             it('anyOf denialError wraps the whole OR when every branch denies', async () => {
-                const denial = new createHttpError.Forbidden('or-denied');
+                const denial = new HttpError.Forbidden('or-denied');
                 const policy = anyOf<Ctx>(
                     [allOf<Ctx>([denyNotFound]), not<Ctx>(async () => true)],
                     denial,

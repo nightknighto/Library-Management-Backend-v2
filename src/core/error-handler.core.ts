@@ -6,7 +6,8 @@
  *
  * Error Categories:
  * 1. Zod Validation Errors - Request validation (400) or output validation (500)
- * 2. HttpError Exceptions - Custom HTTP errors with status codes
+ * 2. HttpError Exceptions - Custom HTTP errors with status codes, optionally carrying
+ *    response headers and cookies to apply on the error response.
  * 3. Generic Errors - Unexpected errors (500)
  *
  * SECTIONS:
@@ -16,7 +17,8 @@
  */
 
 import type { Response } from 'express';
-import createHttpError from 'http-errors';
+import { HttpError, isHttpError } from './http-error.core.ts';
+import type { HttpErrorLike } from './http-error.core.ts';
 import z, { ZodError } from 'zod';
 import { createErrorMap, fromError } from 'zod-validation-error';
 import type { ErrorResponse } from './types.core.ts';
@@ -128,9 +130,33 @@ export function handleResponseValidationError(error: ZodError, res: Response): v
 }
 
 /**
- * Handles HttpError exceptions (custom HTTP errors with status codes).
+ * Handles HTTP-shaped errors (framework `HttpError` or legacy `http-errors`),
+ * sending the error's status and message and applying any declarative headers
+ * and cookies the error carries.
+ *
+ * Side-effects are applied in the same order as the success path: headers first
+ * (so a blanket header write never clobbers a `Set-Cookie`), then cookies,
+ * then the JSON body. Header values are already strings (coerced at
+ * construction on framework `HttpError` instances); legacy `http-errors`
+ * instances carry the same native string map.
  */
-function handleHttpError(error: createHttpError.HttpError, res: Response): void {
+function handleHttpError(error: HttpErrorLike, res: Response): void {
+    if (error.headers) {
+        for (const [name, value] of Object.entries(error.headers)) {
+            res.set(name, value);
+        }
+    }
+
+    if (error.cookies?.length) {
+        for (const operation of error.cookies) {
+            if (operation.action === 'set') {
+                res.cookie(operation.name, operation.value, operation.options ?? {});
+            } else {
+                res.clearCookie(operation.name, operation.options);
+            }
+        }
+    }
+
     res.status(error.statusCode).json({
         success: false,
         error: error.message,
@@ -177,10 +203,11 @@ function handleGenericError(error: unknown, res: Response): void {
  */
 export function handleError(error: unknown, res: Response): void {
     // Zod request/response validation errors are handled at the call site.
-    // This handler deals with HttpError and unexpected errors.
+    // This handler deals with HTTP-shaped errors and unexpected errors.
 
-    // HttpError exceptions (custom status code + message)
-    if (error instanceof createHttpError.HttpError) {
+    // HTTP-shaped errors: framework HttpError OR legacy http-errors instances.
+    // The structural guard also reads any headers/cookies the error carries.
+    if (isHttpError(error)) {
         handleHttpError(error, res);
         return;
     }

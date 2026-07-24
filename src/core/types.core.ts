@@ -11,8 +11,8 @@
  */
 
 import type { CookieOptions, Request } from 'express';
-import type createHttpError from 'http-errors';
 import type { OutgoingHttpHeaders } from 'http';
+import type { HttpErrorLike } from './http-error.core.ts';
 import type { input as Input, ZodTypeAny } from 'zod';
 
 // ============================================================================
@@ -409,9 +409,9 @@ export type AccessMode = 'public' | 'protected' | 'optional';
  *     const header = req.headers.authorization;
  *     if (!header?.startsWith("Bearer ")) return null;
  *     try { return { email: verifyJwt(header).email }; }
- *     catch { throw new createHttpError.Unauthorized("Invalid token"); }
+ *     catch { throw new HttpError.Unauthorized("Invalid token"); }
  *   },
- *   { onMissingCredentials: () => new createHttpError.Unauthorized("Missing Bearer token") },
+ *   { onMissingCredentials: () => new HttpError.Unauthorized("Missing Bearer token") },
  * );
  */
 // Design note: `Authenticator` is a callable carrying an optional `onMissingCredentials`
@@ -423,7 +423,7 @@ export type Authenticator<
     TAuthContext,
     TRequest extends Request<any, any, any, any> = Request,
 > = ((req: TRequest) => MaybePromise<TAuthContext | null>) & {
-    onMissingCredentials?: () => createHttpError.HttpError;
+    onMissingCredentials?: () => HttpErrorLike;
 };
 
 /**
@@ -435,14 +435,14 @@ export type AuthenticatorOptions = {
      * authenticator resolved `null`). Omit to use the framework default
      * (`401 Unauthorized`).
      */
-    onMissingCredentials?: () => createHttpError.HttpError;
+    onMissingCredentials?: () => HttpErrorLike;
 };
 
 /**
  * Authorization policy callback.
  *
  * Allow the request by resolving to `true`; deny by throwing an `HttpError`
- * (for example `new createHttpError.Forbidden('...')`). The thrown error's
+ * (for example `new HttpError.Forbidden('...')`). The thrown error's
  * status code and message become the HTTP response, so a policy may deny with
  * any semantics (403 Forbidden, 404 Not Found, 402 Payment Required, ...).
  *
@@ -466,7 +466,7 @@ export type AuthenticatorOptions = {
  *
  * @example
  * const canEdit: Authorizer<AuthContext> = async ({ auth }) => {
- *   if (auth.role !== "staff") throw new createHttpError.Forbidden("staff only");
+ *   if (auth.role !== "staff") throw new HttpError.Forbidden("staff only");
  *   return true;
  * };
  *
@@ -474,7 +474,7 @@ export type AuthenticatorOptions = {
  * // A denial carries its own status code and message verbatim.
  * const ownsResource: Authorizer<AuthContext, ValidatedRequest<typeof contract>> = async ({ req, auth }) => {
  *   if (req.params.ownerId !== auth.userId) {
- *     throw new createHttpError.NotFound("resource not found");
+ *     throw new HttpError.NotFound("resource not found");
  *   }
  *   return true;
  * };
@@ -518,13 +518,13 @@ export type Authorizer<
  * const authorize: AuthorizationConfig<AuthContext> = {
  *   beforeValidation: [
  *     async ({ auth }) => {
- *       if (auth.role !== "staff") throw new createHttpError.Forbidden("staff only");
+ *       if (auth.role !== "staff") throw new HttpError.Forbidden("staff only");
  *       return true;
  *     },
  *   ],
  *   afterValidation: [
  *     async ({ req, auth }) => {
- *       if (auth.userId !== req.params.id) throw new createHttpError.Forbidden("not owner");
+ *       if (auth.userId !== req.params.id) throw new HttpError.Forbidden("not owner");
  *       return true;
  *     },
  *   ],
@@ -572,13 +572,13 @@ export type AuthorizationConfig<
  *   authorize: {
  *     beforeValidation: [
  *       async ({ auth }) => {
- *         if (auth.role !== "staff") throw new createHttpError.Forbidden("staff only");
+ *         if (auth.role !== "staff") throw new HttpError.Forbidden("staff only");
  *         return true;
  *       },
  *     ],
  *     afterValidation: [
  *       async ({ req, auth }) => {
- *         if (auth.userId !== req.params.userId) throw new createHttpError.Forbidden("not owner");
+ *         if (auth.userId !== req.params.userId) throw new HttpError.Forbidden("not owner");
  *         return true;
  *       },
  *     ],
@@ -622,13 +622,13 @@ export type SecurityOptions<
  *     authorize: {
  *       beforeValidation: [
  *         async ({ auth }) => {
- *           if (auth.role !== "staff") throw new createHttpError.Forbidden("staff only");
+ *           if (auth.role !== "staff") throw new HttpError.Forbidden("staff only");
  *           return true;
  *         },
  *       ],
  *       afterValidation: [
  *         async ({ req, auth }) => {
- *           if (auth.userId !== req.params.userId) throw new createHttpError.Forbidden("not owner");
+ *           if (auth.userId !== req.params.userId) throw new HttpError.Forbidden("not owner");
  *           return true;
  *         },
  *       ],

@@ -1,4 +1,4 @@
-import createHttpError from 'http-errors';
+import { HttpError } from '../../src/core/http-error.core';
 import { z, ZodError } from 'zod';
 import {
     formatErrorForLog,
@@ -67,7 +67,7 @@ describe('error-handler (runtime)', () => {
 
     it('handles HttpError instances with mapped status', () => {
         const res = createMockResponse();
-        const error = new createHttpError.NotFound('Missing');
+        const error = new HttpError.NotFound('Missing');
 
         handleError(error, res as any);
 

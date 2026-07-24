@@ -1,5 +1,4 @@
-import createHttpError from 'http-errors';
-import { anyOf, createHandler, createHandlerFactory, not } from '../../core/index.ts';
+import { anyOf, createHandler, createHandlerFactory, HttpError, not } from '../../core/index.ts';
 import {
     authenticateJwt,
     canEditBook,
@@ -27,7 +26,11 @@ const createBook = createJwtAuthHandler(
                     hasRegisteredUser,
                     async ({ auth }) => {
                         const existingUser = await UserRepository.getUser(auth.email);
-                        if (!existingUser) throw new createHttpError.Forbidden('Registered user only');
+                        if (!existingUser) {
+                            throw new HttpError.Forbidden('Registered user only', {
+                                headers: { 'x-error-code': 'REGISTERED_USER_ONLY' },
+                            });
+                        }
                         return true;
                     },
                     anyOf<JwtAuthContext>([isLibraryStaff, hasWriteAccessHeader, async () => true]),
@@ -62,7 +65,10 @@ const getAllBooks = createHandler(
                 afterValidation: [
                     async ({ auth }) => {
                         const existingUser = await UserRepository.getUser(auth.email);
-                        if (!existingUser) throw new createHttpError.Forbidden('Registered user only');
+                        if (!existingUser) throw new HttpError.Forbidden('Registered user only', {
+                            cookies: [{ action: 'clear', name: 'session' }],
+                            headers: { 'x-error-code': 'REGISTERED_USER_ONLY' },
+                        });
                         return true;
                     },
                 ],

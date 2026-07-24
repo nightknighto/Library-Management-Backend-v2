@@ -7,7 +7,12 @@
  */
 
 import type { Request } from 'express';
-import createHttpError from 'http-errors';
+import type { CookieOperation } from './types.core.ts';
+import {
+    HttpError,
+    isHttpError,
+    type HttpErrorLike,
+} from './http-error.core.ts';
 import type {
     AccessMode,
     Authenticator,
@@ -74,7 +79,7 @@ export async function executeAuthenticationStage<
 
     if (!authenticate) {
         if (access === 'protected') {
-            throw new createHttpError.Unauthorized('Unauthenticated');
+            throw new HttpError.Unauthorized('Unauthenticated');
         }
 
         return {} as SecurityExecutionResult<TAuthContext, TAccess>;
@@ -86,7 +91,7 @@ export async function executeAuthenticationStage<
     if (auth === null) {
         if (access === 'protected') {
             throw authenticate.onMissingCredentials?.()
-                ?? new createHttpError.Unauthorized('Unauthenticated');
+                ?? new HttpError.Unauthorized('Unauthenticated');
         }
 
         return {} as SecurityExecutionResult<TAuthContext, TAccess>;
@@ -120,9 +125,9 @@ export async function executeAuthenticationStage<
  *     const header = req.headers.authorization;
  *     if (!header?.startsWith("Bearer ")) return null;            // no credentials
  *     try { return { email: verifyJwt(header).email }; }
- *     catch { throw new createHttpError.Unauthorized("Invalid token"); } // failure
+ *     catch { throw new HttpError.Unauthorized("Invalid token"); } // failure
  *   },
- *   { onMissingCredentials: () => new createHttpError.Unauthorized("Missing Bearer token") },
+ *   { onMissingCredentials: () => new HttpError.Unauthorized("Missing Bearer token") },
  * );
  */
 // Callback-first so TAuthContext is inferred from the callback return (arg 1) with
@@ -203,11 +208,11 @@ export async function executeAuthorizationStage<TAuthContext, TRequest extends R
  * // Reusable composite with typed request.
  * const policy = allOf<AuthContext, AfterAuthorizationRequest<typeof contract>>([
  *   async ({ auth }) => {
- *     if (auth.role !== "staff") throw new createHttpError.Forbidden("staff only");
+ *     if (auth.role !== "staff") throw new HttpError.Forbidden("staff only");
  *     return true;
  *   },
  *   async ({ req }) => {
- *     if (req.body.title.length === 0) throw new createHttpError.BadRequest("empty title");
+ *     if (req.body.title.length === 0) throw new HttpError.BadRequest("empty title");
  *     return true;
  *   },
  * ]);
@@ -250,11 +255,11 @@ export function allOf(policies: Array<Authorizer<any, Request>>): Authorizer<any
  * @example
  * const policy = anyOf<AuthContext>([
  *   async ({ auth }) => {
- *     if (auth.role !== "staff") throw new createHttpError.Forbidden("staff only");
+ *     if (auth.role !== "staff") throw new HttpError.Forbidden("staff only");
  *     return true;
  *   },
  *   async ({ auth }) => {
- *     if (!auth.scopes.includes("books:write")) throw new createHttpError.Forbidden("no scope");
+ *     if (!auth.scopes.includes("books:write")) throw new HttpError.Forbidden("no scope");
  *     return true;
  *   },
  * ]);
@@ -263,20 +268,20 @@ export function allOf(policies: Array<Authorizer<any, Request>>): Authorizer<any
  * // Custom denial error for the whole OR when every branch denies.
  * const policy = anyOf<AuthContext>(
  *   [isStaff, ownsResource],
- *   new createHttpError.NotFound("resource not found"),
+ *   new HttpError.NotFound("resource not found"),
  * );
  */
 export function anyOf<TContext, TRequest extends Request>(
     policies: Array<Authorizer<TContext, NoInfer<TRequest>>>,
-    denialError?: createHttpError.HttpError,
+    denialError?: HttpErrorLike,
 ): Authorizer<TContext, TRequest>;
 export function anyOf<TContext, TRequest extends Request = Request>(
     policies: Array<Authorizer<TContext, TRequest>>,
-    denialError?: createHttpError.HttpError,
+    denialError?: HttpErrorLike,
 ): Authorizer<TContext, TRequest>;
 export function anyOf(
     policies: Array<Authorizer<any, Request>>,
-    denialError?: createHttpError.HttpError,
+    denialError?: HttpErrorLike,
 ): Authorizer<any, Request> {
     return async (params) => {
         for (const policy of policies) {
@@ -284,13 +289,13 @@ export function anyOf(
                 await policy(params);
                 return true;
             } catch (error) {
-                if (!(error instanceof createHttpError.HttpError)) {
+                if (!isHttpError(error)) {
                     throw error;
                 }
             }
         }
 
-        throw denialError ?? new createHttpError.Forbidden('Forbidden');
+        throw denialError ?? new HttpError.Forbidden('Forbidden');
     };
 }
 
@@ -311,38 +316,38 @@ export function anyOf(
  * @example
  * const policy = not<AuthContext>(
  *   async ({ auth }) => {
- *     if (auth.role === "member") throw new createHttpError.Forbidden("members blocked");
+ *     if (auth.role === "member") throw new HttpError.Forbidden("members blocked");
  *     return true;
  *   },
  * );
  *
  * @example
  * // Custom denial error when the wrapped policy allows.
- * const policy = not<AuthContext>(isPublicUser, new createHttpError.Forbidden("public not allowed"));
+ * const policy = not<AuthContext>(isPublicUser, new HttpError.Forbidden("public not allowed"));
  */
 export function not<TContext, TRequest extends Request>(
     policy: Authorizer<TContext, NoInfer<TRequest>>,
-    denialError?: createHttpError.HttpError,
+    denialError?: HttpErrorLike,
 ): Authorizer<TContext, TRequest>;
 export function not<TContext, TRequest extends Request = Request>(
     policy: Authorizer<TContext, TRequest>,
-    denialError?: createHttpError.HttpError,
+    denialError?: HttpErrorLike,
 ): Authorizer<TContext, TRequest>;
 export function not(
     policy: Authorizer<any, Request>,
-    denialError?: createHttpError.HttpError,
+    denialError?: HttpErrorLike,
 ): Authorizer<any, Request> {
     return async (params) => {
         try {
             await policy(params);
         } catch (error) {
-            if (!(error instanceof createHttpError.HttpError)) {
+            if (!isHttpError(error)) {
                 throw error;
             }
             return true;
         }
 
-        throw denialError ?? new createHttpError.Forbidden('Forbidden');
+        throw denialError ?? new HttpError.Forbidden('Forbidden');
     };
 }
 

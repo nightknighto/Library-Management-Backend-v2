@@ -854,7 +854,7 @@ interface SecuredFactory<
      * @example
      * // A shape-bound authorizer requires params.isbn on every contract.
      * const requireIsbn: Authorizer<Auth, Request<{ isbn: string }, any, unknown, any>> =
-     *   async ({ req }) => { if (!req.params.isbn) throw new createHttpError.Forbidden(); return true; };
+     *   async ({ req }) => { if (!req.params.isbn) throw new HttpError.Forbidden(); return true; };
      * const ownerFactory = jwtFactory.extend({
      *   security: { authorize: { afterValidation: [requireIsbn] } },
      * });

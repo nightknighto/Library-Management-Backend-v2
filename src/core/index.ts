@@ -15,6 +15,8 @@ export type {
     RequestSchemaOutput,
 } from './create-request-schema.core.ts';
 export { createRequestSchema } from './create-request-schema.core.ts';
+export { HttpError, isHttpError } from './http-error.core.ts';
+export type { HttpErrorLike, HttpErrorOptions } from './http-error.core.ts';
 export { buildPaginationMeta, buildSuccessResponsePayload } from './response-builder.core.ts';
 export { sanitizeResponse } from './sanitize-response.core.ts';
 

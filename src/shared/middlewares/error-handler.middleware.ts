@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import createHttpError from 'http-errors';
+import { isHttpError } from '../../core/index.ts';
 
 type ErrorResponse = {
     success: false;
@@ -23,7 +23,7 @@ export function globalErrorHandler(
         let message = 'An unexpected error occurred';
         const details: any = null;
 
-        if (createHttpError.isHttpError(err)) {
+        if (isHttpError(err)) {
             statusCode = err.statusCode;
             code = err.name;
             message = err.message;

@@ -1,7 +1,6 @@
 import type { Request } from 'express';
-import createHttpError from 'http-errors';
 import { z } from 'zod';
-import { allOf, anyOf, createContract, createHandler, createHandlerFactory, not } from '../index.ts';
+import { allOf, anyOf, createContract, createHandler, createHandlerFactory, HttpError, not } from '../index.ts';
 import type { Equal, Expect, ExpectFalse, Extends, IsAny } from './type-test.utils.ts';
 
 /**
@@ -69,7 +68,7 @@ createHandler(
                     async ({ req, auth }) => {
                         type _body = Expect<Equal<typeof req.body, { title: string }>>;
                         type _auth = Expect<Extends<typeof auth, AuthContext>>;
-                        if (!(auth.role === 'staff' && req.body.title.length > 0)) throw new createHttpError.Forbidden('denied'); return true;
+                        if (!(auth.role === 'staff' && req.body.title.length > 0)) throw new HttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -93,14 +92,14 @@ createHandler(
                     async ({ req, auth }) => {
                         type _reqBefore = Expect<Equal<typeof req, Request>>;
                         type _authBefore = Expect<Extends<typeof auth, AuthContext>>;
-                        if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true;
+                        if (auth.role !== 'staff') throw new HttpError.Forbidden('denied'); return true;
                     },
                 ],
                 afterValidation: [
                     async ({ req, auth }) => {
                         type _bodyAfter = Expect<Equal<typeof req.body, { title: string }>>;
                         type _authAfter = Expect<Extends<typeof auth, AuthContext>>;
-                        if (req.body.title.length === 0) throw new createHttpError.Forbidden('denied'); return true;
+                        if (req.body.title.length === 0) throw new HttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -200,7 +199,7 @@ publicFactory(
         security: {
             authorize: {
                 // @ts-expect-error auth is unknown because security is rejected
-                beforeValidation: [async ({ auth }) => { if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true; }],
+                beforeValidation: [async ({ auth }) => { if (auth.role !== 'staff') throw new HttpError.Forbidden('denied'); return true; }],
             },
         },
     },
@@ -219,9 +218,9 @@ publicFactory(
 const _compositePolicy = anyOf<AuthContext>([
     allOf<AuthContext>([
         async () => true,
-        async ({ auth }) => { if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true; },
+        async ({ auth }) => { if (auth.role !== 'staff') throw new HttpError.Forbidden('denied'); return true; },
     ]),
-    not<AuthContext>(async () => true, new createHttpError.Forbidden('not-allowed')),
+    not<AuthContext>(async () => true, new HttpError.Forbidden('not-allowed')),
 ]);
 
 createHandler(
@@ -265,7 +264,7 @@ _regressionFactory(
             authorize: {
                 afterValidation: [
                     async ({ auth }): Promise<true> => {
-                        if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied');
+                        if (auth.role !== 'staff') throw new HttpError.Forbidden('denied');
                         return true;
                     },
                 ],
@@ -315,7 +314,7 @@ const _plainDerived = _plainFactory.extend({
         authorize: {
             beforeValidation: [
                 async ({ auth }): Promise<true> => {
-                    if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied');
+                    if (auth.role !== 'staff') throw new HttpError.Forbidden('denied');
                     return true;
                 },
             ],

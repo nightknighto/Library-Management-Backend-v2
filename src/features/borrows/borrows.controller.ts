@@ -1,6 +1,5 @@
 import type { Request } from 'express';
-import createHttpError from 'http-errors';
-import { createHandler, createHandlerFactory } from '../../core/index.ts';
+import { createHandler, createHandlerFactory, HttpError } from '../../core/index.ts';
 import { authenticateJwt } from '../../shared/auth-stuff.ts';
 import { BorrowRepository } from './borrows.repository.ts';
 import * as BorrowDTOs from './borrows.schemas.ts';
@@ -27,7 +26,7 @@ const borrowBook = createHandler(
                     async ({ auth }) => {
                         // For this example, we'll allow any authenticated user to borrow books.
                         // In a real implementation, you might check user roles or permissions here.
-                        if (!auth?.email) throw new createHttpError.Forbidden('Authenticated user required');
+                        if (!auth?.email) throw new HttpError.Forbidden('Authenticated user required');
                         return true;
                     },
                 ],
@@ -67,7 +66,7 @@ const returnBook = createProtectedHandler(
                         );
 
                         if (!existingBorrow) {
-                            throw new createHttpError.Forbidden(
+                            throw new HttpError.Forbidden(
                                 'No active borrow record found for this user and book.',
                             );
                         }

@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import createHttpError from 'http-errors';
+import { HttpError } from '../../core/index.ts';
 import { BookRepository } from './books.repository.ts';
 import type { GetBookRequest, UpdateBookRequest } from './books.schemas.ts';
 
@@ -9,7 +9,9 @@ async function createBook(
 ) {
     const book = await BookRepository.createBook(email, bookData);
     if (!book) {
-        throw new createHttpError.BadRequest('Book with this ISBN already exists');
+        throw new HttpError.Conflict('Book with this ISBN already exists', {
+            headers: { 'cache-control': 'no-store' },
+        });
     }
 }
 
@@ -32,7 +34,7 @@ async function getAllBooks(filters: {
 async function getBookByISBN(isbn: string, fields: GetBookRequest['query']['fields']) {
     const book = await BookRepository.getBookByIsbn(isbn);
     if (!book) {
-        throw new createHttpError.NotFound('Book not found');
+        throw new HttpError.NotFound('Book not found');
     }
 
     if (fields.length > 0) {
@@ -53,7 +55,7 @@ async function getBookByISBN(isbn: string, fields: GetBookRequest['query']['fiel
 async function updateBook(isbn: string, email: string, updateData: UpdateBookRequest['body']) {
     const updatedBook = await BookRepository.updateBook(isbn, email, updateData);
     if (!updatedBook) {
-        throw new createHttpError.NotFound('Book not found');
+        throw new HttpError.NotFound('Book not found');
     }
     return updatedBook;
 }
@@ -61,7 +63,7 @@ async function updateBook(isbn: string, email: string, updateData: UpdateBookReq
 async function deleteBook(isbn: string, email: string) {
     const deleted = await BookRepository.deleteBook(isbn, email);
     if (!deleted) {
-        throw new createHttpError.NotFound('Book not found');
+        throw new HttpError.NotFound('Book not found');
     }
 }
 

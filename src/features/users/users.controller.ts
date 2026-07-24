@@ -1,5 +1,4 @@
-import createHttpError from 'http-errors';
-import { createHandler } from '../../core/index.ts';
+import { createHandler, HttpError } from '../../core/index.ts';
 import { authenticateJwt } from '../../shared/auth-stuff.ts';
 import { JwtUtils } from '../../utils/jwt.util.ts';
 import { UserRepository } from './users.repository.ts';
@@ -11,7 +10,7 @@ const registerUser = createHandler(UserDTOs.RegisterUserContract, async ({ req }
     const { email, name } = req.body;
     const user = await UserRepository.createUser(email, name);
     if (!user) {
-        throw new createHttpError.BadRequest('User with this email already exists');
+        throw new HttpError.BadRequest('User with this email already exists');
     }
 
     const token = JwtUtils.createToken({ email });
@@ -34,7 +33,7 @@ const loginUser = createHandler(UserDTOs.LoginUserContract, async ({ req }) => {
     const { email } = req.body;
     const user = await UserRepository.getUser(email);
     if (!user) {
-        throw new createHttpError.NotFound('User not found');
+        throw new HttpError.NotFound('User not found');
     }
     const token = JwtUtils.createToken({ email });
     return {
@@ -97,7 +96,7 @@ const updateUser = createHandler(
         const { name } = req.body;
         const updatedUser = await UserRepository.updateUser(email, name);
         if (!updatedUser) {
-            throw new createHttpError.NotFound('User not found');
+            throw new HttpError.NotFound('User not found');
         }
         return {
             data: updatedUser,
@@ -109,7 +108,7 @@ const deleteUser = createHandler(UserDTOs.DeleteUserContract, async ({ req }) =>
     const { email } = req.params;
     const user = await UserRepository.deleteUser(email);
     if (!user) {
-        throw new createHttpError.NotFound('User not found');
+        throw new HttpError.NotFound('User not found');
     }
     return {
         data: 'User deleted successfully',
@@ -135,7 +134,7 @@ const getUserBorrows = createHandler(
         const email = auth.email;
         const userWithBorrows = await UserRepository.getUserWithActiveBorrows(email);
         if (!userWithBorrows) {
-            throw new createHttpError.NotFound('User not found');
+            throw new HttpError.NotFound('User not found');
         }
 
         const now = new Date();

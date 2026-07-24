@@ -1,6 +1,5 @@
-import createHttpError from 'http-errors';
 import type { Authorizer } from '../core/index.ts';
-import { allOf, anyOf, createAuthenticator, createHandlerFactory } from '../core/index.ts';
+import { allOf, anyOf, createAuthenticator, createHandlerFactory, HttpError } from '../core/index.ts';
 import { UserRepository } from '../features/users/users.repository.ts';
 import { JwtUtils } from '../utils/jwt.util.ts';
 
@@ -24,33 +23,33 @@ export const authenticateJwt = createAuthenticator<JwtAuthContext>(
         try {
             payload = JwtUtils.verifyToken(token);
         } catch {
-            throw createHttpError.Unauthorized('Invalid or expired token');
+            throw new HttpError.Unauthorized('Invalid or expired token');
         }
 
         const existingUser = await UserRepository.getUser(payload.email);
         return existingUser;
     },
-    { onMissingCredentials: () => new createHttpError.Unauthorized('Authentication required') },
+    { onMissingCredentials: () => new HttpError.Unauthorized('Authentication required') },
 );
 
 export const hasRegisteredUser: Authorizer<JwtAuthContext> = async ({ auth }) => {
     const existingUser = await UserRepository.getUser(auth.email);
     if (!existingUser) {
-        throw new createHttpError.Forbidden('Registered user only');
+        throw new HttpError.Forbidden('Registered user only');
     }
     return true;
 };
 
 export const isLibraryStaff: Authorizer<JwtAuthContext> = async ({ auth }) => {
     if (!auth.email.endsWith('@library.local')) {
-        throw new createHttpError.Forbidden('Library staff only');
+        throw new HttpError.Forbidden('Library staff only');
     }
     return true;
 };
 
 export const hasWriteAccessHeader: Authorizer<JwtAuthContext> = async ({ req }) => {
     if (req.headers['x-write-access'] !== 'enabled') {
-        throw new createHttpError.Forbidden('Write access header required');
+        throw new HttpError.Forbidden('Write access header required');
     }
     return true;
 };
@@ -62,13 +61,13 @@ export const editsOwnAuthorName: Authorizer<JwtAuthContext> = async ({ req, auth
             : undefined;
 
     if (typeof authorValue !== 'string') {
-        throw new createHttpError.Forbidden('Author must match your account name');
+        throw new HttpError.Forbidden('Author must match your account name');
     }
 
     const normalizedAuthor = authorValue.trim().toLowerCase();
     const emailHandle = auth.email.split('@')[0]?.replace(/[._-]/g, ' ').toLowerCase() ?? '';
     if (normalizedAuthor !== emailHandle) {
-        throw new createHttpError.Forbidden('Author must match your account name');
+        throw new HttpError.Forbidden('Author must match your account name');
     }
     return true;
 };
@@ -79,7 +78,7 @@ export const isSystemReservedBook: Authorizer<JwtAuthContext> = async ({ req }) 
             ? (req.params as { isbn?: string }).isbn
             : undefined;
     if (!isbn?.startsWith('SYS-')) {
-        throw new createHttpError.Forbidden('Not a system-reserved book');
+        throw new HttpError.Forbidden('Not a system-reserved book');
     }
     return true;
 };

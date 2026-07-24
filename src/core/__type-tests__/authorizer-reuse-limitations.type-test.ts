@@ -16,12 +16,12 @@
  */
 
 import type { Request } from 'express';
-import createHttpError from 'http-errors';
 import { z } from 'zod';
 import {
     type AfterAuthorizationRequest,
     type Authorizer,
     createContract,
+    HttpError,
 } from '../index.ts';
 import type { Expect, ExpectFalse, Extends, IsAny } from './type-test.utils.ts';
 
@@ -165,14 +165,14 @@ type _gotcha_paramsEnforcesViaIntersection = ExpectFalse<Fits<SBodyPages, Reques
 type Bucket<S extends Request> = Array<Authorizer<AuthContext, S>>;
 
 const needsBodyTitle: Authorizer<AuthContext, ReqBodyTitle> = async ({ req }) => {
-    if (req.body.title.length === 0) throw new createHttpError.Forbidden('denied'); return true;
+    if (req.body.title.length === 0) throw new HttpError.Forbidden('denied'); return true;
 };
 const needsParamsIsbn: Authorizer<AuthContext, ReqParamsIsbn> = async ({ req }) => {
-    if (req.params.isbn.length === 0) throw new createHttpError.Forbidden('denied'); return true;
+    if (req.params.isbn.length === 0) throw new HttpError.Forbidden('denied'); return true;
 };
 const needsQueryDryRun: Authorizer<AuthContext, Request & { query: { dryRun: boolean } }> = async ({
     req,
-}) => { if (req.query.dryRun !== true) throw new createHttpError.Forbidden('denied'); return true; };
+}) => { if (req.query.dryRun !== true) throw new HttpError.Forbidden('denied'); return true; };
 
 // PARAMS enforced: match installs; missing param rejected.
 const _g_paramsMatch: Bucket<SParamsIsbn> = [needsParamsIsbn];

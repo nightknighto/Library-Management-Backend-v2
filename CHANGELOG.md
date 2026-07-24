@@ -17,6 +17,39 @@ point, then read upward to trace each evolution.
 
 ---
 
+## 2026-07-24
+
+### Errors can now carry response headers and cookies
+
+> You could set headers and cookies on a *successful* response, but not on an
+> error one — so a 401 that should clear the session cookie or send a
+> `WWW-Authenticate` header had no declarative path. You had to drop down to raw
+> Express middleware, and an authenticator or authorizer that *knew* the
+> denial context had no way to attach transport side-effects to the error it
+> threw. Errors now carry optional response headers and cookies, applied on
+> every error origin the framework routes.
+
+- Any error you throw — from an authenticator, an authorizer, a handler, or a
+  service — can attach optional response `headers` and `cookies`. The framework
+  applies them on the error response, in the same headers-then-cookies order as
+  the success path.
+- Throw with `new HttpError.Forbidden('msg', { headers: {...}, cookies: [...] })`
+  — or any of the named status classes (`Unauthorized`, `NotFound`, `Conflict`,
+  …, one per standard 4xx/5xx code). Standard HTTP header names autocomplete in
+  the options; arbitrary custom names are accepted too. Header values may be
+  strings, numbers, booleans, or arrays (coerced like the success path).
+- The combinator `denialError` (`anyOf`/`not`) accepts an enriched error too, so
+  a composite policy can fail with a specific status *and* side-effects.
+- **The framework now owns its HTTP error type.** `HttpError` replaces the
+  `http-errors` dependency on the framework surface, with a named status class
+  for every standard 4xx/5xx code and full IntelliSense under `HttpError.`.
+  Existing throws of the old `http-errors` constructors keep working unchanged —
+  the framework detects both kinds. New code should throw `HttpError.*`.
+- New exports: `HttpError`, `HttpErrorOptions`, `HttpErrorLike`, `isHttpError`.
+- **Deferred:** validation-error responses (the 400/500 the framework sends on
+  request/response Zod failures) do not carry headers or cookies — they bypass
+  the error path by design. Decorating them is out of scope for this change.
+
 ## 2026-07-23
 
 ### Handlers can now set response headers

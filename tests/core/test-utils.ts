@@ -5,6 +5,7 @@ type MockResponse = Partial<Response> & {
     json: vi.Mock;
     cookie: vi.Mock;
     clearCookie: vi.Mock;
+    set: vi.Mock;
 };
 
 export const createTestApp = (
@@ -28,6 +29,7 @@ export const createMockResponse = (): MockResponse => {
         json: vi.fn().mockReturnThis(),
         cookie: vi.fn().mockReturnThis(),
         clearCookie: vi.fn().mockReturnThis(),
+        set: vi.fn().mockReturnThis(),
     };
 
     return res;

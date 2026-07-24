@@ -1,5 +1,4 @@
 import type { Request } from 'express';
-import createHttpError from 'http-errors';
 import { z } from 'zod';
 import {
     type AfterAuthorizationRequest,
@@ -10,6 +9,8 @@ import {
     createContract,
     createHandler,
     createHandlerFactory,
+    HttpError,
+    type HttpErrorLike,
     not,
     type Authorizer,
 } from '../index.ts';
@@ -220,7 +221,7 @@ createHandler(
                             Equal<typeof req.body, { title: string; totalQuantity: number }>
                         >;
                         type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                        if (!(auth.role === 'staff' && req.body.title.length > 0)) throw new createHttpError.Forbidden('denied'); return true;
+                        if (!(auth.role === 'staff' && req.body.title.length > 0)) throw new HttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -240,7 +241,7 @@ createHandler(
                     async ({ req, auth }) => {
                         type _authorizedReq = Expect<Equal<typeof req, Request>>;
                         type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                        if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true;
+                        if (auth.role !== 'staff') throw new HttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -250,10 +251,10 @@ createHandler(
 );
 
 const composedPolicy = allOf<AuthContext>([
-    async ({ auth }) => { if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true; },
+    async ({ auth }) => { if (auth.role !== 'staff') throw new HttpError.Forbidden('denied'); return true; },
     anyOf<AuthContext>([
-        async ({ auth }) => { if (!auth.userId.startsWith('u-')) throw new createHttpError.Forbidden('denied'); return true; },
-        not<AuthContext>(async ({ auth }) => { if (auth.role === 'member') throw new createHttpError.Forbidden('denied'); return true; }),
+        async ({ auth }) => { if (!auth.userId.startsWith('u-')) throw new HttpError.Forbidden('denied'); return true; },
+        not<AuthContext>(async ({ auth }) => { if (auth.role === 'member') throw new HttpError.Forbidden('denied'); return true; }),
     ]),
 ]);
 
@@ -311,7 +312,7 @@ privateFactoryAuthenticateAndAuthorize(
                     async ({ req, auth }) => {
                         type _authorizedReq = Expect<Equal<typeof req, Request>>;
                         type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                        if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true;
+                        if (auth.role !== 'staff') throw new HttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -334,7 +335,7 @@ privateFactoryAuthenticateAndAuthorize(
                             Equal<typeof req.body, { title: string; totalQuantity: number }>
                         >;
                         type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                        if (!(auth.role === 'staff' && req.body.title.length > 0)) throw new createHttpError.Forbidden('denied'); return true;
+                        if (!(auth.role === 'staff' && req.body.title.length > 0)) throw new HttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -362,7 +363,7 @@ privateFactoryAuthenticateOnly(
                     async ({ req, auth }) => {
                         type _authorizedReq = Expect<Equal<typeof req, Request>>;
                         type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                        if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true;
+                        if (auth.role !== 'staff') throw new HttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -392,7 +393,7 @@ privateFactoryInheritedAfterAuthorize(
                             Equal<typeof req.body, { title: string; totalQuantity: number }>
                         >;
                         type _authorizedAuth = Expect<Extends<typeof auth, AuthContext>>;
-                        if (!(auth.role === 'staff' && req.body.title.length > 0)) throw new createHttpError.Forbidden('denied'); return true;
+                        if (!(auth.role === 'staff' && req.body.title.length > 0)) throw new HttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -417,7 +418,7 @@ createHandler(
                 beforeValidation: [
                     async ({ auth }) => {
                         type _authBefore = Expect<Extends<typeof auth, AuthContext>>;
-                        if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied'); return true;
+                        if (auth.role !== 'staff') throw new HttpError.Forbidden('denied'); return true;
                     },
                 ],
                 afterValidation: [
@@ -426,7 +427,7 @@ createHandler(
                             Equal<typeof req.body, { title: string; totalQuantity: number }>
                         >;
                         type _authAfter = Expect<Extends<typeof auth, AuthContext>>;
-                        if (req.body.title.length === 0) throw new createHttpError.Forbidden('denied'); return true;
+                        if (req.body.title.length === 0) throw new HttpError.Forbidden('denied'); return true;
                     },
                 ],
             },
@@ -459,7 +460,7 @@ createHandler(
 const afterTypedPolicy: Authorizer<
     AuthContext,
     AfterAuthorizationRequest<typeof UpdateBookContract>
-> = async ({ req }) => { if (req.body.title.length === 0) throw new createHttpError.Forbidden('denied'); return true; };
+> = async ({ req }) => { if (req.body.title.length === 0) throw new HttpError.Forbidden('denied'); return true; };
 
 createHandler(
     UpdateBookContract,
@@ -684,7 +685,7 @@ createHandler(
  */
 const _strictAllow: Authorizer<AuthContext> = async () => true;
 const _strictAllowGuard: Authorizer<AuthContext> = async ({ auth }) => {
-    if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied');
+    if (auth.role !== 'staff') throw new HttpError.Forbidden('denied');
     return true;
 };
 
@@ -696,7 +697,7 @@ const _booleanExprReturn: Authorizer<AuthContext> = async ({ auth }) => auth.rol
 
 // @ts-expect-error an authorizer that omits `return true` (void return) is rejected
 const _voidReturn: Authorizer<AuthContext> = ({ auth }) => {
-    if (auth.role !== 'staff') throw new createHttpError.Forbidden('denied');
+    if (auth.role !== 'staff') throw new HttpError.Forbidden('denied');
 };
 
 /**
@@ -730,13 +731,13 @@ type _inferredAuthWithAbsenceT = Expect<
 const _authWithDefault = createAuthenticator(
     async () => ({ userId: 'u-auth', role: 'staff' as const }),
     {
-        onMissingCredentials: () => new createHttpError.Unauthorized('Missing Bearer token'),
+        onMissingCredentials: () => new HttpError.Unauthorized('Missing Bearer token'),
     },
 );
 type _onMissingTyped = Expect<
     Equal<
         typeof _authWithDefault.onMissingCredentials,
-        (() => createHttpError.HttpError) | undefined
+        (() => HttpErrorLike) | undefined
     >
 >;
 
@@ -829,7 +830,7 @@ const _needsParamsIsbn: Authorizer<
     AuthContext,
     Request<{ isbn: string }, any, unknown, any>
 > = async ({ req }) => {
-    if (req.params.isbn.length === 0) throw new createHttpError.Forbidden('denied');
+    if (req.params.isbn.length === 0) throw new HttpError.Forbidden('denied');
     return true;
 };
 
@@ -902,7 +903,7 @@ const _derivedBeforeOnly = _protectedBase.extend({
         authorize: {
             beforeValidation: [
                 async ({ auth }) => {
-                    if (auth.role !== 'staff') throw new createHttpError.Forbidden('staff only');
+                    if (auth.role !== 'staff') throw new HttpError.Forbidden('staff only');
                     return true;
                 },
             ],
